@@ -1,0 +1,1 @@
+DELETE FROM public.folgas WHERE data='2026-06-06' AND user_id='99977138-b893-4f53-9f32-890b3dacf7dc';
