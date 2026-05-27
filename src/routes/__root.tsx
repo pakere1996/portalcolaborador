@@ -2,8 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   createRootRouteWithContext,
+  Meta,
+  Links,
+  Scripts,
 } from "@tanstack/react-router";
-import { HeadContent, Scripts } from "@tanstack/react-start";
 import appCss from "../styles.css?url";
 import { AuthProvider } from "@/lib/auth-context";
 import { Toaster } from "@/components/ui/sonner";
@@ -25,7 +27,8 @@ function RootComponent() {
   return (
     <html lang="pt-BR">
       <head>
-        <HeadContent />
+        <Meta />
+        <Links />
       </head>
       <body>
         <QueryClientProvider client={queryClient}>
