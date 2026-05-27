@@ -3,7 +3,7 @@ import {
   Outlet,
   createRootRouteWithContext,
 } from "@tanstack/react-router";
-import { HeadContent, Scripts } from "@tanstack/react-start";
+import { Meta, Scripts } from "@tanstack/react-start";
 import appCss from "../styles.css?url";
 import { AuthProvider } from "@/lib/auth-context";
 import { Toaster } from "@/components/ui/sonner";
@@ -25,7 +25,7 @@ function RootComponent() {
   return (
     <html lang="pt-BR">
       <head>
-        <HeadContent />
+        <Meta />
       </head>
       <body>
         <QueryClientProvider client={queryClient}>
