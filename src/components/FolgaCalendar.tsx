@@ -218,7 +218,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
               "aspect-square rounded-xl flex flex-col items-center justify-center text-sm font-bold relative overflow-hidden border-2 transition-all duration-200",
               c.status === "available" && "bg-emerald-50 border-emerald-100 text-emerald-700 hover:scale-105 hover:shadow-md",
               c.status === "blocked" && "bg-red-50 border-red-100 text-red-700 opacity-80",
-              c.status === "taken" && "bg-slate-100 border-slate-200 text-slate-500",
+              c.status === "taken" && "bg-slate-200 border-slate-300 text-slate-600 shadow-inner",
               c.status === "mine" && "bg-blue-600 border-blue-700 text-white shadow-lg scale-105 z-10",
               c.status === "birthday" && "bg-amber-50 border-amber-200 text-amber-700",
               c.status === "past" && "bg-muted/20 border-transparent text-muted-foreground/30",
@@ -241,7 +241,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     {c.limit > 1 && c.status !== 'past' && (
                       <span className={cn(
                         "absolute top-1 left-1 text-[9px] px-1 rounded font-black",
-                        c.status === 'mine' ? 'bg-white/20 text-white' : 'bg-black/5 text-foreground/60'
+                        c.status === 'mine' ? 'bg-white/20 text-white' : 'bg-black/10 text-foreground/80'
                       )}>
                         {c.occupants.length}/{c.limit}
                       </span>
@@ -272,7 +272,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
           <Legend color="bg-red-500" label="Bloqueado" />
           <Legend color="bg-blue-600" label="Sua Folga" />
           <Legend color="bg-amber-500" label="Aniversário" />
-          <Legend color="bg-slate-300" label="Lotado" />
+          <Legend color="bg-slate-400" label="Lotado" />
         </div>
       </div>
     </TooltipProvider>
