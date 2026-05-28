@@ -42,21 +42,28 @@
   --radius: 0.75rem;
   /* Pakerê brand: yellow #fede59 + red #e30f27 */
   --background: oklch(0.99 0.01 95);
-  --foreground: oklch(0.2 0.02 50);
+  --foreground: oklch(0.1 0 0);              /* Quase preto para melhor leitura */
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.02 50);
+  --card-foreground: oklch(0.1 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.02 50);
-  --primary: oklch(0.91 0.17 95);            /* #fede59 yellow */
-  --primary-foreground: oklch(0.2 0.04 50);
-  --secondary: oklch(0.96 0.04 95);
-  --secondary-foreground: oklch(0.25 0.04 50);
+  --popover-foreground: oklch(0.1 0 0);
+  
+  /* Trocando Primary para Vermelho para atender o pedido de letras vermelhas/pretas */
+  --primary: oklch(0.58 0.23 27);            /* #e30f27 vermelho */
+  --primary-foreground: oklch(0.99 0 0);     /* Branco sobre vermelho */
+  
+  --secondary: oklch(0.91 0.17 95);          /* Amarelo agora é secundário */
+  --secondary-foreground: oklch(0.2 0.04 50);
+  
   --muted: oklch(0.96 0.02 95);
-  --muted-foreground: oklch(0.5 0.03 50);
+  --muted-foreground: oklch(0.3 0 0);        /* Cinza bem escuro para textos secundários */
+  
   --accent: oklch(0.94 0.08 95);
   --accent-foreground: oklch(0.25 0.04 50);
-  --destructive: oklch(0.58 0.23 27);        /* #e30f27 red */
+  
+  --destructive: oklch(0.58 0.23 27);        /* #e30f27 vermelho */
   --destructive-foreground: oklch(0.99 0 0);
+  
   --border: oklch(0.88 0.04 90);
   --input: oklch(0.94 0.03 90);
   --ring: oklch(0.58 0.23 27);
@@ -68,21 +75,21 @@
   --unavailable-foreground: oklch(0.99 0 0);
   --pending: oklch(0.85 0.16 85);
   --pending-foreground: oklch(0.2 0.04 50);
-  --mine: oklch(0.55 0.18 250);              /* Blue for "My Leave" */
+  --mine: oklch(0.55 0.18 250);              /* Azul para "Minha Folga" */
   --mine-foreground: oklch(0.99 0 0);
 
-  --sidebar: oklch(0.91 0.17 95);
-  --sidebar-foreground: oklch(0.2 0.04 50);
+  --sidebar: oklch(0.99 0.01 95);
+  --sidebar-foreground: oklch(0.1 0 0);
   --sidebar-primary: oklch(0.58 0.23 27);
   --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.96 0.08 95);
+  --sidebar-accent: oklch(0.94 0.08 95);
   --sidebar-accent-foreground: oklch(0.25 0.04 50);
-  --sidebar-border: oklch(0.82 0.1 90);
+  --sidebar-border: oklch(0.88 0.04 90);
   --sidebar-ring: oklch(0.58 0.23 27);
 }
 
 .dark {
-  /* same as root - always light */
+  /* Mantendo sempre claro conforme design original */
 }
 
 @layer base {
