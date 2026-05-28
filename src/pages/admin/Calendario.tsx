@@ -8,19 +8,32 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calendar as CalIcon } from "lucide-react";
-import { dayType, formatBR, monthKey, parseYMD } from "@/lib/folga-rules";
+import { Calendar as CalIcon, Filter, User, Info } from "lucide-react";
+import { dayType, formatBR, monthKey, parseYMD, ymd } from "@/lib/folga-rules";
+import { Badge } from "@/components/ui/badge";
 
 export default function AdminCalendar() {
   const { user } = useAuth();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month0, setMonth0] = useState(today.getMonth());
-  const [folgas, setFolgas] = useState<{ id: string; user_id: string; data: string; nome?: string }[]>([]);
-  const [manual, setManual] = useState<{ id: string; data: string; motivo: string; liberada: boolean }[]>([]);
-  const [profiles, setProfiles] = useState<{ id: string; nome: string }[]>([]);
-  const [limites, setLimites] = useState<{ data: string; limite_colaboradores: number }[]>([]);
+  
+  // Data
+  const [folgas, setFolgas] = useState<any[]>([]);
+  const [manual, setManual] = useState<any[]>([]);
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [limites, setLimites] = useState<any[]>([]);
+  const [pendentes, setPendentes] = useState<any[]>([]);
+  
+  // Filters
+  const [filterUser, setFilterUser] = useState("all");
+  const [filterType, setFilterType] = useState("all");
+
+  // Dialog
   const [dlg, setDlg] = useState<{ iso: string; status: string } | null>(null);
   const [assignUser, setAssignUser] = useState<string>("");
   const [blockReason, setBlockReason] = useState("");
@@ -29,42 +42,80 @@ export default function AdminCalendar() {
   const load = async () => {
     const start = `${year}-${String(month0 + 1).padStart(2, "0")}-01`;
     const endDate = new Date(year, month0 + 1, 0);
-    const end = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
-    const [{ data: f }, { data: b }, { data: p }, { data: lim }] = await Promise.all([
-      supabase.from("folgas").select("id, user_id, data").gte("data", start).lte("data", end),
-      supabase.from("datas_bloqueadas").select("id, data, motivo, liberada").gte("data", start).lte("data", end),
-      supabase.from("profiles").select("id, nome").eq("ativo", true).order("nome"),
-      supabase.from("dia_config").select("data, limite_colaboradores").gte("data", start).lte("data", end),
+    const end = ymd(endDate);
+
+    const [fRes, bRes, pRes, limRes, pendRes] = await Promise.all([
+      supabase.from("folgas").select("*").gte("data", start).lte("data", end),
+      supabase.from("datas_bloqueadas").select("*").gte("data", start).lte("data", end),
+      supabase.from("profiles").select("*").eq("ativo", true).order("nome"),
+      supabase.from("dia_config").select("*").gte("data", start).lte("data", end),
+      supabase.from("solicitacoes_especiais").select("*").eq("status", "pendente").gte("data", start).lte("data", end),
     ]);
-    const profs = (p ?? []) as { id: string; nome: string }[];
-    setProfiles(profs);
-    const nm = new Map(profs.map((x) => [x.id, x.nome]));
-    setFolgas((f ?? []).map((x) => ({ ...x, nome: nm.get(x.user_id) })));
-    setManual((b ?? []) as typeof manual);
-    setLimites((lim ?? []) as typeof limites);
+
+    setProfiles(pRes.data ?? []);
+    setFolgas(fRes.data ?? []);
+    setManual(bRes.data ?? []);
+    setLimites(limRes.data ?? []);
+    setPendentes(pendRes.data ?? []);
   };
 
   useEffect(() => { load(); }, [year, month0]);
 
-  useEffect(() => {
-    const ch = supabase
-      .channel("admin-calendario-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "folgas" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "datas_bloqueadas" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "dia_config" }, () => load())
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [year, month0]);
-
   const occupantsByDate = useMemo(() => {
     const m = new Map<string, DayOccupant[]>();
-    for (const f of folgas) {
-      const arr = m.get(f.data) ?? [];
-      arr.push({ userId: f.user_id, userName: f.nome });
-      m.set(f.data, arr);
+    const nm = new Map(profiles.map(p => [p.id, p.nome]));
+
+    // 1. Folgas Fixas (Calculadas para cada dia do mês)
+    const days = getMonthDays(year, month0);
+    for (const d of days) {
+      const iso = ymd(d);
+      const wd = d.getDay();
+      const fixedOnes = profiles.filter(p => p.folga_fixa_semana === wd);
+      
+      fixedOnes.forEach(p => {
+        if (filterUser !== "all" && p.id !== filterUser) return;
+        if (filterType !== "all" && filterType !== "fixed") return;
+        
+        const arr = m.get(iso) ?? [];
+        arr.push({ userId: p.id, userName: p.nome, type: "fixed", origin: "Cadastro Administrativo" });
+        m.set(iso, arr);
+      });
     }
+
+    // 2. Folgas Mensais
+    folgas.forEach(f => {
+      if (filterUser !== "all" && f.user_id !== filterUser) return;
+      if (filterType !== "all" && filterType !== "monthly") return;
+      
+      const iso = f.data;
+      const arr = m.get(iso) ?? [];
+      arr.push({ 
+        userId: f.user_id, 
+        userName: nm.get(f.user_id) || "Desconhecido", 
+        type: "monthly", 
+        origin: f.criado_por ? "Manual/Admin" : "Sorteio/Sistema" 
+      });
+      m.set(iso, arr);
+    });
+
+    // 3. Pendentes
+    pendentes.forEach(p => {
+      if (filterUser !== "all" && p.user_id !== filterUser) return;
+      if (filterType !== "all" && filterType !== "pending") return;
+      
+      const iso = p.data;
+      const arr = m.get(iso) ?? [];
+      arr.push({ 
+        userId: p.user_id, 
+        userName: nm.get(p.user_id) || "Desconhecido", 
+        type: "pending", 
+        origin: "Solicitação do Colaborador" 
+      });
+      m.set(iso, arr);
+    });
+
     return m;
-  }, [folgas]);
+  }, [profiles, folgas, pendentes, year, month0, filterUser, filterType]);
 
   const manualMap = useMemo(() => {
     const m = new Map<string, { reason: string; liberada: boolean }>();
@@ -85,26 +136,6 @@ export default function AdminCalendar() {
     setLimitInput(dayLimits.get(iso) ?? 1);
   };
 
-  const salvarLimite = async (iso: string) => {
-    const v = Math.max(1, Math.min(10, Math.floor(limitInput)));
-    const { error } = await supabase.from("dia_config").upsert(
-      { data: iso, limite_colaboradores: v },
-      { onConflict: "data" }
-    );
-    if (error) return toast.error(error.message);
-    toast.success(`Limite definido: ${v} colaborador(es)`);
-    setDlg(null); load();
-  };
-
-  const removeFolga = async (iso: string, userId: string) => {
-    const f = folgas.find((x) => x.data === iso && x.user_id === userId);
-    if (!f) return;
-    const { error } = await supabase.from("folgas").delete().eq("id", f.id);
-    if (error) return toast.error(error.message);
-    toast.success("Folga removida");
-    setDlg(null); load();
-  };
-
   const assignFolga = async (iso: string) => {
     if (!assignUser) return toast.error("Escolha um funcionário");
     const d = parseYMD(iso);
@@ -118,117 +149,138 @@ export default function AdminCalendar() {
     setDlg(null); load();
   };
 
-  const liberateDate = async (iso: string) => {
-    await supabase.from("datas_bloqueadas").upsert(
-      { data: iso, motivo: "Liberada manualmente", liberada: true, auto: false },
-      { onConflict: "data" }
-    );
-    toast.success("Data liberada"); setDlg(null); load();
-  };
-
-  const blockDate = async (iso: string) => {
-    if (!blockReason.trim()) return toast.error("Informe o motivo");
-    await supabase.from("datas_bloqueadas").upsert(
-      { data: iso, motivo: blockReason.trim(), liberada: false, auto: false },
-      { onConflict: "data" }
-    );
-    toast.success("Data bloqueada"); setDlg(null); load();
+  const removeFolga = async (iso: string, userId: string) => {
+    const f = folgas.find((x) => x.data === iso && x.user_id === userId);
+    if (!f) return;
+    const { error } = await supabase.from("folgas").delete().eq("id", f.id);
+    if (error) return toast.error(error.message);
+    toast.success("Folga removida");
+    setDlg(null); load();
   };
 
   const goPrev = () => { const d = new Date(year, month0 - 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); };
   const goNext = () => { const d = new Date(year, month0 + 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-          <CalIcon className="size-6 text-primary" /> Calendário Geral
-        </h1>
-        <p className="text-muted-foreground mt-1">Edite folgas, libere ou bloqueie datas manualmente.</p>
+    <div className="space-y-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+            <CalIcon className="size-6 text-primary" /> Calendário Geral
+          </h1>
+          <p className="text-muted-foreground mt-1">Visão completa da escala e folgas da equipe.</p>
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div className="bg-card border border-border rounded-xl p-4 flex flex-wrap gap-4 items-end shadow-sm">
+        <div className="space-y-2">
+          <Label className="text-xs flex items-center gap-1"><User className="size-3" /> Colaborador</Label>
+          <Select value={filterUser} onValueChange={setFilterUser}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Todos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os colaboradores</SelectItem>
+              {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs flex items-center gap-1"><Filter className="size-3" /> Tipo de Folga</Label>
+          <Select value={filterType} onValueChange={setFilterType}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Todos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os tipos</SelectItem>
+              <SelectItem value="fixed">Semanal Fixa</SelectItem>
+              <SelectItem value="monthly">Mensal (FDS)</SelectItem>
+              <SelectItem value="pending">Pendentes</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => { setFilterUser("all"); setFilterType("all"); }}>
+          Limpar Filtros
+        </Button>
       </div>
 
       <FolgaCalendar
         year={year} month0={month0}
         occupantsByDate={occupantsByDate} manualBlocked={manualMap}
         dayLimits={dayLimits}
-        myUserId={user?.id ?? null}
+        isAdmin={true}
         onPrev={goPrev} onNext={goNext}
         onSelectDay={onSelect}
-        locked={null}
       />
 
       <Dialog open={!!dlg} onOpenChange={(o) => !o && setDlg(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              {dlg && formatBR(parseYMD(dlg.iso))} — ações
+            <DialogTitle className="flex items-center gap-2">
+              <CalIcon className="size-5 text-primary" />
+              {dlg && formatBR(parseYMD(dlg.iso))}
             </DialogTitle>
           </DialogHeader>
 
           {dlg && (
-            <div className="space-y-4">
-              {(dlg.status === "taken" || dlg.status === "mine" || occupantsByDate.get(dlg.iso)?.length) ? (
-                <div className="space-y-3">
-                  <div className="text-sm font-medium mb-2">Colaboradores com folga:</div>
-                  <div className="space-y-2">
-                    {occupantsByDate.get(dlg.iso)?.map((occ) => (
-                      <div key={occ.userId} className="flex items-center justify-between bg-muted/30 p-2 rounded-lg">
-                        <span className="text-sm">{occ.userName}</span>
-                        <Button variant="destructive" size="sm" onClick={() => removeFolga(dlg.iso, occ.userId)}>Remover</Button>
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Escala do Dia</h3>
+                <div className="space-y-2">
+                  {occupantsByDate.get(dlg.iso)?.map((occ, idx) => (
+                    <div key={idx} className="bg-muted/30 p-3 rounded-lg border border-border/50">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-sm">{occ.userName}</span>
+                        <Badge className={cn(
+                          "text-[10px]",
+                          occ.type === 'fixed' ? "bg-blue-600" :
+                          occ.type === 'monthly' ? "bg-amber-400 text-amber-900" :
+                          "bg-orange-500"
+                        )}>
+                          {occ.type === 'fixed' ? "Fixa" : occ.type === 'monthly' ? "Mensal" : "Pendente"}
+                        </Badge>
                       </div>
-                    ))}
-                    {!occupantsByDate.get(dlg.iso)?.length && <div className="text-xs text-muted-foreground">Ninguém escalado.</div>}
-                  </div>
+                      <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <Info className="size-3" /> Origem: {occ.origin}
+                      </div>
+                      {occ.type === 'monthly' && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="w-full mt-2 h-7 text-xs text-destructive hover:bg-destructive/10"
+                          onClick={() => removeFolga(dlg.iso, occ.userId)}
+                        >
+                          Remover Folga
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  {!occupantsByDate.get(dlg.iso)?.length && (
+                    <div className="text-sm text-muted-foreground text-center py-4 italic">Ninguém escalado para este dia.</div>
+                  )}
                 </div>
-              ) : null}
+              </div>
 
-              {dlg.status === "blocked" ? (
+              <div className="border-t border-border pt-4 space-y-4">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Ações Rápidas</h3>
                 <div className="space-y-3">
-                  <div className="text-sm text-muted-foreground">{manualMap.get(dlg.iso)?.reason}</div>
-                  <Button onClick={() => liberateDate(dlg.iso)}>Liberar esta data</Button>
-                </div>
-              ) : (
-                <div className="space-y-4 border-t border-border pt-4">
                   <div className="space-y-2">
-                    <Label>Atribuir folga a:</Label>
-                    <select
-                      className="w-full bg-input border border-border rounded-md px-3 py-2 text-sm"
-                      value={assignUser}
-                      onChange={(e) => setAssignUser(e.target.value)}
-                    >
-                      <option value="">Selecione...</option>
-                      {profiles.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                    </select>
-                    <Button className="w-full" onClick={() => assignFolga(dlg.iso)}>Atribuir folga</Button>
-                  </div>
-                  <div className="border-t border-border pt-3 space-y-2">
-                    <Label>Limite de colaboradores neste dia</Label>
+                    <Label className="text-xs">Atribuir Folga Mensal</Label>
                     <div className="flex gap-2">
-                      <Input
-                        type="number" min={1} max={10}
-                        value={limitInput}
-                        onChange={(e) => setLimitInput(Number(e.target.value) || 1)}
-                      />
-                      <Button onClick={() => salvarLimite(dlg.iso)}>Salvar</Button>
+                      <Select value={assignUser} onValueChange={setAssignUser}>
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Selecionar..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Button size="sm" onClick={() => assignFolga(dlg.iso)}>Atribuir</Button>
                     </div>
                   </div>
-                  <div className="border-t border-border pt-3 space-y-2">
-                    <Label>Ou bloquear esta data:</Label>
-                    <Input
-                      value={blockReason}
-                      onChange={(e) => setBlockReason(e.target.value)}
-                      placeholder="Motivo do bloqueio"
-                    />
-                    <Button variant="destructive" className="w-full" onClick={() => blockDate(dlg.iso)}>
-                      Bloquear data
-                    </Button>
-                  </div>
                 </div>
-              )}
-              
-              {dlg.status === "past" && (
-                <div className="text-sm text-muted-foreground">Data passada — sem ações.</div>
-              )}
+              </div>
             </div>
           )}
 
@@ -239,4 +291,11 @@ export default function AdminCalendar() {
       </Dialog>
     </div>
   );
+}
+
+function getMonthDays(year: number, month0: number): Date[] {
+  const days: Date[] = [];
+  const last = new Date(year, month0 + 1, 0).getDate();
+  for (let i = 1; i <= last; i++) days.push(new Date(year, month0, i));
+  return days;
 }
