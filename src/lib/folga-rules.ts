@@ -70,6 +70,15 @@ export function getMonthDays(year: number, month0: number): Date[] {
   return days;
 }
 
+/**
+ * Retorna datas que seriam bloqueadas automaticamente por regras fixas.
+ * Atualmente as regras são gerenciadas via banco de dados (bloqueio_regras),
+ * mas mantemos a função para compatibilidade com os componentes de UI.
+ */
+export function autoBlockedDatesForMonth(year: number, month0: number): { date: string; reason: string }[] {
+  return [];
+}
+
 // --- UNIFIED AVAILABILITY LOGIC ---
 
 export function calculateDateStatus(params: {
