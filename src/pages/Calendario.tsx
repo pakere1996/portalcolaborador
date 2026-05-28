@@ -54,6 +54,8 @@ export default function CalendarioPage() {
     const endDate = new Date(year, month0 + 1, 0);
     const end = ymd(endDate);
 
+    console.log(`[Calendario] Carregando dados para ${month0 + 1}/${year}...`);
+
     const [allFolgasRes, blockRes, limRes, prioRes, pendingRes, profilesRes] = await Promise.all([
       supabase.from("folgas").select("user_id, data").gte("data", start).lte("data", end),
       supabase.from("datas_bloqueadas").select("data, motivo, liberada").gte("data", start).lte("data", end),
@@ -63,9 +65,16 @@ export default function CalendarioPage() {
       supabase.from("profiles").select("id, folga_fixa_semana").eq("ativo", true),
     ]);
 
-    // Verificação de erros de permissão (RLS/Grants)
-    if (allFolgasRes.error) console.error("Erro ao carregar folgas da equipe:", allFolgasRes.error);
-    if (profilesRes.error) console.error("Erro ao carregar perfis da equipe:", profilesRes.error);
+    // Debug de visibilidade
+    console.log("[Calendario] Resumo de carga:", {
+      folgasEquipe: allFolgasRes.data?.length ?? 0,
+      perfisAtivos: profilesRes.data?.length ?? 0,
+      bloqueiosManuais: blockRes.data?.length ?? 0,
+      limitesCustom: limRes.data?.length ?? 0
+    });
+
+    if (allFolgasRes.error) console.error("Erro Folgas:", allFolgasRes.error);
+    if (profilesRes.error) console.error("Erro Perfis:", profilesRes.error);
 
     setFolgas((allFolgasRes.data ?? []) as { user_id: string; data: string }[]);
     setManual((blockRes.data ?? []) as { data: string; motivo: string; liberada: boolean }[]);
