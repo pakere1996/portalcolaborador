@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,14 +5,10 @@ import { formatBR, parseYMD } from "@/lib/folga-rules";
 import { Badge } from "@/components/ui/badge";
 import { ClipboardList } from "lucide-react";
 
-export const Route = createFileRoute("/_authenticated/historico")({
-  component: HistoricoPage,
-});
-
 interface Folga { id: string; data: string; tipo: string; created_at: string; criado_por: string | null }
 interface Solic { id: string; data: string; motivo: string; status: string; resposta_admin: string | null; created_at: string }
 
-function HistoricoPage() {
+export default function HistoricoPage() {
   const { user } = useAuth();
   const [folgas, setFolgas] = useState<Folga[]>([]);
   const [solics, setSolics] = useState<Solic[]>([]);

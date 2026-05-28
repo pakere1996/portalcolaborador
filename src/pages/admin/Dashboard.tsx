@@ -1,13 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Shield, Users, Calendar, ClipboardList } from "lucide-react";
 
-export const Route = createFileRoute("/_authenticated/admin/")({
-  component: AdminDashboard,
-});
-
-function AdminDashboard() {
+export default function AdminDashboard() {
   const [stats, setStats] = useState({
     funcionarios: 0,
     folgasMes: 0,

@@ -1,12 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeftRight } from "lucide-react";
-
-export const Route = createFileRoute("/_authenticated/admin/trocas")({
-  component: AdminTrocas,
-});
 
 const DIAS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
@@ -21,7 +16,7 @@ interface Row {
   respondido_em: string | null;
 }
 
-function AdminTrocas() {
+export default function AdminTrocas() {
   const [rows, setRows] = useState<Row[]>([]);
   const [nomes, setNomes] = useState<Map<string, string>>(new Map());
   const [filtro, setFiltro] = useState<string>("todos");

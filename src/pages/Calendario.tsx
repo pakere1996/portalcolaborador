@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,11 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Calendar as CalIcon, Cake } from "lucide-react";
 
-export const Route = createFileRoute("/_authenticated/calendario")({
-  component: CalendarioPage,
-});
-
-function CalendarioPage() {
+export default function CalendarioPage() {
   const { user, profile } = useAuth();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
@@ -77,7 +72,6 @@ function CalendarioPage() {
 
   useEffect(() => { load(); }, [year, month0, user]);
 
-  // Realtime: recarrega quando folgas ou prioridades mudam
   useEffect(() => {
     const ch = supabase
       .channel("calendario-realtime")
@@ -85,7 +79,6 @@ function CalendarioPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "prioridade_aniversario" }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, month0, user?.id]);
 
   const occupantsByDate = useMemo(() => {

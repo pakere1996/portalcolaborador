@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { FolgaCalendar } from "@/components/FolgaCalendar";
@@ -12,11 +11,7 @@ import { toast } from "sonner";
 import { Calendar as CalIcon } from "lucide-react";
 import { dayType, formatBR, monthKey, parseYMD } from "@/lib/folga-rules";
 
-export const Route = createFileRoute("/_authenticated/admin/calendario")({
-  component: AdminCalendar,
-});
-
-function AdminCalendar() {
+export default function AdminCalendar() {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month0, setMonth0] = useState(today.getMonth());
@@ -197,7 +192,7 @@ function AdminCalendar() {
                     <Label>Ou bloquear esta data:</Label>
                     <Input
                       value={blockReason}
-                      onChange={(e) => setBlockReason(e.target.value)}
+                      onChange={(e) => setEditBlockReason(e.target.value)}
                       placeholder="Motivo do bloqueio"
                     />
                     <Button variant="destructive" className="w-full" onClick={() => blockDate(dlg.iso)}>

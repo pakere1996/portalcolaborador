@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,17 +7,13 @@ import { formatBR, parseYMD, dayType, monthKey } from "@/lib/folga-rules";
 import { ClipboardList, Check, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
-export const Route = createFileRoute("/_authenticated/admin/solicitacoes")({
-  component: SolicPage,
-});
-
 interface Solic {
   id: string; user_id: string; data: string; motivo: string;
   status: string; resposta_admin: string | null; created_at: string;
   nome?: string;
 }
 
-function SolicPage() {
+export default function SolicPage() {
   const { user } = useAuth();
   const [list, setList] = useState<Solic[]>([]);
   const [resp, setResp] = useState<Record<string, string>>({});
@@ -49,7 +44,6 @@ function SolicPage() {
     if (error) return toast.error(error.message);
 
     if (approve) {
-      // Liberate the date and create folga
       await supabase.from("datas_bloqueadas").upsert(
         { data: s.data, motivo: "Liberada por solicitação", liberada: true, auto: false },
         { onConflict: "data" },

@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,10 +10,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { ArrowLeftRight, Check, X as XIcon, Plus } from "lucide-react";
-
-export const Route = createFileRoute("/_authenticated/trocas")({
-  component: TrocasPage,
-});
 
 const DIAS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
@@ -33,7 +28,7 @@ interface Troca {
   created_at: string;
 }
 
-function TrocasPage() {
+export default function TrocasPage() {
   const { user, profile } = useAuth();
   const [colegas, setColegas] = useState<Profile[]>([]);
   const [trocas, setTrocas] = useState<Troca[]>([]);

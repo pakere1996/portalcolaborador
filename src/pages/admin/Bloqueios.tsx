@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -17,10 +16,6 @@ import {
 import { toast } from "sonner";
 import { Ban, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { MONTH_NAMES, formatBR, parseYMD } from "@/lib/folga-rules";
-
-export const Route = createFileRoute("/_authenticated/admin/bloqueios")({
-  component: BloqueiosAdmin,
-});
 
 type Tipo = "fixa_anual" | "dinamica";
 interface Regra {
@@ -69,18 +64,16 @@ const emptyRegra = (): Regra => ({
   ativo: true,
 });
 
-function BloqueiosAdmin() {
+export default function BloqueiosAdmin() {
   const currentYear = new Date().getFullYear();
   const [regras, setRegras] = useState<Regra[]>([]);
   const [datas, setDatas] = useState<DataBloqueada[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filtros de datas
   const [ano, setAno] = useState<number>(currentYear);
   const [mesFiltro, setMesFiltro] = useState<string>("todos");
   const [tipoFiltro, setTipoFiltro] = useState<string>("todos");
 
-  // Dialog regra
   const [dlgOpen, setDlgOpen] = useState(false);
   const [edit, setEdit] = useState<Regra>(emptyRegra());
 
@@ -217,7 +210,6 @@ function BloqueiosAdmin() {
           <TabsTrigger value="datas">Datas geradas ({datas.length})</TabsTrigger>
         </TabsList>
 
-        {/* ----------- REGRAS ----------- */}
         <TabsContent value="regras" className="space-y-2">
           {regras.length === 0 && (
             <div className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
@@ -249,7 +241,6 @@ function BloqueiosAdmin() {
           ))}
         </TabsContent>
 
-        {/* ----------- DATAS ----------- */}
         <TabsContent value="datas" className="space-y-4">
           <div className="flex gap-2 flex-wrap items-end">
             <div>
@@ -322,7 +313,6 @@ function BloqueiosAdmin() {
         </TabsContent>
       </Tabs>
 
-      {/* ----------- DIALOG REGRA ----------- */}
       <Dialog open={dlgOpen} onOpenChange={setDlgOpen}>
         <DialogContent>
           <DialogHeader>
