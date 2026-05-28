@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import {
   Tabs, TabsContent, TabsList, TabsTrigger,
-} from "@/components/tabs";
+} from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Ban, Pencil, Plus, Trash2 } from "lucide-react";
 import { MONTH_NAMES, formatBR, parseYMD } from "@/lib/folga-rules";
