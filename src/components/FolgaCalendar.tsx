@@ -1,3 +1,5 @@
+"use client";
+
 import { useMemo } from "react";
 import {
   MONTH_NAMES,
@@ -75,10 +77,6 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     const days = getMonthDays(year, month0);
     const auto = new Map(autoBlockedDatesForMonth(year, month0).map((b) => [b.date, b.reason]));
 
-    const myFolgaThisMonth = Array.from(occupantsByDate?.values() || []).some(occList => 
-      occList.some(o => o.userId === myUserId)
-    );
-
     const result: DayInfo[] = [];
     for (let i = 0; i < lead; i++) result.push({ kind: "blank" });
 
@@ -113,7 +111,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      // 3. Minha Folga (Azul/Destaque)
+      // 3. Minha Folga (Amarelo - Conforme solicitado)
       if (isMine) {
         result.push({
           kind: "weekend", date: d, iso, status: "mine", occupants, limit, birthdayUser,
@@ -122,7 +120,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      // 4. Solicitação Pendente (Amarelo)
+      // 4. Solicitação Pendente (Amarelo claro/Borda)
       if (isPending) {
         result.push({
           kind: "weekend", date: d, iso, status: "pending", occupants, limit,
@@ -162,23 +160,14 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      // 8. Já possui folga no mês (Vermelho para as outras datas)
-      if (myFolgaThisMonth && !isAdmin) {
-        result.push({
-          kind: "weekend", date: d, iso, status: "blocked", occupants, limit,
-          tooltip: "Você já possui uma folga marcada neste mês"
-        });
-        continue;
-      }
-
-      // 9. Disponível (Verde)
+      // 8. Disponível (Verde) - Mantém verde mesmo se o usuário já tiver folga no mês
       result.push({
         kind: "weekend", date: d, iso, status: "available", occupants, limit,
         tooltip: limit > 1 ? `Disponível (${occupants.length}/${limit})` : "Disponível para seleção"
       });
     }
     return result;
-  }, [year, month0, occupantsByDate, manualBlocked, dayLimits, birthdayByDate, pendingRequests, myUserId, today, locked, isAdmin]);
+  }, [year, month0, occupantsByDate, manualBlocked, dayLimits, birthdayByDate, pendingRequests, myUserId, today, locked]);
 
   return (
     <TooltipProvider>
@@ -229,7 +218,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
               blocked: "bg-red-500/10 border-red-500/30 text-red-600",
               taken: "bg-red-500/10 border-red-500/30 text-red-600",
               birthday: "bg-red-500/10 border-red-500/30 text-red-600",
-              mine: "bg-blue-600 border-blue-700 text-white shadow-md scale-105 z-10",
+              mine: "bg-amber-400 border-amber-500 text-amber-900 shadow-md scale-105 z-10", // Amarelo para "Minha Folga"
               pending: "bg-amber-500/10 border-amber-500/30 text-amber-600",
               past: "bg-muted/20 border-transparent text-muted-foreground/40",
             };
@@ -247,13 +236,13 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     )}
                   >
                     {c.birthdayUser && (
-                      <Cake className={cn("absolute top-1 right-1 size-3", c.status === 'mine' ? 'text-white' : 'text-amber-500')} />
+                      <Cake className={cn("absolute top-1 right-1 size-3", c.status === 'mine' ? 'text-amber-900' : 'text-amber-500')} />
                     )}
                     <span className="text-lg leading-none">{c.date.getDate()}</span>
                     {c.label && (
                       <span className={cn(
                         "text-[9px] truncate px-1 mt-1 max-w-full font-medium",
-                        c.status === 'mine' ? 'text-white/90' : 'text-current/70'
+                        c.status === 'mine' ? 'text-amber-900/80' : 'text-current/70'
                       )}>
                         {c.label}
                       </span>
@@ -273,8 +262,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         <div className="flex flex-wrap gap-4 mt-8 pt-6 border-t border-border text-[10px] font-bold uppercase tracking-tight">
           <Legend color="bg-emerald-500" label="Disponível" />
           <Legend color="bg-red-500" label="Indisponível / Lotado" />
-          <Legend color="bg-amber-500" label="Solicitação Pendente" />
-          <Legend color="bg-blue-600" label="Sua Folga" />
+          <Legend color="bg-amber-400" label="Sua Folga" />
           <Legend color="bg-muted" label="Passado" />
         </div>
       </div>
