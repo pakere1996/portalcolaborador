@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { FolgaCalendar, type DayOccupant } from "@/components/FolgaCalendar";
@@ -12,13 +13,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Filter, User, Trash2, Plus, Settings2, Save, Lock, Info, Unlock, AlertTriangle } from "lucide-react";
+import { Calendar as CalIcon, Filter, User, Trash2, Plus, Settings2, Save, Lock, Info, Unlock, AlertTriangle, ChevronRight } from "lucide-react";
 import { dayType, formatBR, monthKey, parseYMD, ymd, autoBlockedDatesForMonth } from "@/lib/folga-rules";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
 export default function AdminCalendar() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month0, setMonth0] = useState(today.getMonth());
@@ -114,7 +116,8 @@ export default function AdminCalendar() {
         userId: p.user_id, 
         userName: nm.get(p.user_id) || "Desconhecido", 
         type: "pending", 
-        origin: "Solicitação Pendente" 
+        origin: "Solicitação Pendente",
+        requestId: p.id
       });
       m.set(iso, arr);
     });
@@ -354,32 +357,64 @@ export default function AdminCalendar() {
               <div className="space-y-5">
                 <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Escala do Dia</h3>
                 <div className="grid gap-4">
-                  {occupantsByDate.get(dlg.iso)?.map((occ, idx) => (
-                    <div key={idx} className="group bg-slate-50/50 p-5 rounded-3xl border border-slate-100 flex items-center justify-between transition-all hover:bg-white hover:shadow-xl hover:scale-[1.02]">
-                      <div className="flex items-center gap-5">
-                        <div className={cn(
-                          "size-3 rounded-full shadow-sm",
-                          occ.type === 'fixed' ? "bg-blue-400" :
-                          occ.type === 'monthly' ? "bg-amber-400" :
-                          "bg-orange-400"
-                        )} />
-                        <div>
-                          <div className="font-black text-slate-900 text-lg tracking-tight">{occ.userName}</div>
-                          <div className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{occ.origin}</div>
+                  {occupantsByDate.get(dlg.iso)?.map((occ, idx) => {
+                    const isPending = occ.type === 'pending';
+                    
+                    const content = (
+                      <div className={cn(
+                        "group p-5 rounded-3xl border flex items-center justify-between transition-all",
+                        isPending 
+                          ? "bg-violet-50/50 border-violet-100 hover:bg-white hover:shadow-xl hover:scale-[1.02] cursor-pointer" 
+                          : "bg-slate-50/50 border-slate-100 hover:bg-white hover:shadow-xl hover:scale-[1.02]"
+                      )}>
+                        <div className="flex items-center gap-5">
+                          <div className={cn(
+                            "size-3 rounded-full shadow-sm",
+                            occ.type === 'fixed' ? "bg-blue-400" :
+                            occ.type === 'monthly' ? "bg-amber-400" :
+                            "bg-orange-400"
+                          )} />
+                          <div>
+                            <div className="font-black text-slate-900 text-lg tracking-tight">{occ.userName}</div>
+                            <div className={cn(
+                              "text-[11px] font-bold uppercase tracking-widest mt-0.5",
+                              isPending ? "text-violet-500" : "text-slate-400"
+                            )}>{occ.origin}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isPending && <ChevronRight className="size-5 text-violet-300 group-hover:text-violet-500 transition-colors" />}
+                          {occ.type === 'monthly' && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="size-10 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-2xl opacity-0 group-hover:opacity-100 transition-all"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeFolga(dlg.iso, occ.userId);
+                              }}
+                            >
+                              <Trash2 className="size-5" />
+                            </Button>
+                          )}
                         </div>
                       </div>
-                      {occ.type === 'monthly' && (
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="size-10 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-2xl opacity-0 group-hover:opacity-100 transition-all"
-                          onClick={() => removeFolga(dlg.iso, occ.userId)}
+                    );
+
+                    if (isPending) {
+                      return (
+                        <button 
+                          key={idx} 
+                          className="text-left block w-full"
+                          onClick={() => navigate('/admin/solicitacoes')}
                         >
-                          <Trash2 className="size-5" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
+                          {content}
+                        </button>
+                      );
+                    }
+
+                    return <div key={idx}>{content}</div>;
+                  })}
                   {!occupantsByDate.get(dlg.iso)?.length && (
                     <div className="text-sm font-medium text-slate-400 text-center py-12 bg-slate-50/50 rounded-[2rem] border border-dashed border-slate-200">
                       Ninguém escalado para este dia.

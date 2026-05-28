@@ -24,6 +24,7 @@ export interface DayOccupant {
   userName?: string;
   type: "fixed" | "monthly" | "pending";
   origin?: string;
+  requestId?: string;
 }
 
 export type DayInfo =
