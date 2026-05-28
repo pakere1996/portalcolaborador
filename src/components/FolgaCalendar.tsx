@@ -101,7 +101,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
       const mineHere = !!myUserId && occupants.some((o) => o.userId === myUserId);
       const isFull = occupants.length >= limit;
 
-      // Se eu já tenho folga aqui, status é "mine"
+      // 1. Minha folga (Sempre azul)
       if (mineHere) {
         result.push({
           kind: "weekend",
@@ -117,7 +117,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      // Se está lotado por outros, status é "taken"
+      // 2. Lotado (Vermelho)
       if (isFull) {
         result.push({
           kind: "weekend",
@@ -133,7 +133,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      // Verificamos bloqueios manuais ou automáticos
+      // 3. Bloqueios (Vermelho)
       const manual = manualBlocked.get(iso);
       const autoReason = auto.get(iso);
       const blockedReason =
@@ -153,13 +153,13 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      // Prioridade de aniversário de outro colega
+      // 4. Prioridade de aniversário de outro (Vermelho para evitar confusão)
       if (birthdayUser && birthdayUser.userId !== myUserId) {
         result.push({
           kind: "weekend",
           date: d,
           iso,
-          status: "birthday",
+          status: "birthday", // Usaremos a cor de bloqueado no CSS
           occupants,
           limit,
           birthdayUser,
@@ -168,23 +168,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      // Se tem gente mas não está lotado, status é "available" mas com indicador
-      if (occupants.length > 0) {
-        result.push({
-          kind: "weekend",
-          date: d,
-          iso,
-          status: "available",
-          occupants,
-          limit,
-          birthdayUser,
-          label: occupants[0].userName?.split(" ")[0],
-          tooltip: `${occupants.length}/${limit} ocupado — ${occupants.map(o => o.userName).join(", ")}`,
-        });
-        continue;
-      }
-
-      // Totalmente livre
+      // 5. Disponível (Verde) - Pode ter gente mas não está lotado
       result.push({
         kind: "weekend",
         date: d,
@@ -193,7 +177,10 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         occupants,
         limit,
         birthdayUser,
-        tooltip: limit > 1 ? `Disponível (0/${limit})` : "Disponível",
+        label: occupants.length > 0 ? occupants[0].userName?.split(" ")[0] : undefined,
+        tooltip: occupants.length > 0 
+          ? `${occupants.length}/${limit} ocupado — ${occupants.map(o => o.userName).join(", ")}`
+          : limit > 1 ? `Disponível (0/${limit})` : "Disponível",
       });
     }
     return result;
@@ -241,13 +228,15 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
               );
             }
             const isClickable = !!onSelectDay && !locked;
+            
+            // Unificando cores: birthday (de outros), blocked e taken ficam vermelhos
+            const isRed = c.status === "blocked" || c.status === "taken" || c.status === "birthday";
+            
             const classes = cn(
               "aspect-square rounded-xl flex flex-col items-center justify-center text-sm font-bold relative overflow-hidden border-2 transition-all duration-200",
               c.status === "available" && "bg-available/10 border-available/20 text-available hover:scale-105 hover:shadow-md",
-              c.status === "blocked" && "bg-unavailable/10 border-unavailable/20 text-unavailable opacity-80",
-              c.status === "taken" && "bg-unavailable/10 border-unavailable/20 text-unavailable shadow-inner",
+              isRed && "bg-unavailable/10 border-unavailable/20 text-unavailable shadow-inner",
               c.status === "mine" && "bg-mine border-mine text-mine-foreground shadow-lg scale-105 z-10",
-              c.status === "birthday" && "bg-pending/10 border-pending/20 text-pending-foreground",
               c.status === "past" && "bg-muted/20 border-transparent text-muted-foreground/30",
               isClickable && "cursor-pointer",
               !isClickable && "cursor-default"
