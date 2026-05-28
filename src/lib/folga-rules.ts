@@ -69,6 +69,24 @@ export function getMonthDays(year: number, month0: number): Date[] {
   return days;
 }
 
+export function firstWeekendAfterDay5(year: number, month0: number): string[] {
+  let d = new Date(year, month0, 6);
+  while (d.getDay() !== 6) {
+    d = new Date(year, month0, d.getDate() + 1);
+  }
+  const sat = ymd(d);
+  const sun = ymd(new Date(year, month0, d.getDate() + 1));
+  return [sat, sun];
+}
+
+export function autoBlockedDatesForMonth(year: number, month0: number): { date: string; reason: string }[] {
+  const result: { date: string; reason: string }[] = [];
+  const [sat, sun] = firstWeekendAfterDay5(year, month0);
+  result.push({ date: sat, reason: "Primeiro fim de semana após dia 5" });
+  result.push({ date: sun, reason: "Primeiro fim de semana após dia 5" });
+  return result;
+}
+
 // --- UNIFIED AVAILABILITY LOGIC ---
 
 export function calculateDateStatus(params: {
@@ -143,7 +161,7 @@ export function calculateDateStatus(params: {
   if (isWknd) {
     const limit = dayLimits.get(iso) ?? 1;
     
-    // Contar folgas mensais
+    // Contar folgas mensais de toda a equipe
     const monthlyCount = allFolgas.filter(f => f.data === iso).length;
     
     // Contar folgas fixas de toda a equipe
@@ -169,32 +187,3 @@ export const MONTH_NAMES = [
 ];
 
 export const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-
-export function specialBlockedDates(year: number): { date: string; reason: string }[] {
-  // Mantido para compatibilidade, mas a lógica agora é centralizada no banco/regras
-  return [];
-}
-
-function nthSundayOfMonth(year: number, month0: number, n: number): Date {
-  const d = new Date(year, month0, 1);
-  const offset = (7 - d.getDay()) % 7;
-  return new Date(year, month0, 1 + offset + (n - 1) * 7);
-}
-
-export function firstWeekendAfterDay5(year: number, month0: number): string[] {
-  let d = new Date(year, month0, 6);
-  while (d.getDay() !== 6) {
-    d = new Date(year, month0, d.getDate() + 1);
-  }
-  const sat = ymd(d);
-  const sun = ymd(new Date(year, month0, d.getDate() + 1));
-  return [sat, sun];
-}
-
-export function autoBlockedDatesForMonth(year: number, month0: number): { date: string; reason: string }[] {
-  const result: { date: string; reason: string }[] = [];
-  const [sat, sun] = firstWeekendAfterDay5(year, month0);
-  result.push({ date: sat, reason: "Primeiro fim de semana após dia 5" });
-  result.push({ date: sun, reason: "Primeiro fim de semana após dia 5" });
-  return result;
-}

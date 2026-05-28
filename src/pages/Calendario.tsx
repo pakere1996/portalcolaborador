@@ -12,7 +12,6 @@ import {
   parseYMD,
   unlockDateForMonth,
   ymd,
-  getMonthDays,
   calculateDateStatus,
 } from "@/lib/folga-rules";
 import { Button } from "@/components/ui/button";
@@ -23,7 +22,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Calendar as CalIcon, Cake, Clock, AlertCircle } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 
 interface Solic {
   id: string;
@@ -56,6 +54,7 @@ export default function CalendarioPage() {
     const endDate = new Date(year, month0 + 1, 0);
     const end = ymd(endDate);
 
+    // Buscamos folgas de TODOS os usuários para calcular ocupação real
     const [allFolgasRes, blockRes, limRes, prioRes, pendingRes, profilesRes] = await Promise.all([
       supabase.from("folgas").select("user_id, data").gte("data", start).lte("data", end),
       supabase.from("datas_bloqueadas").select("data, motivo, liberada").gte("data", start).lte("data", end),

@@ -6,6 +6,7 @@ import {
   WEEKDAY_LABELS,
   getMonthDays,
   calculateDateStatus,
+  ymd,
   type DateStatusKind,
 } from "@/lib/folga-rules";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,6 @@ export type DayInfo =
       birthdayUser?: { userId: string; userName?: string };
       label?: string;
       tooltip?: string;
-      blockedReason?: string;
     };
 
 export interface FolgaCalendarProps {
@@ -83,9 +83,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     for (let i = 0; i < lead; i++) result.push({ kind: "blank" });
 
     for (const d of days) {
-      const iso = props.allFolgas[0]?.data || ""; // Apenas para forçar re-render se folgas mudarem
+      const iso = ymd(d);
       
-      // CHAMADA ÚNICA DA FONTE DE VERDADE
       const { status, reason, label } = calculateDateStatus({
         date: d,
         myUserId,
@@ -102,68 +101,17 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
       result.push({
         kind: "day",
         date: d,
-        iso: props.allFolgas.find(f => f.data === props.allFolgas[0]?.data)?.data || "", // Placeholder, o ymd(d) é gerado dentro
+        iso,
         status,
-        occupants: occupantsByDate?.get(props.allFolgas[0]?.data || "") || [], // Placeholder
-        limit: dayLimits.get(props.allFolgas[0]?.data || "") || 1, // Placeholder
+        occupants: occupantsByDate?.get(iso) || [],
+        limit: dayLimits.get(iso) || 1,
         label,
         tooltip: reason,
-        birthdayUser: birthdayByDate.get(props.allFolgas[0]?.data || "")
-      });
-      
-      // Corrigindo a atribuição real do ISO e dados que o loop acima bagunçou no pensamento
-      const last = result[result.length - 1] as any;
-      const realIso = props.allFolgas.find(() => true)?.data || ""; // Forçar dependência
-      // Na verdade, vamos reconstruir o objeto corretamente:
-      result[result.length - 1] = {
-        kind: "day",
-        date: d,
-        iso: props.allFolgas.find(() => true) ? props.allFolgas.find(() => true)!.data : "", // Forçar dependência
-        status,
-        occupants: occupantsByDate?.get(props.allFolgas.find(() => true)?.data || "") || [], // Forçar dependência
-        limit: dayLimits.get(props.allFolgas.find(() => true)?.data || "") || 1, // Forçar dependência
-        label,
-        tooltip: reason,
-      } as any;
-      
-      // RE-IMPLEMENTAÇÃO LIMPA DO LOOP PARA EVITAR ERROS DE REFERÊNCIA
-    }
-    
-    // Reiniciando o loop de forma limpa para garantir 100% de acerto
-    const cleanResult: DayInfo[] = [];
-    for (let i = 0; i < lead; i++) cleanResult.push({ kind: "blank" });
-    
-    for (const d of days) {
-      const iso = props.allFolgas.find(() => true) ? "dummy" : "dummy"; // Forçar dependência do useMemo
-      const { status, reason, label } = calculateDateStatus({
-        date: d,
-        myUserId,
-        allFolgas,
-        allProfiles,
-        manualBlocked,
-        dayLimits,
-        birthdayByDate: birthdayByDate as any,
-        pendingRequests,
-        isAdmin: !!isAdmin,
-        locked
-      });
-
-      const dIso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, '0') + "-" + String(d.getDate()).padStart(2, '0');
-
-      cleanResult.push({
-        kind: "day",
-        date: d,
-        iso: dIso,
-        status,
-        occupants: occupantsByDate?.get(dIso) || [],
-        limit: dayLimits.get(dIso) || 1,
-        label,
-        tooltip: reason,
-        birthdayUser: birthdayByDate.get(dIso)
+        birthdayUser: birthdayByDate.get(iso)
       });
     }
     
-    return cleanResult;
+    return result;
   }, [year, month0, allFolgas, allProfiles, manualBlocked, dayLimits, birthdayByDate, myUserId, isAdmin, locked, pendingRequests, occupantsByDate]);
 
   return (
