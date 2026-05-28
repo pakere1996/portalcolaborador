@@ -12,7 +12,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Plus, Users, Pencil, Trash2, KeyRound, Cake, CalendarDays } from "lucide-react";
+import { Plus, Users, Pencil, Trash2, KeyRound, Cake, CalendarDays, RefreshCw } from "lucide-react";
 import { formatCPF, isValidCPFLength, onlyDigits } from "@/lib/cpf";
 import { adminApi } from "@/lib/admin-api";
 import { Badge } from "@/components/ui/badge";
@@ -91,6 +91,29 @@ export default function Funcionarios() {
       toast.error("Erro ao cadastrar", { description: (e as Error).message });
     } finally {
       setBusy(false);
+    }
+  };
+
+  const syncAccess = async (p: Profile) => {
+    const toastId = toast.loading(`Sincronizando acesso de ${p.nome}...`);
+    try {
+      await adminApi.createUser({
+        nome: p.nome,
+        cpf: onlyDigits(p.cpf),
+        cargo: p.cargo,
+        senha: "mudar123456", // Senha temporária para reparo
+        dataAdmissao: p.data_admissao,
+        dataNascimento: p.data_nascimento,
+        folgaFixaSemana: p.folga_fixa_semana,
+        role: "funcionario",
+      });
+      toast.success("Acesso sincronizado!", { 
+        id: toastId,
+        description: "O login foi reparado. Use a função de 'Chave' para definir a senha final." 
+      });
+      load();
+    } catch (e) {
+      toast.error("Erro na sincronização", { id: toastId, description: (e as Error).message });
     }
   };
 
@@ -277,6 +300,9 @@ export default function Funcionarios() {
                   </td>
                   <td className="p-4 text-right whitespace-nowrap">
                     <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" className="size-8" title="Sincronizar Acesso" onClick={() => syncAccess(p)}>
+                        <RefreshCw className="size-4 text-blue-500" />
+                      </Button>
                       <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={() => openEdit(p)}>
                         <Pencil className="size-4" />
                       </Button>
