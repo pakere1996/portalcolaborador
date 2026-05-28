@@ -40,60 +40,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadProfile = async (uid: string) => {
     try {
-      console.log("[Auth] Carregando dados para:", uid);
+      console.log("[Auth] Buscando dados para o ID:", uid);
       
-      // Buscamos o perfil e a role
       const [profRes, rolesRes] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
         supabase.from("user_roles").select("role").eq("user_id", uid)
       ]);
       
-      if (profRes.error) console.error("[Auth] Erro Perfil:", profRes.error);
-      if (rolesRes.error) console.error("[Auth] Erro Roles:", rolesRes.error);
+      if (profRes.error) console.error("[Auth] Erro ao buscar Perfil:", profRes.error);
+      if (rolesRes.error) console.error("[Auth] Erro ao buscar Roles:", rolesRes.error);
 
       const p = profRes.data as Profile | null;
       
       if (p && p.ativo === false) {
-        console.warn("[Auth] Usuário inativo.");
+        console.warn("[Auth] Usuário desativado pelo administrador.");
         await supabase.auth.signOut();
         return;
       }
 
       setProfile(p);
-      const r = (rolesRes.data ?? []).map((x: any) => x.role);
+      const roles = (rolesRes.data ?? []).map((x: any) => x.role);
       
-      // Prioridade para admin
-      if (r.includes("admin")) {
+      if (roles.includes("admin")) {
         setRole("admin");
-      } else if (r.includes("funcionario")) {
+      } else if (roles.includes("funcionario")) {
         setRole("funcionario");
       } else {
         setRole(null);
       }
       
-      console.log("[Auth] Perfil carregado:", p?.nome, "| Role:", r);
+      console.log("[Auth] Carregamento concluído. Nome:", p?.nome, "| Role:", roles);
     } catch (err) {
-      console.error("[Auth] Erro crítico no contexto:", err);
+      console.error("[Auth] Erro inesperado no loadProfile:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange(async (evt, s) => {
-      console.log("[Auth] Evento:", evt);
-      setSession(s);
-      if (s?.user) {
-        await loadProfile(s.user.id);
+    // Monitora mudanças de estado (login/logout)
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+      console.log("[Auth] Evento de Autenticação:", event);
+      setSession(currentSession);
+      
+      if (currentSession?.user) {
+        await loadProfile(currentSession.user.id);
       } else {
         setProfile(null);
         setRole(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      if (data.session?.user) {
-        loadProfile(data.session.user.id).finally(() => setLoading(false));
+    // Checagem inicial da sessão
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      setSession(initialSession);
+      if (initialSession?.user) {
+        loadProfile(initialSession.user.id);
       } else {
         setLoading(false);
       }
