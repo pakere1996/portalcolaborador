@@ -103,7 +103,9 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
 
       if (occupants.length > 0) {
         const status = mineHere ? "mine" : isFull ? "taken" : "available";
-        const label = occupants.map(o => o.userName?.split(' ')[0]).join(', ');
+        // Se for "mine", mostra o nome. Se não, mostra apenas "Ocupado"
+        const label = mineHere ? "Sua folga" : isFull ? "Lotado" : "Ocupado";
+        
         result.push({
           kind: "weekend",
           date: d,
@@ -112,12 +114,11 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
           occupants,
           limit,
           birthdayUser,
-          label,
+          label: occupants.length > 0 ? label : undefined,
           tooltip:
             `${occupants.length}/${limit} ocupado` +
             (isFull ? " (Lotado)" : "") +
-            ` — ${occupants.map((o) => o.userName ?? "Alguém").join(", ")}` +
-            (birthdayUser ? ` | 🎂 Aniversário: ${birthdayUser.userName}` : ""),
+            (birthdayUser ? ` | 🎂 Aniversário` : ""),
         });
         continue;
       }
@@ -153,7 +154,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
           birthdayUser,
           tooltip: mine
             ? `🎂 Seu aniversário! Você tem prioridade hoje.`
-            : `🎂 Reservado para ${birthdayUser.userName} (Aniversário)`,
+            : `🎂 Reservado para Aniversariante`,
         });
         continue;
       }

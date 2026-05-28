@@ -38,7 +38,9 @@ export default function CalendarioPage() {
     const endDate = new Date(year, month0 + 1, 0);
     const end = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
 
-    // Buscamos todas as folgas para calcular a ocupação real
+    // Buscamos todas as folgas. 
+    // IMPORTANTE: Se o RLS estiver ativo, o colaborador só verá as dele.
+    // Você deve permitir a leitura de todas as folgas no painel do Supabase.
     const [allFolgasRes, blockRes, limRes, prioRes, profRes] = await Promise.all([
       supabase.from("folgas").select("user_id, data").gte("data", start).lte("data", end),
       supabase.from("datas_bloqueadas").select("data, motivo, liberada").gte("data", start).lte("data", end),
@@ -53,14 +55,15 @@ export default function CalendarioPage() {
     const combined = allFolgas.map(f => ({
       user_id: f.user_id,
       data: f.data,
-      nome: f.user_id === user.id ? "Sua folga" : (nomes.get(f.user_id) || "Ocupado")
+      // Se não for a folga do próprio usuário, exibe apenas "Ocupado" para manter a privacidade
+      nome: f.user_id === user.id ? "Sua folga" : "Ocupado"
     }));
 
     setFolgas(combined);
     setManual(blockRes.data ?? []);
     setLimites(limRes.data ?? []);
     setPrios(((prioRes.data ?? []) as { user_id: string; data: string; status: string }[]).map((p) => ({
-      ...p, nome: nomes.get(p.user_id),
+      ...p, nome: p.user_id === user.id ? "Sua prioridade" : "Reservado",
     })));
   };
 
@@ -153,7 +156,7 @@ export default function CalendarioPage() {
       toast.success(`Folga registrada para ${formatBR(d)}`);
       load();
     } else if (info.status === "birthday") {
-      toast.info(info.reason ?? "Data reservada para aniversariante");
+      toast.info("Data reservada para aniversariante");
     } else if (info.status === "blocked") {
       setReqDialog({ iso, reason: info.reason ?? "Data bloqueada" });
     } else if (info.status === "mine") {
