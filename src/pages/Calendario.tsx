@@ -38,24 +38,18 @@ export default function CalendarioPage() {
     const endDate = new Date(year, month0 + 1, 0);
     const end = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
 
-    // Buscamos todas as folgas. 
-    // IMPORTANTE: Se o RLS estiver ativo, o colaborador só verá as dele.
-    // Você deve permitir a leitura de todas as folgas no painel do Supabase.
-    const [allFolgasRes, blockRes, limRes, prioRes, profRes] = await Promise.all([
+    const [allFolgasRes, blockRes, limRes, prioRes] = await Promise.all([
       supabase.from("folgas").select("user_id, data").gte("data", start).lte("data", end),
       supabase.from("datas_bloqueadas").select("data, motivo, liberada").gte("data", start).lte("data", end),
       supabase.from("dia_config").select("data, limite_colaboradores").gte("data", start).lte("data", end),
       supabase.from("prioridade_aniversario").select("user_id, data, status").eq("status", "ativa").gte("data", start).lte("data", end),
-      supabase.from("profiles").select("id, nome"),
     ]);
 
-    const nomes = new Map(((profRes.data ?? []) as { id: string; nome: string }[]).map((p) => [p.id, p.nome]));
     const allFolgas = (allFolgasRes.data ?? []) as { user_id: string; data: string }[];
 
     const combined = allFolgas.map(f => ({
       user_id: f.user_id,
       data: f.data,
-      // Se não for a folga do próprio usuário, exibe apenas "Ocupado" para manter a privacidade
       nome: f.user_id === user.id ? "Sua folga" : "Ocupado"
     }));
 
@@ -74,6 +68,7 @@ export default function CalendarioPage() {
       .channel("calendario-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "folgas" }, () => load())
       .on("postgres_changes", { event: "*", schema: "public", table: "prioridade_aniversario" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "dia_config" }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [year, month0, user?.id]);
@@ -139,14 +134,11 @@ export default function CalendarioPage() {
         criado_por: user.id,
       }).select("id").maybeSingle();
       if (error || !inserted) {
-        console.error("[calendario] erro ao registrar folga:", error);
         const msg = error?.message ?? "Erro desconhecido";
         if (msg.toLowerCase().includes("limite") || msg.toLowerCase().includes("lotado")) {
           toast.error("Esta data já atingiu o limite de colaboradores.");
         } else if (msg.toLowerCase().includes("aniversariante") || msg.toLowerCase().includes("reservad")) {
           toast.error("Esta data está reservada para um aniversariante.");
-        } else if (error?.code === "23505") {
-          toast.error("Esta data já foi escolhida por você ou está indisponível.");
         } else {
           toast.error("Não foi possível registrar a folga", { description: msg });
         }
