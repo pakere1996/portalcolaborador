@@ -115,7 +115,7 @@ export default function CalendarioPage() {
     const statusInfo = calculateDateStatus({
       date: parseYMD(iso),
       myUserId: user.id,
-      allFolgas,
+      allFolgas: folgas, // Corrigido de allFolgas para folgas
       allProfiles,
       manualBlocked: manualMap,
       dayLimits,
