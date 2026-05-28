@@ -257,15 +257,6 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                   </div>
                 </div>
 
-                {isAdmin && c.status === 'blocked' && c.blockedReason && (
-                  <div className="mb-3">
-                    <div className="text-[10px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-1.5 bg-rose-100/50 px-2 py-1 rounded-lg border border-rose-200/50 w-fit max-w-full">
-                      <Lock className="size-2.5 shrink-0" />
-                      <span className="truncate">{c.blockedReason}</span>
-                    </div>
-                  </div>
-                )}
-
                 {isAdmin && c.occupants.length > 0 && (
                   <div className="flex flex-col gap-1.5 overflow-hidden">
                     {c.occupants.slice(0, 4).map((occ, idx) => (
