@@ -38,30 +38,24 @@ export default function CalendarioPage() {
     const endDate = new Date(year, month0 + 1, 0);
     const end = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
 
-    const [myRes, takenRes, blockRes, limRes, prioRes, profRes] = await Promise.all([
-      supabase.from("folgas").select("user_id, data").eq("user_id", user.id).gte("data", start).lte("data", end),
-      supabase.rpc("folgas_dates_in_range", { _start: start, _end: end }),
+    // Buscamos todas as folgas para calcular a ocupação real
+    const [allFolgasRes, blockRes, limRes, prioRes, profRes] = await Promise.all([
+      supabase.from("folgas").select("user_id, data").gte("data", start).lte("data", end),
       supabase.from("datas_bloqueadas").select("data, motivo, liberada").gte("data", start).lte("data", end),
       supabase.from("dia_config").select("data, limite_colaboradores").gte("data", start).lte("data", end),
       supabase.from("prioridade_aniversario").select("user_id, data, status").eq("status", "ativa").gte("data", start).lte("data", end),
       supabase.from("profiles").select("id, nome"),
     ]);
 
-    if (myRes.error) {
-      console.error("[calendario] erro carregando minhas folgas:", myRes.error);
-      toast.error("Erro ao carregar suas folgas", { description: myRes.error.message });
-    }
-
     const nomes = new Map(((profRes.data ?? []) as { id: string; nome: string }[]).map((p) => [p.id, p.nome]));
-    const myFolgas = (myRes.data ?? []) as { user_id: string; data: string }[];
-    const takenDates = ((takenRes.data ?? []) as { data: string }[]);
+    const allFolgas = (allFolgasRes.data ?? []) as { user_id: string; data: string }[];
 
-    const mineSet = new Set(myFolgas.map((f) => f.data));
-    const combined: { user_id: string; data: string; nome?: string }[] = [];
-    for (const f of myFolgas) combined.push({ ...f, nome: "Sua folga" });
-    for (const d of takenDates) {
-      if (!mineSet.has(d.data)) combined.push({ user_id: "__anon__", data: d.data, nome: "Indisponível" });
-    }
+    const combined = allFolgas.map(f => ({
+      user_id: f.user_id,
+      data: f.data,
+      nome: f.user_id === user.id ? "Sua folga" : (nomes.get(f.user_id) || "Ocupado")
+    }));
+
     setFolgas(combined);
     setManual(blockRes.data ?? []);
     setLimites(limRes.data ?? []);
@@ -261,7 +255,7 @@ export default function CalendarioPage() {
             </DialogDescription>
           </DialogHeader>
           <Textarea
-            placeholder="Explique o motivo da solicitação"
+            placeholder="Explique o motivo da solicitaçao"
             value={reqMotivo}
             onChange={(e) => setReqMotivo(e.target.value)}
             rows={5}
