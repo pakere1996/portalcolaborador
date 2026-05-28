@@ -16,5 +16,6 @@ export function isValidCPFLength(s: string): boolean {
 }
 
 export function cpfToEmail(cpf: string): string {
-  return `${onlyDigits(cpf)}@pizzaria.local`;
+  // Usando um domínio com TLD válido (.com.br) para evitar rejeição do servidor de autenticação
+  return `${onlyDigits(cpf)}@pakere.com.br`;
 }
