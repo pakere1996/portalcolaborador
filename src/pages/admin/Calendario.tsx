@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { FolgaCalendar } from "@/components/FolgaCalendar";
+import { FolgaCalendar, type DayOccupant } from "@/components/FolgaCalendar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
@@ -44,9 +44,13 @@ export default function AdminCalendar() {
 
   useEffect(() => { load(); }, [year, month0]);
 
-  const takenByDate = useMemo(() => {
-    const m = new Map<string, { userId: string; userName?: string }>();
-    for (const f of folgas) m.set(f.data, { userId: f.user_id, userName: f.nome });
+  const occupantsByDate = useMemo(() => {
+    const m = new Map<string, DayOccupant[]>();
+    for (const f of folgas) {
+      const arr = m.get(f.data) ?? [];
+      arr.push({ userId: f.user_id, userName: f.nome });
+      m.set(f.data, arr);
+    }
     return m;
   }, [folgas]);
 
@@ -80,8 +84,8 @@ export default function AdminCalendar() {
     setDlg(null); load();
   };
 
-  const removeFolga = async (iso: string) => {
-    const f = folgas.find((x) => x.data === iso);
+  const removeFolga = async (iso: string, userId: string) => {
+    const f = folgas.find((x) => x.data === iso && x.user_id === userId);
     if (!f) return;
     const { error } = await supabase.from("folgas").delete().eq("id", f.id);
     if (error) return toast.error(error.message);
@@ -134,7 +138,7 @@ export default function AdminCalendar() {
 
       <FolgaCalendar
         year={year} month0={month0}
-        takenByDate={takenByDate} manualBlocked={manualMap}
+        occupantsByDate={occupantsByDate} manualBlocked={manualMap}
         dayLimits={dayLimits}
         onPrev={goPrev} onNext={goNext}
         onSelectDay={onSelect}
@@ -151,20 +155,27 @@ export default function AdminCalendar() {
 
           {dlg && (
             <div className="space-y-4">
-              {dlg.status === "taken" || dlg.status === "mine" ? (
+              {(dlg.status === "taken" || dlg.status === "mine") ? (
                 <div className="space-y-3">
-                  <div className="text-sm">
-                    Folga de <b>{takenByDate.get(dlg.iso)?.userName}</b>.
+                  <div className="text-sm font-medium mb-2">Colaboradores com folga:</div>
+                  <div className="space-y-2">
+                    {occupantsByDate.get(dlg.iso)?.map((occ) => (
+                      <div key={occ.userId} className="flex items-center justify-between bg-muted/30 p-2 rounded-lg">
+                        <span className="text-sm">{occ.userName}</span>
+                        <Button variant="destructive" size="sm" onClick={() => removeFolga(dlg.iso, occ.userId)}>Remover</Button>
+                      </div>
+                    ))}
                   </div>
-                  <Button variant="destructive" onClick={() => removeFolga(dlg.iso)}>Remover folga</Button>
                 </div>
-              ) : dlg.status === "blocked" ? (
+              ) : null}
+
+              {dlg.status === "blocked" ? (
                 <div className="space-y-3">
                   <div className="text-sm text-muted-foreground">{manualMap.get(dlg.iso)?.reason}</div>
                   <Button onClick={() => liberateDate(dlg.iso)}>Liberar esta data</Button>
                 </div>
-              ) : dlg.status === "available" ? (
-                <div className="space-y-4">
+              ) : (
+                <div className="space-y-4 border-t border-border pt-4">
                   <div className="space-y-2">
                     <Label>Atribuir folga a:</Label>
                     <select
@@ -192,7 +203,7 @@ export default function AdminCalendar() {
                     <Label>Ou bloquear esta data:</Label>
                     <Input
                       value={blockReason}
-                      onChange={(e) => setEditBlockReason(e.target.value)}
+                      onChange={(e) => setBlockReason(e.target.value)}
                       placeholder="Motivo do bloqueio"
                     />
                     <Button variant="destructive" className="w-full" onClick={() => blockDate(dlg.iso)}>
@@ -200,7 +211,9 @@ export default function AdminCalendar() {
                     </Button>
                   </div>
                 </div>
-              ) : (
+              )}
+              
+              {dlg.status === "past" && (
                 <div className="text-sm text-muted-foreground">Data passada — sem ações.</div>
               )}
             </div>
