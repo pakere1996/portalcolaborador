@@ -84,9 +84,9 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
 
     for (const d of days) {
       const iso = ymd(d);
+      const isWknd = d.getDay() === 0 || d.getDay() === 6;
       
-      // CHAMADA ÚNICA DA FONTE DE VERDADE PARA CADA DIA
-      const { status, reason, label } = calculateDateStatus({
+      const statusInfo = calculateDateStatus({
         date: d,
         myUserId,
         allFolgas,
@@ -99,15 +99,33 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         locked
       });
 
+      // LOG DE DEPURAÇÃO PARA FINS DE SEMANA
+      if (isWknd && !isAdmin) {
+        const limit = dayLimits.get(iso) ?? 1;
+        const monthlyCount = allFolgas.filter(f => f.data === iso).length;
+        const fixedCount = allProfiles.filter(p => p.folga_fixa_semana === d.getDay()).length;
+        const total = monthlyCount + fixedCount;
+
+        console.log(`[Render] ${iso}:`, {
+          status: statusInfo.status,
+          limite: limit,
+          ocupacaoTotal: total,
+          folgasMensais: monthlyCount,
+          folgasFixas: fixedCount,
+          allFolgasCount: allFolgas.length,
+          allProfilesCount: allProfiles.length
+        });
+      }
+
       result.push({
         kind: "day",
         date: d,
         iso,
-        status,
+        status: statusInfo.status,
         occupants: occupantsByDate?.get(iso) || [],
         limit: dayLimits.get(iso) || 1,
-        label,
-        tooltip: reason,
+        label: statusInfo.label,
+        tooltip: statusInfo.reason,
         birthdayUser: birthdayByDate.get(iso)
       });
     }
