@@ -12,9 +12,10 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Plus, Users, Pencil, Trash2, KeyRound } from "lucide-react";
+import { Plus, Users, Pencil, Trash2, KeyRound, Cake, CalendarDays } from "lucide-react";
 import { formatCPF, isValidCPFLength, onlyDigits } from "@/lib/cpf";
 import { adminApi } from "@/lib/admin-api";
+import { Badge } from "@/components/ui/badge";
 
 const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
@@ -166,44 +167,55 @@ export default function Funcionarios() {
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button><Plus className="size-4" /> Novo</Button>
+            <Button className="rounded-full px-6"><Plus className="size-4 mr-2" /> Novo Funcionário</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle>Novo funcionário</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              <div><Label>Nome</Label><Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></div>
-              <div>
-                <Label>CPF</Label>
-                <Input
-                  value={form.cpf}
-                  onChange={(e) => setForm({ ...form, cpf: formatCPF(e.target.value) })}
-                  maxLength={14}
-                  placeholder="000.000.000-00"
-                />
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Nome Completo</Label>
+                <Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Ex: João Silva" />
               </div>
-              <div><Label>Cargo</Label><Input value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} /></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Data de admissão</Label>
-                  <Input type="date" value={form.dataAdmissao} onChange={(e) => setForm({ ...form, dataAdmissao: e.target.value })} />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>CPF</Label>
+                  <Input
+                    value={form.cpf}
+                    onChange={(e) => setForm({ ...form, cpf: formatCPF(e.target.value) })}
+                    maxLength={14}
+                    placeholder="000.000.000-00"
+                  />
                 </div>
-                <div>
-                  <Label>Data de nascimento</Label>
+                <div className="space-y-2">
+                  <Label>Cargo</Label>
+                  <Input value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} placeholder="Ex: Pizzaiolo" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Data de Nascimento</Label>
                   <Input type="date" value={form.dataNascimento} onChange={(e) => setForm({ ...form, dataNascimento: e.target.value })} />
                 </div>
+                <div className="space-y-2">
+                  <Label>Data de Admissão</Label>
+                  <Input type="date" value={form.dataAdmissao} onChange={(e) => setForm({ ...form, dataAdmissao: e.target.value })} />
+                </div>
               </div>
-              <div>
-                <Label>Folga fixa semanal</Label>
+              <div className="space-y-2">
+                <Label>Folga Fixa Semanal</Label>
                 <select
-                  className="w-full bg-input border border-border rounded-md px-3 py-2 text-sm"
+                  className="w-full bg-input border border-border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
                   value={form.folgaFixa}
                   onChange={(e) => setForm({ ...form, folgaFixa: e.target.value })}
                 >
-                  <option value="">— sem folga fixa —</option>
+                  <option value="">— Sem folga fixa —</option>
                   {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
                 </select>
               </div>
-              <div><Label>Senha inicial</Label><Input type="password" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} /></div>
+              <div className="space-y-2">
+                <Label>Senha Inicial</Label>
+                <Input type="password" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} placeholder="Mínimo 6 caracteres" />
+              </div>
             </div>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
@@ -213,109 +225,121 @@ export default function Funcionarios() {
         </Dialog>
       </div>
 
-      <div className="bg-card border border-border rounded-xl overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/30 text-muted-foreground">
-            <tr>
-              <th className="text-left p-3">Nome</th>
-              <th className="text-left p-3 hidden md:table-cell">CPF</th>
-              <th className="text-left p-3 hidden lg:table-cell">Cargo</th>
-              <th className="text-left p-3 hidden xl:table-cell">Nascimento</th>
-              <th className="text-left p-3 hidden xl:table-cell">Folga fixa</th>
-              <th className="text-left p-3 hidden lg:table-cell">Admissão</th>
-              <th className="text-center p-3">Ativo</th>
-              <th className="text-right p-3">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {list.length === 0 && (
-              <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">Nenhum funcionário cadastrado.</td></tr>
-            )}
-            {list.map((p) => (
-              <tr key={p.id}>
-                <td className="p-3 font-medium">
-                  {p.nome}
-                  {p.aprovacao_status === "pendente" && (
-                    <span className="ml-2 text-xs bg-pending/20 text-pending-foreground px-2 py-0.5 rounded">pendente</span>
-                  )}
-                </td>
-                <td className="p-3 hidden md:table-cell text-muted-foreground">{formatCPF(p.cpf)}</td>
-                <td className="p-3 hidden lg:table-cell text-muted-foreground">{p.cargo}</td>
-                <td className="p-3 hidden xl:table-cell text-muted-foreground">
-                  {p.data_nascimento ? new Date(p.data_nascimento + "T00:00:00").toLocaleDateString("pt-BR") : "—"}
-                </td>
-                <td className="p-3 hidden xl:table-cell text-muted-foreground">
-                  {p.folga_fixa_semana == null ? "—" : WEEKDAYS[p.folga_fixa_semana]}
-                </td>
-                <td className="p-3 hidden lg:table-cell text-muted-foreground">
-                  {p.data_admissao ? new Date(p.data_admissao + "T00:00:00").toLocaleDateString("pt-BR") : "—"}
-                </td>
-                <td className="p-3 text-center">
-                  <Switch checked={p.ativo} onCheckedChange={() => toggleAtivo(p)} />
-                </td>
-                <td className="p-3 text-right whitespace-nowrap">
-                  <Button variant="ghost" size="icon" title="Editar" onClick={() => openEdit(p)}>
-                    <Pencil className="size-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" title="Redefinir senha" onClick={() => setResetting(p)}>
-                    <KeyRound className="size-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" title="Excluir" onClick={() => setConfirmDelete(p)}>
-                    <Trash2 className="size-4 text-destructive" />
-                  </Button>
-                </td>
+      <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-muted-foreground border-b border-border">
+              <tr>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Funcionário</th>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">Cargo</th>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">Nascimento</th>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Folga Fixa</th>
+                <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
+                <th className="text-right p-4 font-bold uppercase tracking-wider text-[10px]">Ações</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {list.length === 0 && (
+                <tr><td colSpan={6} className="p-12 text-center text-muted-foreground">Nenhum funcionário cadastrado.</td></tr>
+              )}
+              {list.map((p) => (
+                <tr key={p.id} className="hover:bg-muted/20 transition-colors">
+                  <td className="p-4">
+                    <div className="font-bold text-foreground">{p.nome}</div>
+                    <div className="text-[10px] text-muted-foreground font-mono">{formatCPF(p.cpf)}</div>
+                    {p.aprovacao_status === "pendente" && (
+                      <Badge variant="outline" className="mt-1 bg-orange-50 text-orange-600 border-orange-200 text-[9px]">Pendente</Badge>
+                    )}
+                  </td>
+                  <td className="p-4 hidden md:table-cell">
+                    <span className="text-muted-foreground">{p.cargo}</span>
+                  </td>
+                  <td className="p-4 hidden lg:table-cell">
+                    {p.data_nascimento ? (
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Cake className="size-3 text-amber-500" />
+                        {new Date(p.data_nascimento + "T00:00:00").toLocaleDateString("pt-BR")}
+                      </div>
+                    ) : "—"}
+                  </td>
+                  <td className="p-4">
+                    {p.folga_fixa_semana != null ? (
+                      <div className="flex items-center gap-1.5 font-bold text-blue-600">
+                        <CalendarDays className="size-3" />
+                        {WEEKDAYS[p.folga_fixa_semana]}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground/40">—</span>
+                    )}
+                  </td>
+                  <td className="p-4 text-center">
+                    <Switch checked={p.ativo} onCheckedChange={() => toggleAtivo(p)} />
+                  </td>
+                  <td className="p-4 text-right whitespace-nowrap">
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={() => openEdit(p)}>
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="size-8" title="Redefinir senha" onClick={() => setResetting(p)}>
+                        <KeyRound className="size-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="size-8 text-red-500 hover:text-red-600 hover:bg-red-50" title="Excluir" onClick={() => setConfirmDelete(p)}>
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Edit dialog */}
+      {/* Diálogos de Edição, Reset e Exclusão permanecem com a mesma lógica, mas com visual ajustado */}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Editar funcionário</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div><Label>Nome</Label><Input value={editForm.nome} onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })} /></div>
-            <div><Label>Cargo</Label><Input value={editForm.cargo} onChange={(e) => setEditForm({ ...editForm, cargo: e.target.value })} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2"><Label>Nome</Label><Input value={editForm.nome} onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Cargo</Label><Input value={editForm.cargo} onChange={(e) => setEditForm({ ...editForm, cargo: e.target.value })} /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
                 <Label>Admissão</Label>
                 <Input type="date" value={editForm.dataAdmissao} onChange={(e) => setEditForm({ ...editForm, dataAdmissao: e.target.value })} />
               </div>
-              <div>
+              <div className="space-y-2">
                 <Label>Demissão</Label>
                 <Input type="date" value={editForm.dataDemissao} onChange={(e) => setEditForm({ ...editForm, dataDemissao: e.target.value })} />
               </div>
             </div>
-            <div>
-              <Label>Data de nascimento</Label>
+            <div className="space-y-2">
+              <Label>Data de Nascimento</Label>
               <Input type="date" value={editForm.dataNascimento} onChange={(e) => setEditForm({ ...editForm, dataNascimento: e.target.value })} />
             </div>
-            <div>
-              <Label>Folga fixa semanal</Label>
+            <div className="space-y-2">
+              <Label>Folga Fixa Semanal</Label>
               <select
                 className="w-full bg-input border border-border rounded-md px-3 py-2 text-sm"
                 value={editForm.folgaFixa}
                 onChange={(e) => setEditForm({ ...editForm, folgaFixa: e.target.value })}
               >
-                <option value="">— sem folga fixa —</option>
+                <option value="">— Sem folga fixa —</option>
                 {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
               </select>
             </div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setEditing(null)}>Cancelar</Button>
-            <Button onClick={saveEdit}>Salvar</Button>
+            <Button onClick={saveEdit}>Salvar Alterações</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Reset password dialog */}
       <Dialog open={!!resetting} onOpenChange={(o) => !o && (setResetting(null), setNewPwd(""))}>
         <DialogContent>
           <DialogHeader><DialogTitle>Redefinir senha — {resetting?.nome}</DialogTitle></DialogHeader>
-          <div className="space-y-2">
-            <Label>Nova senha</Label>
+          <div className="space-y-2 py-4">
+            <Label>Nova Senha</Label>
             <Input type="password" value={newPwd} onChange={(e) => setNewPwd(e.target.value)} placeholder="Mínimo 6 caracteres" />
           </div>
           <DialogFooter>
@@ -325,7 +349,6 @@ export default function Funcionarios() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation */}
       <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -337,8 +360,8 @@ export default function Funcionarios() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={doDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Excluir
+            <AlertDialogAction onClick={doDelete} className="bg-red-600 text-white hover:bg-red-700">
+              Excluir Permanentemente
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
