@@ -20,7 +20,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Cake, Clock, AlertCircle, ArrowLeftRight, ShieldAlert, User } from "lucide-react";
+import { Calendar as CalIcon, Cake, Clock, AlertCircle, ArrowLeftRight, ShieldAlert, User, RefreshCw } from "lucide-react";
 
 interface Solic {
   id: string;
@@ -46,9 +46,11 @@ export default function CalendarioPage() {
   const [canceledFolgas, setCanceledFolgas] = useState<any[]>([]);
   
   const [smartSwap, setSmartSwap] = useState<{ iso: string; occupants: any[] } | null>(null);
+  const [changeFolgaDialog, setChangeFolgaDialog] = useState<{ newIso: string; oldFolga: any } | null>(null);
   const [reqDialog, setReqDialog] = useState<{ iso: string; reason: string } | null>(null);
   const [viewDialog, setViewDialog] = useState<Solic | null>(null);
   const [reqMotivo, setReqMotivo] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const load = async () => {
     if (!user) return;
@@ -115,7 +117,7 @@ export default function CalendarioPage() {
     const statusInfo = calculateDateStatus({
       date: parseYMD(iso),
       myUserId: user.id,
-      allFolgas: folgas, // Corrigido de allFolgas para folgas
+      allFolgas: folgas,
       allProfiles,
       manualBlocked: manualMap,
       dayLimits,
@@ -127,9 +129,15 @@ export default function CalendarioPage() {
     });
 
     if (statusInfo.status === "available") {
-      const myFolgaThisMonth = folgas.find((f) => f.user_id === user.id && monthKey(parseYMD(f.data)) === mk);
+      // Verifica se já tem folga mensal (sabado/domingo) neste mês
+      const myFolgaThisMonth = folgas.find((f) => 
+        f.user_id === user.id && 
+        monthKey(parseYMD(f.data)) === mk && 
+        (f.tipo === 'sabado' || f.tipo === 'domingo')
+      );
+
       if (myFolgaThisMonth) {
-        toast.error("Você já possui uma folga selecionada neste mês.");
+        setChangeFolgaDialog({ newIso: iso, oldFolga: myFolgaThisMonth });
         return;
       }
       
@@ -164,6 +172,43 @@ export default function CalendarioPage() {
       ].filter(o => o.id !== user.id);
 
       setSmartSwap({ iso, occupants });
+    }
+  };
+
+  const doChangeFolga = async () => {
+    if (!user || !changeFolgaDialog) return;
+    setBusy(true);
+    
+    try {
+      // 1. Remove a antiga
+      const { error: delErr } = await supabase
+        .from("folgas")
+        .delete()
+        .eq("id", changeFolgaDialog.oldFolga.id);
+      
+      if (delErr) throw delErr;
+
+      // 2. Cria a nova
+      const d = parseYMD(changeFolgaDialog.newIso);
+      const type = dayType(d);
+      
+      const { error: insErr } = await supabase.from("folgas").insert({
+        user_id: user.id, 
+        data: changeFolgaDialog.newIso, 
+        mes: mk, 
+        tipo: type!, 
+        criado_por: user.id,
+      });
+
+      if (insErr) throw insErr;
+
+      toast.success("Folga alterada com sucesso!");
+      setChangeFolgaDialog(null);
+      load();
+    } catch (e) {
+      toast.error("Erro ao alterar folga", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -215,7 +260,50 @@ export default function CalendarioPage() {
         locked={unlocked ? null : { unlockDateBR: formatBR(unlock) }}
       />
 
-      {/* Diálogo Inteligente de Troca */}
+      {/* Diálogo de Mudança de Folga (Troca Direta) */}
+      <Dialog open={!!changeFolgaDialog} onOpenChange={(o) => !o && setChangeFolgaDialog(null)}>
+        <DialogContent className="rounded-[2rem]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <RefreshCw className="size-5 text-primary" /> Alterar Folga Mensal
+            </DialogTitle>
+            <DialogDescription>
+              Você já possui uma folga agendada para este mês. Deseja trocá-la?
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-6 space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-muted/50 rounded-2xl border border-border text-center">
+                <Label className="text-[10px] font-black uppercase text-muted-foreground">Folga Atual</Label>
+                <div className="text-lg font-bold mt-1 text-muted-foreground line-through">
+                  {changeFolgaDialog && formatBR(parseYMD(changeFolgaDialog.oldFolga.data))}
+                </div>
+              </div>
+              <div className="p-4 bg-primary/5 rounded-2xl border border-primary/20 text-center">
+                <Label className="text-[10px] font-black uppercase text-primary">Nova Folga</Label>
+                <div className="text-lg font-bold mt-1 text-primary">
+                  {changeFolgaDialog && formatBR(parseYMD(changeFolgaDialog.newIso))}
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl text-sm text-blue-800 flex items-start gap-3">
+              <Info className="size-5 shrink-0" />
+              <p>Ao confirmar, sua folga antiga será liberada para outros colaboradores e a nova será registrada imediatamente.</p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setChangeFolgaDialog(null)} disabled={busy}>Cancelar</Button>
+            <Button onClick={doChangeFolga} disabled={busy} className="px-8">
+              {busy ? "Alterando..." : "Confirmar Troca"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo Inteligente de Troca (Com outros) */}
       <Dialog open={!!smartSwap} onOpenChange={(o) => !o && setSmartSwap(null)}>
         <DialogContent className="rounded-[2rem]">
           <DialogHeader>
@@ -303,5 +391,13 @@ export default function CalendarioPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function Info({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+    </svg>
   );
 }
