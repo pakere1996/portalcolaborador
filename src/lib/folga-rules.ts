@@ -9,6 +9,7 @@ export type DateStatusKind =
   | "birthday"
   | "pending"
   | "fixed"
+  | "swapped"
   | "weekday";
 
 export interface DateStatus {
@@ -69,21 +70,18 @@ export function getMonthDays(year: number, month0: number): Date[] {
   return days;
 }
 
-export function autoBlockedDatesForMonth(year: number, month0: number): { date: string; reason: string }[] {
-  return [];
-}
-
 // --- UNIFIED AVAILABILITY LOGIC ---
 
 export function calculateDateStatus(params: {
   date: Date;
   myUserId: string | null;
-  allFolgas?: { user_id: string; data: string }[];
+  allFolgas?: { user_id: string; data: string; tipo?: string }[];
   allProfiles?: { id: string; folga_fixa_semana: number | null }[];
   manualBlocked?: Map<string, { reason: string; liberada: boolean }>;
   dayLimits?: Map<string, number>;
   birthdayByDate?: Map<string, { userId: string }>;
-  pendingRequests?: { data: string }[];
+  pendingRequests?: { data: string; user_id?: string }[];
+  canceledFolgas?: { user_id: string; data: string }[];
   isAdmin: boolean;
   locked?: { unlockDateBR: string } | null;
 }): DateStatus {
@@ -96,6 +94,7 @@ export function calculateDateStatus(params: {
     dayLimits = new Map(), 
     birthdayByDate = new Map(), 
     pendingRequests = [], 
+    canceledFolgas = [],
     isAdmin, 
     locked 
   } = params;
@@ -112,29 +111,32 @@ export function calculateDateStatus(params: {
   const type = dayType(date);
   const isWknd = !!type;
 
-  // 2. Bloqueio Administrativo (PRIORIDADE MÁXIMA)
+  // 2. Bloqueio Administrativo
   const manual = manualBlocked.get(iso);
   if (manual && !manual.liberada) {
     return { status: "blocked", reason: manual.reason };
   }
 
-  // 3. Minha Folga Mensal
-  const isMine = myUserId && allFolgas.some(f => f.user_id === myUserId && f.data === iso);
-  if (!isAdmin && isMine) {
-    return { status: "mine", label: "Sua folga", reason: "Sua folga mensal registrada" };
+  // 3. Minha Folga (Mensal ou Troca)
+  const myFolga = myUserId && allFolgas.find(f => f.user_id === myUserId && f.data === iso);
+  if (!isAdmin && myFolga) {
+    const label = myFolga.tipo === 'troca' ? "Troca Aprovada" : "Sua folga";
+    return { status: myFolga.tipo === 'troca' ? "swapped" : "mine", label, reason: label };
   }
 
-  // 4. Minha Folga Fixa
+  // 4. Minha Folga Fixa (Verificar se não foi cancelada temporariamente)
   const myProfile = allProfiles.find(p => p.id === myUserId);
-  const isMyFixed = !isAdmin && myProfile?.folga_fixa_semana === date.getDay();
+  const isCanceled = myUserId && canceledFolgas.some(c => c.user_id === myUserId && c.data === iso);
+  const isMyFixed = !isAdmin && myProfile?.folga_fixa_semana === date.getDay() && !isCanceled;
+  
   if (!isAdmin && isMyFixed) {
     return { status: "fixed", label: "Semanal", reason: "Sua folga semanal fixa" };
   }
 
-  // 5. Minha Solicitação Pendente
-  const hasMyPending = !isAdmin && pendingRequests.some(r => r.data === iso);
+  // 5. Minha Solicitação Pendente (Troca ou Especial)
+  const hasMyPending = !isAdmin && pendingRequests.some(r => r.data === iso && r.user_id === myUserId);
   if (!isAdmin && hasMyPending) {
-    return { status: "pending", label: "Sua solicitação", reason: "Aguardando aprovação" };
+    return { status: "pending", label: "Pendente", reason: "Aguardando aprovação" };
   }
 
   // 6. Bloqueio por Mês Trancado (Apenas FDS)
@@ -142,22 +144,25 @@ export function calculateDateStatus(params: {
     return { status: "blocked", reason: `Folgas ainda não liberadas (Abre em ${locked.unlockDateBR})` };
   }
 
-  // 7. Prioridade de Aniversário de Terceiros
+  // 7. Prioridade de Aniversário
   const birthday = birthdayByDate.get(iso);
   if (!isAdmin && isWknd && birthday && birthday.userId !== myUserId) {
     return { status: "birthday", label: "Indisponível", reason: "Reservado para aniversariante" };
   }
 
   // 8. Cálculo de Ocupação Real
-  if (isWknd) {
-    const limit = dayLimits.get(iso) ?? 1;
-    const monthlyCount = allFolgas.filter(f => f.data === iso).length;
-    const fixedCount = allProfiles.filter(p => p.folga_fixa_semana === date.getDay()).length;
-    const totalOccupied = monthlyCount + fixedCount;
+  const limit = dayLimits.get(iso) ?? 1;
+  const monthlyCount = allFolgas.filter(f => f.data === iso).length;
+  const fixedCount = allProfiles.filter(p => {
+    const hasFixed = p.folga_fixa_semana === date.getDay();
+    const canceled = canceledFolgas.some(c => c.user_id === p.id && c.data === iso);
+    return hasFixed && !canceled;
+  }).length;
+  
+  const totalOccupied = monthlyCount + fixedCount;
 
-    if (totalOccupied >= limit) {
-      return { status: "taken", label: "Indisponível", reason: "Limite de folgas atingido" };
-    }
+  if (totalOccupied >= limit) {
+    return { status: "taken", label: "Lotado", reason: "Limite de folgas atingido" };
   }
 
   // 9. Disponível ou Dia de Semana Comum

@@ -1,16 +1,15 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeftRight } from "lucide-react";
-
-const DIAS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+import { ArrowLeftRight, Calendar, User } from "lucide-react";
+import { formatBR, parseYMD } from "@/lib/folga-rules";
+import { cn } from "@/lib/utils";
 
 interface Row {
   id: string;
   solicitante_id: string;
   destinatario_id: string;
-  dia_original: number;
-  dia_solicitado: number;
+  data_destinatario: string;
   status: string;
   created_at: string;
   respondido_em: string | null;
@@ -32,40 +31,25 @@ export default function AdminTrocas() {
 
   useEffect(() => {
     load();
-    const ch = supabase
-      .channel("admin-trocas")
-      .on("postgres_changes", { event: "*", schema: "public", table: "trocas_folga" }, () => load())
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
   }, []);
 
   const filtered = filtro === "todos" ? rows : rows.filter((r) => r.status === filtro);
 
-  const badge = (s: string) => {
-    const map: Record<string, string> = {
-      pendente: "bg-pending/20 text-pending-foreground border-pending/40",
-      aprovada: "bg-available/20 text-available border-available/40",
-      recusada: "bg-unavailable/20 text-unavailable border-unavailable/40",
-      cancelada: "bg-muted text-muted-foreground border-border",
-    };
-    return <Badge className={`${map[s] ?? ""} border`}>{s}</Badge>;
-  };
-
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between gap-4">
+    <div className="space-y-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-            <ArrowLeftRight className="size-6 text-primary" /> Histórico de Trocas
+            <ArrowLeftRight className="size-6 text-primary" /> Histórico de Trocas Inteligentes
           </h1>
-          <p className="text-muted-foreground mt-1">Acompanhe todas as trocas entre colaboradores.</p>
+          <p className="text-muted-foreground mt-1">Acompanhe as permutas temporárias entre colaboradores.</p>
         </div>
         <select
-          className="bg-input border border-border rounded-md px-3 py-2 text-sm"
+          className="bg-input border border-border rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
           value={filtro}
           onChange={(e) => setFiltro(e.target.value)}
         >
-          <option value="todos">Todos</option>
+          <option value="todos">Todos os Status</option>
           <option value="pendente">Pendentes</option>
           <option value="aprovada">Aprovadas</option>
           <option value="recusada">Recusadas</option>
@@ -73,40 +57,56 @@ export default function AdminTrocas() {
         </select>
       </div>
 
-      <div className="bg-card border border-border rounded-2xl p-4 md:p-6 shadow-xl">
+      <div className="grid gap-4">
         {filtered.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">Nenhuma troca encontrada.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-muted-foreground border-b border-border">
-                  <th className="py-2 px-2">Solicitante</th>
-                  <th className="py-2 px-2">Destinatário</th>
-                  <th className="py-2 px-2">Troca</th>
-                  <th className="py-2 px-2">Status</th>
-                  <th className="py-2 px-2">Solicitada</th>
-                  <th className="py-2 px-2">Respondida</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((r) => (
-                  <tr key={r.id} className="border-b border-border/50">
-                    <td className="py-2 px-2">{nomes.get(r.solicitante_id) ?? "?"}</td>
-                    <td className="py-2 px-2">{nomes.get(r.destinatario_id) ?? "?"}</td>
-                    <td className="py-2 px-2">{DIAS[r.dia_original]} ⇄ {DIAS[r.dia_solicitado]}</td>
-                    <td className="py-2 px-2">{badge(r.status)}</td>
-                    <td className="py-2 px-2 text-xs text-muted-foreground">
-                      {new Date(r.created_at).toLocaleString("pt-BR")}
-                    </td>
-                    <td className="py-2 px-2 text-xs text-muted-foreground">
-                      {r.respondido_em ? new Date(r.respondido_em).toLocaleString("pt-BR") : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="bg-card border border-border rounded-2xl p-12 text-center text-muted-foreground">
+            Nenhuma troca encontrada com este filtro.
           </div>
+        ) : (
+          filtered.map((r) => (
+            <div key={r.id} className="bg-card border border-border rounded-2xl p-5 flex flex-wrap items-center justify-between gap-6 hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-8 flex-1 min-w-[300px]">
+                <div className="space-y-1">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                    <User className="size-3" /> Solicitante
+                  </div>
+                  <div className="font-bold">{nomes.get(r.solicitante_id) ?? "—"}</div>
+                </div>
+                
+                <ArrowLeftRight className="size-5 text-primary/40 shrink-0" />
+
+                <div className="space-y-1">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                    <User className="size-3" /> Destinatário
+                  </div>
+                  <div className="font-bold">{nomes.get(r.destinatario_id) ?? "—"}</div>
+                </div>
+
+                <div className="space-y-1 ml-auto">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                    <Calendar className="size-3" /> Data da Troca
+                  </div>
+                  <div className="font-bold text-primary">{formatBR(parseYMD(r.data_destinatario))}</div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-6">
+                <div className="text-right">
+                  <Badge className={cn(
+                    "border",
+                    r.status === 'pendente' ? "bg-pending/20 text-pending-foreground border-pending/40" :
+                    r.status === 'aprovada' ? "bg-available/20 text-available border-available/40" :
+                    "bg-muted text-muted-foreground border-border"
+                  )}>
+                    {r.status}
+                  </Badge>
+                  <div className="text-[10px] text-muted-foreground mt-1">
+                    Solicitada em {new Date(r.created_at).toLocaleDateString('pt-BR')}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))
         )}
       </div>
     </div>

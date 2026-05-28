@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
-import { FolgaCalendar, type DayOccupant } from "@/components/FolgaCalendar";
+import { FolgaCalendar } from "@/components/FolgaCalendar";
 import {
-  MONTH_NAMES,
   autoBlockedDatesForMonth,
   dayType,
   formatBR,
@@ -21,7 +20,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Cake, Clock, AlertCircle } from "lucide-react";
+import { Calendar as CalIcon, Cake, Clock, AlertCircle, ArrowLeftRight, ShieldAlert, User } from "lucide-react";
 
 interface Solic {
   id: string;
@@ -29,6 +28,7 @@ interface Solic {
   motivo: string;
   status: string;
   created_at: string;
+  user_id: string;
 }
 
 export default function CalendarioPage() {
@@ -37,13 +37,15 @@ export default function CalendarioPage() {
   const [year, setYear] = useState(today.getFullYear());
   const [month0, setMonth0] = useState(today.getMonth());
   
-  const [folgas, setFolgas] = useState<{ user_id: string; data: string }[]>([]);
-  const [manual, setManual] = useState<{ data: string; motivo: string; liberada: boolean }[]>([]);
-  const [limites, setLimites] = useState<{ data: string; limite_colaboradores: number }[]>([]);
-  const [prios, setPrios] = useState<{ user_id: string; data: string; status: string }[]>([]);
+  const [folgas, setFolgas] = useState<any[]>([]);
+  const [manual, setManual] = useState<any[]>([]);
+  const [limites, setLimites] = useState<any[]>([]);
+  const [prios, setPrios] = useState<any[]>([]);
   const [pendingSolics, setPendingSolics] = useState<Solic[]>([]);
-  const [allProfiles, setAllProfiles] = useState<{ id: string; folga_fixa_semana: number | null }[]>([]);
+  const [allProfiles, setAllProfiles] = useState<any[]>([]);
+  const [canceledFolgas, setCanceledFolgas] = useState<any[]>([]);
   
+  const [smartSwap, setSmartSwap] = useState<{ iso: string; occupants: any[] } | null>(null);
   const [reqDialog, setReqDialog] = useState<{ iso: string; reason: string } | null>(null);
   const [viewDialog, setViewDialog] = useState<Solic | null>(null);
   const [reqMotivo, setReqMotivo] = useState("");
@@ -54,36 +56,33 @@ export default function CalendarioPage() {
     const endDate = new Date(year, month0 + 1, 0);
     const end = ymd(endDate);
 
-    const [allFolgasRes, blockRes, limRes, prioRes, pendingRes, profilesRes] = await Promise.all([
-      supabase.from("folgas").select("user_id, data").gte("data", start).lte("data", end),
-      supabase.from("datas_bloqueadas").select("data, motivo, liberada").gte("data", start).lte("data", end),
-      supabase.from("dia_config").select("data, limite_colaboradores").gte("data", start).lte("data", end),
-      supabase.from("prioridade_aniversario").select("user_id, data, status").eq("status", "ativa").gte("data", start).lte("data", end),
-      supabase.from("solicitacoes_especiais").select("*").eq("user_id", user.id).eq("status", "pendente").gte("data", start).lte("data", end),
-      supabase.from("profiles").select("id, folga_fixa_semana").eq("ativo", true),
+    const [allFolgasRes, blockRes, limRes, prioRes, pendingRes, profilesRes, canceledRes] = await Promise.all([
+      supabase.from("folgas").select("*").gte("data", start).lte("data", end),
+      supabase.from("datas_bloqueadas").select("*").gte("data", start).lte("data", end),
+      supabase.from("dia_config").select("*").gte("data", start).lte("data", end),
+      supabase.from("prioridade_aniversario").select("*").eq("status", "ativa").gte("data", start).lte("data", end),
+      supabase.from("solicitacoes_especiais").select("*").eq("status", "pendente").gte("data", start).lte("data", end),
+      supabase.from("profiles").select("*").eq("ativo", true),
+      supabase.from("folgas_canceladas").select("*").gte("data", start).lte("data", end),
     ]);
 
-    // LOG DE AUDITORIA DE DADOS
-    console.log(`[DADOS BANCO] Mês ${month0 + 1}: Recebidas ${allFolgasRes.data?.length ?? 0} folgas de toda a equipe e ${profilesRes.data?.length ?? 0} perfis ativos.`);
-
-    setFolgas((allFolgasRes.data ?? []) as { user_id: string; data: string }[]);
-    setManual((blockRes.data ?? []) as { data: string; motivo: string; liberada: boolean }[]);
-    setLimites((limRes.data ?? []) as { data: string; limite_colaboradores: number }[]);
-    setPrios((prioRes.data ?? []) as { user_id: string; data: string; status: string }[]);
-    setPendingSolics((pendingRes.data ?? []) as Solic[]);
-    setAllProfiles((profilesRes.data ?? []) as { id: string; folga_fixa_semana: number | null }[]);
+    setFolgas(allFolgasRes.data ?? []);
+    setManual(blockRes.data ?? []);
+    setLimites(limRes.data ?? []);
+    setPrios(prioRes.data ?? []);
+    setPendingSolics(pendingRes.data ?? []);
+    setAllProfiles(profilesRes.data ?? []);
+    setCanceledFolgas(canceledRes.data ?? []);
   };
 
   useEffect(() => { load(); }, [year, month0, user]);
 
   useEffect(() => {
-    const ch = supabase
-      .channel("calendario-realtime")
+    const ch = supabase.channel("calendario-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "folgas" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "prioridade_aniversario" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "trocas_folga" }, () => load())
       .on("postgres_changes", { event: "*", schema: "public", table: "solicitacoes_especiais" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "dia_config" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "datas_bloqueadas" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "folgas_canceladas" }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [year, month0, user?.id]);
@@ -113,20 +112,21 @@ export default function CalendarioPage() {
   const onSelectDay = async (iso: string) => {
     if (!user) return;
     
-    const { status, reason } = calculateDateStatus({
+    const statusInfo = calculateDateStatus({
       date: parseYMD(iso),
       myUserId: user.id,
-      allFolgas: folgas,
-      allProfiles: allProfiles,
+      allFolgas,
+      allProfiles,
       manualBlocked: manualMap,
-      dayLimits: dayLimits,
+      dayLimits,
       birthdayByDate: birthdayByDate as any,
       pendingRequests: pendingSolics,
+      canceledFolgas,
       isAdmin: false,
       locked: unlocked ? null : { unlockDateBR: formatBR(unlock) }
     });
 
-    if (status === "available") {
+    if (statusInfo.status === "available") {
       const myFolgaThisMonth = folgas.find((f) => f.user_id === user.id && monthKey(parseYMD(f.data)) === mk);
       if (myFolgaThisMonth) {
         toast.error("Você já possui uma folga selecionada neste mês.");
@@ -137,55 +137,59 @@ export default function CalendarioPage() {
       const type = dayType(d);
       if (!type) return;
       
-      const { data: inserted, error } = await supabase.from("folgas").insert({
+      const { error } = await supabase.from("folgas").insert({
         user_id: user.id, data: iso, mes: mk, tipo: type, criado_por: user.id,
-      }).select("id").maybeSingle();
+      });
       
-      if (error || !inserted) {
-        toast.error("Não foi possível registrar a folga", { description: error?.message || "Data indisponível" });
-        load();
-        return;
-      }
+      if (error) return toast.error("Erro ao registrar folga", { description: error.message });
       toast.success(`Folga registrada para ${formatBR(d)}`);
       load();
-    } else if (status === "mine") {
+    } else if (statusInfo.status === "mine" || statusInfo.status === "swapped") {
       if (!confirm("Deseja cancelar sua folga nesta data?")) return;
       const { error } = await supabase.from("folgas").delete().eq("user_id", user.id).eq("data", iso);
       if (error) return toast.error(error.message);
       toast.success("Folga cancelada");
       load();
-    } else if (status === "pending") {
-      const solic = pendingSolics.find(s => s.data === iso);
+    } else if (statusInfo.status === "pending") {
+      const solic = pendingSolics.find(s => s.data === iso && s.user_id === user.id);
       if (solic) setViewDialog(solic);
-    } else if (status === "blocked" || status === "taken" || status === "birthday") {
-      setReqDialog({ iso, reason: reason ?? "Data indisponível" });
+    } else if (statusInfo.status === "taken" || statusInfo.status === "birthday" || statusInfo.status === "blocked" || !dayType(parseYMD(iso))) {
+      // Identificar quem folga no dia para oferecer troca
+      const d = parseYMD(iso);
+      const wd = d.getDay();
+      
+      const occupants = [
+        ...folgas.filter(f => f.data === iso).map(f => ({ id: f.user_id, nome: allProfiles.find(p => p.id === f.user_id)?.nome, tipo: 'mensal' })),
+        ...allProfiles.filter(p => p.folga_fixa_semana === wd && !canceledFolgas.some(c => c.user_id === p.id && c.data === iso)).map(p => ({ id: p.id, nome: p.nome, tipo: 'semanal' }))
+      ].filter(o => o.id !== user.id);
+
+      setSmartSwap({ iso, occupants });
     }
+  };
+
+  const requestSwap = async (destId: string) => {
+    if (!user) return;
+    const { error } = await supabase.from("trocas_folga").insert({
+      solicitante_id: user.id,
+      destinatario_id: destId,
+      data_destinatario: smartSwap!.iso,
+      mensagem: `Solicitação de troca para o dia ${formatBR(parseYMD(smartSwap!.iso))}`,
+    });
+    if (error) return toast.error(error.message);
+    toast.success("Solicitação de troca enviada!");
+    setSmartSwap(null);
+    load();
   };
 
   const submitRequest = async () => {
     if (!user || !reqDialog) return;
-    if (reqMotivo.trim().length < 5) {
-      toast.error("Descreva o motivo (mín. 5 caracteres).");
-      return;
-    }
+    if (reqMotivo.trim().length < 5) return toast.error("Descreva o motivo.");
     const { error } = await supabase.from("solicitacoes_especiais").insert({
       user_id: user.id, data: reqDialog.iso, motivo: reqMotivo.trim(),
     });
     if (error) return toast.error(error.message);
-    toast.success("Solicitação enviada! Aguarde a resposta do admin.");
-    setReqDialog(null); setReqMotivo("");
-    load();
-  };
-
-  const myBirthdayPrio = prios.find((p) => p.user_id === user?.id);
-  const abdicarPrio = async () => {
-    if (!myBirthdayPrio) return;
-    if (!confirm("Desistir da prioridade de aniversário e liberar para os colegas?")) return;
-    const { error } = await supabase.from("prioridade_aniversario")
-      .update({ status: "abdicada" })
-      .eq("user_id", user!.id).eq("data", myBirthdayPrio.data);
-    if (error) return toast.error(error.message);
-    toast.success("Prioridade liberada.");
+    toast.success("Solicitação de exceção enviada!");
+    setReqDialog(null); setReqMotivo(""); setSmartSwap(null);
     load();
   };
 
@@ -195,33 +199,15 @@ export default function CalendarioPage() {
         <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
           <CalIcon className="size-6 text-primary" /> Calendário de Folgas
         </h1>
-        <p className="text-muted-foreground mt-1">
-          Olá, <b>{profile?.nome}</b>. Escolha 1 sábado <i>ou</i> 1 domingo por mês.
-        </p>
+        <p className="text-muted-foreground mt-1">Escolha sua folga ou solicite uma troca.</p>
       </div>
 
-      {myBirthdayPrio && (
-        <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm flex items-center justify-between gap-3 flex-wrap text-amber-700">
-          <div className="flex items-center gap-2">
-            <Cake className="size-4 text-amber-500" />
-            <span>
-              Seu aniversário cai em <b>{formatBR(parseYMD(myBirthdayPrio.data))}</b>.
-              Você tem <b>prioridade exclusiva</b> nesta data.
-            </span>
-          </div>
-          <Button variant="ghost" size="sm" onClick={abdicarPrio} className="text-amber-700 hover:bg-amber-100">Desistir da prioridade</Button>
-        </div>
-      )}
-
       <FolgaCalendar
-        year={year}
-        month0={month0}
-        manualBlocked={manualMap}
-        dayLimits={dayLimits}
+        year={year} month0={month0}
+        manualBlocked={manualMap} dayLimits={dayLimits}
         birthdayByDate={birthdayByDate as any}
         myUserId={user?.id ?? null}
-        allFolgas={folgas}
-        allProfiles={allProfiles}
+        allFolgas={folgas} allProfiles={allProfiles}
         pendingRequests={pendingSolics}
         onPrev={() => { const d = new Date(year, month0 - 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); }}
         onNext={() => { const d = new Date(year, month0 + 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); }}
@@ -229,56 +215,87 @@ export default function CalendarioPage() {
         locked={unlocked ? null : { unlockDateBR: formatBR(unlock) }}
       />
 
-      <div className="text-xs text-muted-foreground">
-        Datas bloqueadas automaticamente:{" "}
-        {autoBlockedDatesForMonth(year, month0).map((b) => formatBR(parseYMD(b.date))).join(", ") || "nenhuma"}.
-        Você pode <b>solicitar exceção</b> clicando em uma data vermelha.
-      </div>
-
-      <Dialog open={!!reqDialog} onOpenChange={(o) => !o && setReqDialog(null)}>
-        <DialogContent>
+      {/* Diálogo Inteligente de Troca */}
+      <Dialog open={!!smartSwap} onOpenChange={(o) => !o && setSmartSwap(null)}>
+        <DialogContent className="rounded-[2rem]">
           <DialogHeader>
-            <DialogTitle>Solicitar exceção</DialogTitle>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <ArrowLeftRight className="size-5 text-primary" /> Opções para {smartSwap && formatBR(parseYMD(smartSwap.iso))}
+            </DialogTitle>
             <DialogDescription>
-              {reqDialog && (
-                <>Data <b>{formatBR(parseYMD(reqDialog.iso))}</b> — {reqDialog.reason}</>
-              )}
+              Este dia possui restrições ou já atingiu o limite.
             </DialogDescription>
           </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {smartSwap?.occupants.length ? (
+              <div className="space-y-3">
+                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Colaboradores de folga neste dia:</Label>
+                {smartSwap.occupants.map(occ => (
+                  <div key={occ.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-2xl border border-border">
+                    <div className="flex items-center gap-3">
+                      <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                        {occ.nome?.charAt(0)}
+                      </div>
+                      <div>
+                        <div className="font-bold">{occ.nome}</div>
+                        <div className="text-xs text-muted-foreground capitalize">Folga {occ.tipo}</div>
+                      </div>
+                    </div>
+                    <Button size="sm" onClick={() => requestSwap(occ.id)}>Solicitar Troca</Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl text-sm text-amber-800 flex items-start gap-3">
+                <AlertCircle className="size-5 shrink-0" />
+                <p>Ninguém possui folga agendada para este dia.</p>
+              </div>
+            )}
+
+            <div className="pt-4 border-t border-border">
+              <Button 
+                variant="outline" 
+                className="w-full h-12 rounded-xl border-primary/20 text-primary hover:bg-primary/5"
+                onClick={() => setReqDialog({ iso: smartSwap!.iso, reason: "Solicitação de exceção administrativa" })}
+              >
+                <ShieldAlert className="size-4 mr-2" /> Solicitar exceção ao administrador
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de Exceção */}
+      <Dialog open={!!reqDialog} onOpenChange={(o) => !o && setReqDialog(null)}>
+        <DialogContent className="rounded-[2rem]">
+          <DialogHeader>
+            <DialogTitle>Solicitar exceção administrativa</DialogTitle>
+            <DialogDescription>Data: {reqDialog && formatBR(parseYMD(reqDialog.iso))}</DialogDescription>
+          </DialogHeader>
           <Textarea
-            placeholder="Explique o motivo da solicitaçao"
+            placeholder="Explique o motivo da sua solicitação para o administrador..."
             value={reqMotivo}
             onChange={(e) => setReqMotivo(e.target.value)}
             rows={5}
+            className="rounded-xl"
           />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setReqDialog(null)}>Cancelar</Button>
-            <Button onClick={submitRequest}>Enviar solicitação</Button>
+            <Button onClick={submitRequest}>Enviar Solicitação</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Visualização de Pendente */}
       <Dialog open={!!viewDialog} onOpenChange={(o) => !o && setViewDialog(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="rounded-[2rem]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Clock className="size-5 text-violet-500" /> Solicitação Pendente
-            </DialogTitle>
-            <DialogDescription>
-              {viewDialog && (
-                <>Data solicitada: <b>{formatBR(parseYMD(viewDialog.data))}</b></>
-              )}
-            </DialogDescription>
+            <DialogTitle className="flex items-center gap-2"><Clock className="size-5 text-violet-500" /> Solicitação Pendente</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="bg-violet-50 border border-violet-100 rounded-xl p-4 space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-violet-400">Seu Motivo</Label>
-              <p className="text-sm text-violet-900 italic">"{viewDialog?.motivo}"</p>
-            </div>
-            <div className="flex items-center gap-2 text-amber-600 bg-amber-50 p-3 rounded-lg border border-amber-100">
-              <AlertCircle className="size-4 shrink-0" />
-              <span className="text-xs font-medium">Aguardando aprovação administrativa</span>
-            </div>
+          <div className="p-4 bg-violet-50 border border-violet-100 rounded-2xl">
+            <Label className="text-[10px] font-black uppercase text-violet-400">Seu Motivo</Label>
+            <p className="text-sm text-violet-900 italic mt-1">"{viewDialog?.motivo}"</p>
           </div>
           <DialogFooter>
             <Button variant="outline" className="w-full" onClick={() => setViewDialog(null)}>Fechar</Button>
