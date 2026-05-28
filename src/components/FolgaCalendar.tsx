@@ -97,8 +97,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
       const monthlyOccupants = occupants.filter(o => o.type === 'monthly');
       const isFull = monthlyOccupants.length >= limit;
       
-      const isMine = !!myUserId && occupants.some((o) => o.userId === myUserId && o.type === 'monthly
-');
+      const isMine = !!myUserId && occupants.some((o) => o.userId === myUserId && o.type === 'monthly');
       const hasPending = occupants.some(o => o.type === 'pending');
 
       if (d < today) {
