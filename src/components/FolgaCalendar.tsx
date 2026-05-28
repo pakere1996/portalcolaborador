@@ -101,28 +101,39 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
       const mineHere = !!myUserId && occupants.some((o) => o.userId === myUserId);
       const isFull = occupants.length >= limit;
 
-      if (occupants.length > 0) {
-        const status = mineHere ? "mine" : isFull ? "taken" : "available";
-        const label = mineHere ? "Sua folga" : isFull ? "Lotado" : occupants[0].userName?.split(" ")[0];
-        
+      // Se eu já tenho folga aqui, status é "mine"
+      if (mineHere) {
         result.push({
           kind: "weekend",
           date: d,
           iso,
-          status,
+          status: "mine",
           occupants,
           limit,
           birthdayUser,
-          label,
-          tooltip:
-            `${occupants.length}/${limit} ocupado` +
-            (isFull ? " (Lotado)" : "") +
-            (birthdayUser ? ` | 🎂 Aniversário` : "") +
-            ` — ${occupants.map(o => o.userName).join(", ")}`,
+          label: "Sua folga",
+          tooltip: `Sua folga registrada (${occupants.length}/${limit})`,
         });
         continue;
       }
 
+      // Se está lotado por outros, status é "taken"
+      if (isFull) {
+        result.push({
+          kind: "weekend",
+          date: d,
+          iso,
+          status: "taken",
+          occupants,
+          limit,
+          birthdayUser,
+          label: "Lotado",
+          tooltip: `Lotado (${occupants.length}/${limit}) — ${occupants.map(o => o.userName).join(", ")}`,
+        });
+        continue;
+      }
+
+      // Verificamos bloqueios manuais ou automáticos
       const manual = manualBlocked.get(iso);
       const autoReason = auto.get(iso);
       const blockedReason =
@@ -142,23 +153,38 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      if (birthdayUser) {
-        const mine = birthdayUser.userId === myUserId;
+      // Prioridade de aniversário de outro colega
+      if (birthdayUser && birthdayUser.userId !== myUserId) {
         result.push({
           kind: "weekend",
           date: d,
           iso,
-          status: mine ? "available" : "birthday",
+          status: "birthday",
           occupants,
           limit,
           birthdayUser,
-          tooltip: mine
-            ? `🎂 Seu aniversário! Você tem prioridade hoje.`
-            : `🎂 Reservado para Aniversariante`,
+          tooltip: `🎂 Reservado para Aniversariante`,
         });
         continue;
       }
 
+      // Se tem gente mas não está lotado, status é "available" mas com indicador
+      if (occupants.length > 0) {
+        result.push({
+          kind: "weekend",
+          date: d,
+          iso,
+          status: "available",
+          occupants,
+          limit,
+          birthdayUser,
+          label: occupants[0].userName?.split(" ")[0],
+          tooltip: `${occupants.length}/${limit} ocupado — ${occupants.map(o => o.userName).join(", ")}`,
+        });
+        continue;
+      }
+
+      // Totalmente livre
       result.push({
         kind: "weekend",
         date: d,

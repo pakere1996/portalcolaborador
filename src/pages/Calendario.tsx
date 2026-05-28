@@ -38,6 +38,7 @@ export default function CalendarioPage() {
     const endDate = new Date(year, month0 + 1, 0);
     const end = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
 
+    // Buscamos todas as folgas, bloqueios, limites e prioridades do mês
     const [allFolgasRes, blockRes, limRes, prioRes] = await Promise.all([
       supabase.from("folgas").select("user_id, data").gte("data", start).lte("data", end),
       supabase.from("datas_bloqueadas").select("data, motivo, liberada").gte("data", start).lte("data", end),
@@ -45,8 +46,15 @@ export default function CalendarioPage() {
       supabase.from("prioridade_aniversario").select("user_id, data, status").eq("status", "ativa").gte("data", start).lte("data", end),
     ]);
 
+    if (allFolgasRes.error) {
+      console.error("Erro ao carregar folgas:", allFolgasRes.error);
+      toast.error("Erro ao carregar dados do calendário");
+      return;
+    }
+
     const allFolgas = (allFolgasRes.data ?? []) as { user_id: string; data: string }[];
 
+    // Mapeamos as folgas para identificar quais são do usuário logado e quais são de outros
     const combined = allFolgas.map(f => ({
       user_id: f.user_id,
       data: f.data,
@@ -69,6 +77,7 @@ export default function CalendarioPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "folgas" }, () => load())
       .on("postgres_changes", { event: "*", schema: "public", table: "prioridade_aniversario" }, () => load())
       .on("postgres_changes", { event: "*", schema: "public", table: "dia_config" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "datas_bloqueadas" }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [year, month0, user?.id]);
@@ -118,6 +127,7 @@ export default function CalendarioPage() {
 
   const onSelectDay = async (iso: string, info: { status: string; reason?: string }) => {
     if (!user) return;
+    
     if (info.status === "available") {
       if (myFolgaThisMonth) {
         toast.error("Você já escolheu uma folga neste mês.");
@@ -126,6 +136,7 @@ export default function CalendarioPage() {
       const d = parseYMD(iso);
       const type = dayType(d);
       if (!type) return;
+      
       const { data: inserted, error } = await supabase.from("folgas").insert({
         user_id: user.id,
         data: iso,
@@ -133,6 +144,7 @@ export default function CalendarioPage() {
         tipo: type,
         criado_por: user.id,
       }).select("id").maybeSingle();
+      
       if (error || !inserted) {
         const msg = error?.message ?? "Erro desconhecido";
         if (msg.toLowerCase().includes("limite") || msg.toLowerCase().includes("lotado")) {
