@@ -69,22 +69,9 @@ export function getMonthDays(year: number, month0: number): Date[] {
   return days;
 }
 
-export function firstWeekendAfterDay5(year: number, month0: number): string[] {
-  let d = new Date(year, month0, 6);
-  while (d.getDay() !== 6) {
-    d = new Date(year, month0, d.getDate() + 1);
-  }
-  const sat = ymd(d);
-  const sun = ymd(new Date(year, month0, d.getDate() + 1));
-  return [sat, sun];
-}
-
+// Removida a regra hardcoded de pagamento. Agora tudo vem do banco de dados.
 export function autoBlockedDatesForMonth(year: number, month0: number): { date: string; reason: string }[] {
-  const result: { date: string; reason: string }[] = [];
-  const [sat, sun] = firstWeekendAfterDay5(year, month0);
-  result.push({ date: sat, reason: "Primeiro fim de semana após dia 5" });
-  result.push({ date: sun, reason: "Primeiro fim de semana após dia 5" });
-  return result;
+  return [];
 }
 
 // --- UNIFIED AVAILABILITY LOGIC ---
@@ -145,40 +132,28 @@ export function calculateDateStatus(params: {
     return { status: "pending", label: "Sua solicitação", reason: "Aguardando aprovação" };
   }
 
-  // 5. Bloqueio Administrativo (Manual ou Automático via Regra)
+  // 5. Bloqueio Administrativo (Manual ou Automático via Regra do Banco)
   const manual = manualBlocked.get(iso);
   if (manual && !manual.liberada) {
     return { status: "blocked", reason: manual.reason };
   }
 
-  // 6. Bloqueio por Regra de Data (Primeiro FDS após dia 5)
-  const autoBlocks = autoBlockedDatesForMonth(date.getFullYear(), date.getMonth());
-  const autoReason = autoBlocks.find(b => b.date === iso)?.reason;
-  if (autoReason && (!manual || !manual.liberada)) {
-    return { status: "blocked", reason: autoReason };
-  }
-
-  // 7. Bloqueio por Mês Trancado (Apenas FDS)
+  // 6. Bloqueio por Mês Trancado (Apenas FDS)
   if (!isAdmin && locked && isWknd) {
     return { status: "blocked", reason: `Folgas ainda não liberadas (Abre em ${locked.unlockDateBR})` };
   }
 
-  // 8. Prioridade de Aniversário de Terceiros
+  // 7. Prioridade de Aniversário de Terceiros
   const birthday = birthdayByDate.get(iso);
   if (!isAdmin && isWknd && birthday && birthday.userId !== myUserId) {
     return { status: "birthday", label: "Indisponível", reason: "Reservado para aniversariante" };
   }
 
-  // 9. Cálculo de Ocupação Real (Mensais + Fixas de Terceiros)
+  // 8. Cálculo de Ocupação Real (Mensais + Fixas de Terceiros)
   if (isWknd) {
     const limit = dayLimits.get(iso) ?? 1;
-    
-    // Contar folgas mensais de toda a equipe
     const monthlyCount = allFolgas.filter(f => f.data === iso).length;
-    
-    // Contar folgas fixas de toda a equipe
     const fixedCount = allProfiles.filter(p => p.folga_fixa_semana === date.getDay()).length;
-    
     const totalOccupied = monthlyCount + fixedCount;
 
     if (totalOccupied >= limit) {
@@ -186,7 +161,7 @@ export function calculateDateStatus(params: {
     }
   }
 
-  // 10. Disponível ou Dia de Semana Comum
+  // 9. Disponível ou Dia de Semana Comum
   return { 
     status: isWknd ? "available" : "weekday",
     reason: isWknd ? "Disponível para seleção" : undefined

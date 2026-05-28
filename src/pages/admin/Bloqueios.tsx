@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { Ban, Pencil, Plus, Trash2 } from "lucide-react";
 import { MONTH_NAMES, formatBR, parseYMD } from "@/lib/folga-rules";
 
-type Tipo = "fixa_anual" | "dinamica";
+type Tipo = "fixa_anual" | "dinamica" | "pos_pagamento";
 interface Regra {
   id: string;
   descricao: string;
@@ -115,7 +115,6 @@ export default function BloqueiosAdmin() {
 
     if (error) return toast.error("Erro ao salvar", { description: error.message });
     
-    // Sincroniza as datas do ano atual com a nova regra silenciosamente
     await supabase.rpc("gerar_bloqueios_ano", { _ano: ano });
     
     toast.success(edit.id ? "Regra atualizada" : "Regra criada");
@@ -167,6 +166,9 @@ export default function BloqueiosAdmin() {
     if (r.tipo === "fixa_anual") {
       return `${String(r.dia).padStart(2, "0")}/${String(r.mes).padStart(2, "0")} (todo ano)`;
     }
+    if (r.tipo === "pos_pagamento") {
+      return `1º Fim de semana após dia 05 de ${MONTH_NAMES[r.mes - 1]}`;
+    }
     const ord = ORDINAIS.find((o) => o.v === r.ordinal)?.label ?? "?";
     const ds = DIAS_SEMANA.find((d) => d.v === r.dia_semana)?.label ?? "?";
     return `${ord} ${ds} de ${MONTH_NAMES[r.mes - 1]}`;
@@ -206,7 +208,7 @@ export default function BloqueiosAdmin() {
                 <div className="font-semibold flex items-center gap-2">
                   {r.descricao}
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted font-bold uppercase tracking-wider">
-                    {r.tipo === "fixa_anual" ? "Fixa" : "Dinâmica"}
+                    {r.tipo === "fixa_anual" ? "Fixa" : r.tipo === "pos_pagamento" ? "Pagamento" : "Dinâmica"}
                   </span>
                 </div>
                 <div className="text-sm text-muted-foreground">{formatRegra(r)}</div>
@@ -332,6 +334,7 @@ export default function BloqueiosAdmin() {
                   <SelectContent>
                     <SelectItem value="fixa_anual">Data Fixa (Todo ano)</SelectItem>
                     <SelectItem value="dinamica">Data Dinâmica</SelectItem>
+                    <SelectItem value="pos_pagamento">Fim de semana após dia 5</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -348,7 +351,7 @@ export default function BloqueiosAdmin() {
               </div>
             </div>
 
-            {edit.tipo === "fixa_anual" ? (
+            {edit.tipo === "fixa_anual" && (
               <div className="space-y-2">
                 <Label className="font-bold">Dia do Mês</Label>
                 <Input
@@ -358,7 +361,9 @@ export default function BloqueiosAdmin() {
                   className="rounded-xl"
                 />
               </div>
-            ) : (
+            )}
+
+            {edit.tipo === "dinamica" && (
               <div className="grid grid-cols-2 gap-3 p-4 bg-muted/30 rounded-2xl border border-border">
                 <div className="space-y-2">
                   <Label className="font-bold">Qual ocorrência?</Label>
