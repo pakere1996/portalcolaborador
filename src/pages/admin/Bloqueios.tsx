@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { Ban, Pencil, Plus, Trash2 } from "lucide-react";
 import { MONTH_NAMES, formatBR, parseYMD } from "@/lib/folga-rules";
+import { cn } from "@/lib/utils";
 
 type Tipo = "fixa_anual" | "dinamica" | "pos_pagamento";
 interface Regra {
