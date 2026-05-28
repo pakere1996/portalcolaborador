@@ -39,46 +39,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const loadProfile = async (uid: string) => {
-    const [{ data: prof }, { data: roles }] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
-      supabase.from("user_roles").select("role").eq("user_id", uid),
-    ]);
-    const p = prof as Profile | null;
-    // Bloqueia usuários pendentes/recusados/inativos
-    if (p && (p.aprovacao_status === "pendente" || p.aprovacao_status === "recusado" || !p.ativo)) {
-      await supabase.auth.signOut();
-      setProfile(null);
-      setRole(null);
-      const msg =
-        p.aprovacao_status === "pendente"
-          ? "Seu cadastro está aguardando aprovação de um administrador."
-          : p.aprovacao_status === "recusado"
-            ? "Seu cadastro foi recusado. Entre em contato com o administrador."
-            : "Sua conta está desativada. Entre em contato com o administrador.";
-      if (typeof window !== "undefined") {
-        const { toast } = await import("sonner");
-        toast.error("Acesso bloqueado", { description: msg });
+    try {
+      const [{ data: prof }, { data: roles }] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
+        supabase.from("user_roles").select("role").eq("user_id", uid),
+      ]);
+      
+      const p = prof as Profile | null;
+      
+      // Se o perfil existe, verificamos se está ativo
+      if (p && p.ativo === false) {
+        console.warn("[Auth] Usuário inativo tentando acessar.");
+        await supabase.auth.signOut();
+        return;
       }
-      return;
+
+      setProfile(p);
+      const r = (roles ?? []).map((x: { role: AppRole }) => x.role);
+      setRole(r.includes("admin") ? "admin" : r.includes("funcionario") ? "funcionario" : null);
+    } catch (err) {
+      console.error("[Auth] Erro ao carregar perfil:", err);
     }
-    setProfile(p);
-    const r = (roles ?? []).map((x: { role: AppRole }) => x.role);
-    setRole(r.includes("admin") ? "admin" : r.includes("funcionario") ? "funcionario" : null);
   };
 
   useEffect(() => {
-    // Listener first
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => {
       setSession(s);
       if (s?.user) {
-        // defer to avoid deadlocks
-        setTimeout(() => { loadProfile(s.user.id); }, 0);
+        loadProfile(s.user.id);
       } else {
         setProfile(null);
         setRole(null);
       }
     });
-    // Then existing session
+
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       if (data.session?.user) {
@@ -87,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     });
+
     return () => sub.subscription.unsubscribe();
   }, []);
 
@@ -95,9 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setProfile(null);
     setRole(null);
-    if (typeof window !== "undefined") {
-      window.location.href = "/login";
-    }
+    window.location.href = "/login";
   };
 
   const refresh = async () => {
