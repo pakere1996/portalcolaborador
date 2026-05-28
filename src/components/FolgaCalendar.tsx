@@ -47,7 +47,7 @@ export interface FolgaCalendarProps {
   occupantsByDate?: Map<string, DayOccupant[]>;
   manualBlocked: Map<string, { reason: string; liberada: boolean }>;
   dayLimits: Map<string, number>;
-  birthdayByDate: Map<string, { userId: string; userName?: string }>;
+  birthdayByDate?: Map<string, { userId: string; userName?: string }>;
   myUserId: string | null;
   allFolgas: { user_id: string; data: string }[];
   allProfiles: { id: string; folga_fixa_semana: number | null }[];
@@ -78,6 +78,9 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     const first = new Date(year, month0, 1);
     const lead = first.getDay();
     const days = getMonthDays(year, month0);
+    
+    // Garantir que birthdayByDate nunca seja undefined para evitar erro .get()
+    const bdayMap = birthdayByDate || new Map<string, { userId: string; userName?: string }>();
 
     const result: DayInfo[] = [];
     for (let i = 0; i < lead; i++) result.push({ kind: "blank" });
@@ -93,21 +96,11 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         allProfiles,
         manualBlocked,
         dayLimits,
-        birthdayByDate: birthdayByDate as any,
+        birthdayByDate: bdayMap as any,
         pendingRequests,
         isAdmin: !!isAdmin,
         locked
       });
-
-      // LOG DE DEPURAÇÃO SIMPLIFICADO
-      if (isWknd && !isAdmin) {
-        const limit = dayLimits.get(iso) ?? 1;
-        const monthlyCount = allFolgas.filter(f => f.data === iso).length;
-        const fixedCount = allProfiles.filter(p => p.folga_fixa_semana === d.getDay()).length;
-        const total = monthlyCount + fixedCount;
-        
-        console.log(`[Render] ${iso} -> Status: ${statusInfo.status} | Ocupação: ${total}/${limit} (Mensais: ${monthlyCount}, Fixas: ${fixedCount})`);
-      }
 
       result.push({
         kind: "day",
@@ -118,7 +111,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         limit: dayLimits.get(iso) || 1,
         label: statusInfo.label,
         tooltip: statusInfo.reason,
-        birthdayUser: birthdayByDate.get(iso)
+        birthdayUser: bdayMap.get(iso)
       });
     }
     
