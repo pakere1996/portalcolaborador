@@ -12,9 +12,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Filter, User, Trash2, Plus, Settings2, Save, Lock, Info, Unlock } from "lucide-react";
-import { dayType, formatBR, monthKey, parseYMD, ymd } from "@/lib/folga-rules";
+import { Calendar as CalIcon, Filter, User, Trash2, Plus, Settings2, Save, Lock, Info, Unlock, AlertTriangle } from "lucide-react";
+import { dayType, formatBR, monthKey, parseYMD, ymd, autoBlockedDatesForMonth } from "@/lib/folga-rules";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 export default function AdminCalendar() {
   const { user } = useAuth();
@@ -178,9 +179,19 @@ export default function AdminCalendar() {
 
   const unlockDay = async (iso: string) => {
     const block = manual.find(m => m.data === iso);
-    if (!block) return;
-    const { error } = await supabase.from("datas_bloqueadas").update({ liberada: true }).eq("id", block.id);
-    if (error) return toast.error(error.message);
+    if (!block) {
+      // Se for um bloqueio automático não materializado, criamos uma entrada liberada
+      const { error } = await supabase.from("datas_bloqueadas").upsert({
+        data: iso,
+        motivo: "Liberado manualmente",
+        liberada: true,
+        auto: false
+      }, { onConflict: 'data' });
+      if (error) return toast.error(error.message);
+    } else {
+      const { error } = await supabase.from("datas_bloqueadas").update({ liberada: true }).eq("id", block.id);
+      if (error) return toast.error(error.message);
+    }
     toast.success("Data liberada com sucesso");
     setDlg(null); load();
   };
@@ -189,7 +200,18 @@ export default function AdminCalendar() {
   const goNext = () => { const d = new Date(year, month0 + 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); };
 
   const isWeekend = dlg ? !!dayType(parseYMD(dlg.iso)) : false;
-  const currentBlock = dlg ? manual.find(m => m.data === dlg.iso && !m.liberada) : null;
+  
+  const currentBlock = useMemo(() => {
+    if (!dlg) return null;
+    const m = manual.find(x => x.data === dlg.iso && !x.liberada);
+    if (m) return { motivo: m.motivo, auto: m.auto, created_at: m.created_at, id: m.id };
+    
+    // Se não achou no banco, verifica se é um bloqueio automático da regra
+    const auto = autoBlockedDatesForMonth(year, month0).find(b => b.date === dlg.iso);
+    if (auto) return { motivo: auto.reason, auto: true, created_at: null, id: null };
+    
+    return null;
+  }, [dlg, manual, year, month0]);
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -263,9 +285,9 @@ export default function AdminCalendar() {
 
           {dlg && (
             <div className="space-y-8 py-6">
-              {/* Informações de Bloqueio */}
+              {/* Informações de Bloqueio - AGORA SEMPRE VISÍVEL SE BLOQUEADO */}
               {currentBlock && (
-                <div className="bg-rose-50/80 p-6 rounded-[2rem] border border-rose-100 space-y-4">
+                <div className="bg-rose-50/80 p-6 rounded-[2rem] border border-rose-100 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-center justify-between">
                     <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-rose-400 flex items-center gap-2">
                       <Lock className="size-3.5" /> Data Bloqueada
@@ -275,10 +297,15 @@ export default function AdminCalendar() {
                     </Badge>
                   </div>
                   <div className="space-y-2">
-                    <div className="text-lg font-black text-rose-900 leading-tight">{currentBlock.motivo}</div>
-                    <div className="text-[10px] text-rose-400 font-bold uppercase tracking-widest">
-                      Criado em: {new Date(currentBlock.created_at).toLocaleDateString('pt-BR')}
+                    <div className="text-lg font-black text-rose-900 leading-tight flex items-start gap-2">
+                      <AlertTriangle className="size-5 text-rose-500 shrink-0 mt-0.5" />
+                      {currentBlock.motivo}
                     </div>
+                    {currentBlock.created_at && (
+                      <div className="text-[10px] text-rose-400 font-bold uppercase tracking-widest">
+                        Criado em: {new Date(currentBlock.created_at).toLocaleDateString('pt-BR')}
+                      </div>
+                    )}
                   </div>
                   <Button 
                     variant="outline" 
