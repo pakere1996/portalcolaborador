@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,14 +6,10 @@ import { Label } from "@/components/ui/label";
 import logo from "@/assets/pakere-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
-import { cpfToEmail, formatCPF, isValidCPFLength, onlyDigits } from "@/lib/cpf";
+import { cpfToEmail, formatCPF, isValidCPFLength } from "@/lib/cpf";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/login")({
-  component: LoginPage,
-});
-
-function LoginPage() {
+export default function LoginPage() {
   const navigate = useNavigate();
   const { session, role, loading } = useAuth();
   const [cpf, setCpf] = useState("");
@@ -22,7 +18,7 @@ function LoginPage() {
 
   useEffect(() => {
     if (!loading && session) {
-      navigate({ to: role === "admin" ? "/admin" : "/calendario" });
+      navigate(role === "admin" ? "/admin" : "/calendario", { replace: true });
     }
   }, [loading, session, role, navigate]);
 
@@ -87,9 +83,6 @@ function LoginPage() {
             {busy ? "Entrando..." : "Entrar"}
           </Button>
         </form>
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          Dúvidas? Fale com o administrador da pizzaria.
-        </p>
       </div>
     </div>
   );

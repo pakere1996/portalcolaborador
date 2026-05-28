@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import { ArrowLeftRight, Ban, Calendar, ClipboardList, LogOut, Menu, Shield, UserCheck, Users, X } from "lucide-react";
 import { useState } from "react";
@@ -10,7 +10,8 @@ interface NavItem { to: string; label: string; icon: typeof Calendar }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { profile, role, signOut } = useAuth();
-  const path = useRouterState({ select: (s) => s.location.pathname });
+  const location = useLocation();
+  const path = location.pathname;
   const [open, setOpen] = useState(false);
 
   const employeeNav: NavItem[] = [
@@ -32,7 +33,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
-      {/* Mobile header */}
       <header className="md:hidden flex items-center justify-between border-b border-border bg-card/50 backdrop-blur px-4 py-3">
         <div className="flex items-center gap-2">
           <img src={logo} alt="Pakerê" className="size-7 rounded-md object-cover" />
@@ -46,10 +46,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      {/* Sidebar */}
-      <aside
-        className={`${open ? "block" : "hidden"} md:block md:w-64 shrink-0 border-r border-border bg-card/40 backdrop-blur md:min-h-screen`}
-      >
+      <aside className={`${open ? "block" : "hidden"} md:block md:w-64 shrink-0 border-r border-border bg-card/40 backdrop-blur md:min-h-screen`}>
         <div className="hidden md:flex items-center gap-3 px-6 py-5 border-b border-border">
           <img src={logo} alt="Pakerê" className="size-10 rounded-lg object-cover" />
           <div>
