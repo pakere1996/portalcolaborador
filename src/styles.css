@@ -97,8 +97,8 @@
   html, body { background-color: var(--color-background); color: var(--color-foreground); }
   body {
     font-feature-settings: "cv11", "ss01";
-    /* Ajustada a transparência para 0.88 para mostrar um pouco mais o padrão */
-    background-image: linear-gradient(rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.88)), url("./assets/bg-pattern.png");
+    /* Ajustada a transparência para 0.82 para mostrar ainda mais o padrão */
+    background-image: linear-gradient(rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.82)), url("./assets/bg-pattern.png");
     background-repeat: repeat;
     background-size: 600px auto;
     background-attachment: fixed;
