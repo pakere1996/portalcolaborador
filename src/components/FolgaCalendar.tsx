@@ -117,7 +117,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      // 2. Lotado (Vermelho)
+      // 2. Lotado (Vermelho) - Se atingiu o limite, fica vermelho independente de quem está lá
       if (isFull) {
         result.push({
           kind: "weekend",
@@ -153,13 +153,13 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      // 4. Prioridade de aniversário de outro (Vermelho para evitar confusão)
+      // 4. Prioridade de aniversário de outro (Vermelho)
       if (birthdayUser && birthdayUser.userId !== myUserId) {
         result.push({
           kind: "weekend",
           date: d,
           iso,
-          status: "birthday", // Usaremos a cor de bloqueado no CSS
+          status: "birthday",
           occupants,
           limit,
           birthdayUser,
