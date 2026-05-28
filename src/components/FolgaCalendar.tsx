@@ -82,23 +82,29 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     for (let i = 0; i < lead; i++) result.push({ kind: "blank" });
 
     for (const d of days) {
-      const type = dayType(d);
+      const type = dayType(d); // "sabado" | "domingo" | null
       const iso = ymd(d);
+      const isWeekend = !!type;
       const isFixedOff = !isAdmin && fixedDayOfWeek !== null && fixedDayOfWeek !== undefined && d.getDay() === fixedDayOfWeek;
       
       const limit = dayLimits?.get(iso) ?? 1;
       const occupants = occupantsByDate?.get(iso) ?? [];
       const birthdayUser = birthdayByDate?.get(iso);
       
+      // Regra de Lotação: Apenas folgas mensais contam para o limite
+      const monthlyOccupants = occupants.filter(o => o.type === 'monthly');
+      const isFull = monthlyOccupants.length >= limit;
+      
       const isMine = !!myUserId && occupants.some((o) => o.userId === myUserId && o.type === 'monthly');
       const hasPending = occupants.some(o => o.type === 'pending');
-      const isFull = occupants.filter(o => o.type !== 'pending').length >= limit;
 
+      // 1. Datas Passadas
       if (d < today) {
         result.push({ kind: "day", date: d, iso, status: "past", occupants, limit, tooltip: "Data passada" });
         continue;
       }
 
+      // 2. Minha Folga Mensal (Colaborador)
       if (!isAdmin && isMine) {
         result.push({
           kind: "day", date: d, iso, status: "mine", occupants, limit, birthdayUser,
@@ -107,6 +113,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
+      // 3. Folga Semanal Fixa (Colaborador) - Informativa, não bloqueia
       if (!isAdmin && isFixedOff) {
         result.push({
           kind: "day", date: d, iso, status: "fixed", occupants, limit,
@@ -115,7 +122,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      if (!isAdmin && locked) {
+      // 4. Mês Bloqueado (Apenas para fins de semana)
+      if (!isAdmin && locked && isWeekend) {
         result.push({
           kind: "day", date: d, iso, status: "blocked", occupants, limit,
           tooltip: `Folgas ainda não liberadas (Abre em ${locked.unlockDateBR})`
@@ -123,6 +131,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
+      // 5. Bloqueios Manuais ou Automáticos
       const manual = manualBlocked.get(iso);
       const autoReason = auto.get(iso);
       const blockedReason = (manual && !manual.liberada) ? manual.reason : (autoReason && !manual?.liberada ? autoReason : null);
@@ -135,7 +144,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      if (!isAdmin && birthdayUser && birthdayUser.userId !== myUserId) {
+      // 6. Prioridade de Aniversário (Apenas para fins de semana)
+      if (!isAdmin && isWeekend && birthdayUser && birthdayUser.userId !== myUserId) {
         result.push({
           kind: "day", date: d, iso, status: "birthday", occupants, limit,
           tooltip: "Indisponível: Reservado para aniversariante"
@@ -143,6 +153,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
+      // 7. Pendente
       if (hasPending) {
         result.push({
           kind: "day", date: d, iso, status: "pending", occupants, limit,
@@ -151,17 +162,19 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      if (isFull) {
+      // 8. Lotado (Apenas para fins de semana e folgas mensais)
+      if (isWeekend && isFull) {
         result.push({
           kind: "day", date: d, iso, status: "taken", occupants, limit,
-          label: "Indisponível", tooltip: "Limite de colaboradores atingido"
+          label: "Indisponível", tooltip: "Limite de folgas mensais atingido"
         });
         continue;
       }
 
+      // 9. Disponível (Verde - Apenas FDS) ou Dia Útil (Branco)
       result.push({
-        kind: "day", date: d, iso, status: type ? "available" : "weekday", occupants, limit,
-        tooltip: type ? (limit > 1 ? `Disponível (${occupants.length}/${limit})` : "Disponível") : undefined
+        kind: "day", date: d, iso, status: isWeekend ? "available" : "weekday", occupants, limit,
+        tooltip: isWeekend ? (limit > 1 ? `Disponível (${monthlyOccupants.length}/${limit})` : "Disponível") : undefined
       });
     }
     return result;
