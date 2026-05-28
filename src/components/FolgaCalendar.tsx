@@ -155,7 +155,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
       if (isFull) {
         result.push({
           kind: "weekend", date: d, iso, status: "taken", occupants, limit,
-          label: "Lotado", tooltip: "Limite de colaboradores atingido"
+          label: "Indisponível", tooltip: "Limite de colaboradores atingido"
         });
         continue;
       }
@@ -261,9 +261,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
 
         <div className="flex flex-wrap gap-4 mt-8 pt-6 border-t border-border text-[10px] font-bold uppercase tracking-tight">
           <Legend color="bg-emerald-500" label="Disponível" />
-          <Legend color="bg-red-500" label="Indisponível / Lotado" />
+          <Legend color="bg-red-500" label="Indisponível" />
           <Legend color="bg-amber-400" label="Sua Folga" />
-          <Legend color="bg-muted" label="Passado" />
         </div>
       </div>
     </TooltipProvider>
