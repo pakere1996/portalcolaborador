@@ -40,25 +40,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadProfile = async (uid: string) => {
     try {
-      const [{ data: prof }, { data: roles }] = await Promise.all([
-        supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
-        supabase.from("user_roles").select("role").eq("user_id", uid),
-      ]);
+      // Buscamos o perfil e a role separadamente para evitar que um erro de RLS em um trave o outro
+      const { data: prof, error: pErr } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
+      const { data: roles, error: rErr } = await supabase.from("user_roles").select("role").eq("user_id", uid);
       
+      if (pErr) console.error("[Auth] Erro ao carregar perfil:", pErr);
+      if (rErr) console.error("[Auth] Erro ao carregar roles:", rErr);
+
       const p = prof as Profile | null;
       
-      // Se o perfil existe, verificamos se está ativo
       if (p && p.ativo === false) {
-        console.warn("[Auth] Usuário inativo tentando acessar.");
+        console.warn("[Auth] Usuário inativo.");
         await supabase.auth.signOut();
         return;
       }
 
       setProfile(p);
-      const r = (roles ?? []).map((x: { role: AppRole }) => x.role);
+      const r = (roles ?? []).map((x: any) => x.role);
       setRole(r.includes("admin") ? "admin" : r.includes("funcionario") ? "funcionario" : null);
     } catch (err) {
-      console.error("[Auth] Erro ao carregar perfil:", err);
+      console.error("[Auth] Erro crítico no contexto:", err);
     }
   };
 
