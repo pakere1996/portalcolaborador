@@ -97,7 +97,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
       const monthlyOccupants = occupants.filter(o => o.type === 'monthly');
       const isFull = monthlyOccupants.length >= limit;
       
-      const isMine = !!myUserId && occupants.some((o) => o.userId === myUserId && o.type === 'monthly');
+      const isMine = !!myUserId && occupants.some((o) => o.userId === myUserId && o.type === 'monthly
+');
       const hasPending = occupants.some(o => o.type === 'pending');
 
       if (d < today) {
@@ -123,7 +124,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      // Prioridade 3: Minha solicitação pendente (Roxo) - DEVE VIR ANTES DO BLOQUEIO
+      // Prioridade 3: Minha solicitação pendente (Roxo)
       if (hasPending) {
         result.push({
           kind: "day", date: d, iso, status: "pending", occupants, limit,
@@ -161,10 +162,11 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
+      // Se estiver lotado por outros colaboradores
       if (isWeekend && isFull) {
         result.push({
           kind: "day", date: d, iso, status: "taken", occupants, limit,
-          label: "Lotado", tooltip: "Limite de folgas mensais atingido"
+          label: "Indisponível", tooltip: "Limite de folgas mensais atingido"
         });
         continue;
       }
@@ -298,7 +300,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                   </div>
                 )}
 
-                {isWeekend && c.status !== 'past' && (
+                {isAdmin && isWeekend && c.status !== 'past' && (
                   <div className={cn(
                     "mt-auto text-[10px] font-bold flex items-center gap-1",
                     c.status === 'taken' ? "text-rose-600" : "text-slate-400",
