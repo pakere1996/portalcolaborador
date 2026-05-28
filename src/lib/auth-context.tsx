@@ -40,26 +40,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadProfile = async (uid: string) => {
     try {
-      console.log("[Auth] Buscando dados para o ID:", uid);
+      console.log("[Auth] Iniciando busca de dados para:", uid);
       
-      const [profRes, rolesRes] = await Promise.all([
-        supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
-        supabase.from("user_roles").select("role").eq("user_id", uid)
-      ]);
-      
-      if (profRes.error) console.error("[Auth] Erro ao buscar Perfil:", profRes.error);
-      if (rolesRes.error) console.error("[Auth] Erro ao buscar Roles:", rolesRes.error);
+      // Buscamos perfil e roles separadamente para evitar que um erro em um trave o outro
+      const { data: p, error: pErr } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
+      if (pErr) console.error("[Auth] Erro ao carregar perfil:", pErr);
 
-      const p = profRes.data as Profile | null;
-      
+      const { data: r, error: rErr } = await supabase.from("user_roles").select("role").eq("user_id", uid);
+      if (rErr) console.error("[Auth] Erro ao carregar roles:", rErr);
+
       if (p && p.ativo === false) {
-        console.warn("[Auth] Usuário desativado pelo administrador.");
+        console.warn("[Auth] Usuário inativo.");
         await supabase.auth.signOut();
         return;
       }
 
-      setProfile(p);
-      const roles = (rolesRes.data ?? []).map((x: any) => x.role);
+      setProfile(p as Profile);
+      const roles = (r ?? []).map((x: any) => x.role);
       
       if (roles.includes("admin")) {
         setRole("admin");
@@ -69,18 +66,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRole(null);
       }
       
-      console.log("[Auth] Carregamento concluído. Nome:", p?.nome, "| Role:", roles);
+      console.log("[Auth] Dados carregados com sucesso.");
     } catch (err) {
-      console.error("[Auth] Erro inesperado no loadProfile:", err);
+      console.error("[Auth] Erro inesperado:", err);
     } finally {
+      // Garante que o loading termine sempre
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    // Monitora mudanças de estado (login/logout)
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
-      console.log("[Auth] Evento de Autenticação:", event);
+      console.log("[Auth] Evento Supabase:", event);
       setSession(currentSession);
       
       if (currentSession?.user) {
@@ -92,11 +89,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    // Checagem inicial da sessão
-    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
-      setSession(initialSession);
-      if (initialSession?.user) {
-        loadProfile(initialSession.user.id);
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      if (s?.user) {
+        loadProfile(s.user.id);
       } else {
         setLoading(false);
       }
