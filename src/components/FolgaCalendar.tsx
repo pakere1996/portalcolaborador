@@ -203,7 +203,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
             const isSaturday = dayOfWeek === 6;
             
             const statusStyles = {
-              available: "bg-white hover:bg-emerald-50/40",
+              available: "bg-emerald-50/40 border-emerald-200/50 border-2 hover:bg-emerald-100/60",
               blocked: "bg-rose-50/80 border-rose-200 border-2",
               taken: "bg-rose-50/80 border-rose-200 border-2",
               birthday: "bg-rose-50/80 border-rose-200 border-2",
@@ -228,8 +228,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                 className={cn(
                   "min-h-[100px] md:min-h-[140px] p-3 flex flex-col relative transition-all duration-300 group border-none",
                   statusStyles[c.status],
-                  !isBlocked && c.status !== 'pending' && isSunday && c.status !== 'past' && "bg-rose-50/40",
-                  !isBlocked && c.status !== 'pending' && isSaturday && c.status !== 'past' && "bg-amber-50/40",
+                  c.status !== 'available' && !isBlocked && c.status !== 'pending' && isSunday && c.status !== 'past' && "bg-rose-50/40",
+                  c.status !== 'available' && !isBlocked && c.status !== 'pending' && isSaturday && c.status !== 'past' && "bg-amber-50/40",
                   isClickable && "cursor-pointer hover:shadow-lg hover:z-10 hover:scale-[1.02]"
                 )}
                 onClick={() => onSelectDay?.(c.iso, { status: c.status, reason: c.tooltip })}
@@ -237,7 +237,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                 <div className="flex justify-between items-start mb-3">
                   <span className={cn(
                     "text-sm font-bold tracking-tight",
-                    (isSunday || isSaturday) && c.status !== 'past' ? "text-slate-900" : "text-slate-400",
+                    c.status === 'available' ? "text-emerald-700" : (isSunday || isSaturday) && c.status !== 'past' ? "text-slate-900" : "text-slate-400",
                     c.status === 'past' && "text-slate-200",
                     c.status === 'pending' && "text-violet-700"
                   )}>
