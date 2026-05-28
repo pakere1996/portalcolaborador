@@ -18,7 +18,16 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Cake } from "lucide-react";
+import { Calendar as CalIcon, Cake, Clock, AlertCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+
+interface Solic {
+  id: string;
+  data: string;
+  motivo: string;
+  status: string;
+  created_at: string;
+}
 
 export default function CalendarioPage() {
   const { user, profile } = useAuth();
@@ -29,8 +38,9 @@ export default function CalendarioPage() {
   const [manual, setManual] = useState<{ data: string; motivo: string; liberada: boolean }[]>([]);
   const [limites, setLimites] = useState<{ data: string; limite_colaboradores: number }[]>([]);
   const [prios, setPrios] = useState<{ user_id: string; data: string; status: string; nome?: string }[]>([]);
-  const [pendingReqs, setPendingReqs] = useState<Set<string>>(new Set());
+  const [pendingSolics, setPendingSolics] = useState<Solic[]>([]);
   const [reqDialog, setReqDialog] = useState<{ iso: string; reason: string } | null>(null);
+  const [viewDialog, setViewDialog] = useState<Solic | null>(null);
   const [reqMotivo, setReqMotivo] = useState("");
 
   const load = async () => {
@@ -44,7 +54,7 @@ export default function CalendarioPage() {
       supabase.from("datas_bloqueadas").select("data, motivo, liberada").gte("data", start).lte("data", end),
       supabase.from("dia_config").select("data, limite_colaboradores").gte("data", start).lte("data", end),
       supabase.from("prioridade_aniversario").select("user_id, data, status").eq("status", "ativa").gte("data", start).lte("data", end),
-      supabase.from("solicitacoes_especiais").select("data").eq("user_id", user.id).eq("status", "pendente").gte("data", start).lte("data", end),
+      supabase.from("solicitacoes_especiais").select("*").eq("user_id", user.id).eq("status", "pendente").gte("data", start).lte("data", end),
     ]);
 
     if (allFolgasRes.error) {
@@ -53,7 +63,7 @@ export default function CalendarioPage() {
     }
 
     const folgasData = (allFolgasRes.data ?? []) as { user_id: string; data: string }[];
-    const pendingData = (pendingRes.data ?? []) as { data: string }[];
+    const pendingData = (pendingRes.data ?? []) as Solic[];
 
     const combined: { user_id: string; data: string; nome: string; type: "monthly" | "pending" }[] = [
       ...folgasData.map(f => ({
@@ -76,7 +86,7 @@ export default function CalendarioPage() {
     setPrios(((prioRes.data ?? []) as { user_id: string; data: string; status: string }[]).map((p) => ({
       ...p, nome: p.user_id === user.id ? "Sua prioridade" : "Reservado",
     })));
-    setPendingReqs(new Set(pendingData.map(r => r.data)));
+    setPendingSolics(pendingData);
   };
 
   useEffect(() => { load(); }, [year, month0, user]);
@@ -169,6 +179,9 @@ export default function CalendarioPage() {
       if (error) return toast.error(error.message);
       toast.success("Folga cancelada");
       load();
+    } else if (info.status === "pending") {
+      const solic = pendingSolics.find(s => s.data === iso);
+      if (solic) setViewDialog(solic);
     } else if (info.status === "blocked" || info.status === "taken" || info.status === "birthday") {
       setReqDialog({ iso, reason: info.reason ?? "Data indisponível" });
     }
@@ -186,6 +199,7 @@ export default function CalendarioPage() {
     if (error) return toast.error(error.message);
     toast.success("Solicitação enviada! Aguarde a resposta do admin.");
     setReqDialog(null); setReqMotivo("");
+    load();
   };
 
   const myBirthdayPrio = prios.find((p) => p.user_id === user?.id);
@@ -238,7 +252,6 @@ export default function CalendarioPage() {
         manualBlocked={manualMap}
         dayLimits={dayLimits}
         birthdayByDate={birthdayByDate}
-        pendingRequests={pendingReqs}
         myUserId={user?.id ?? null}
         fixedDayOfWeek={profile?.folga_fixa_semana}
         onPrev={goPrev}
@@ -253,6 +266,7 @@ export default function CalendarioPage() {
         Você pode <b>solicitar exceção</b> clicando em uma data vermelha.
       </div>
 
+      {/* Modal para Nova Solicitação */}
       <Dialog open={!!reqDialog} onOpenChange={(o) => !o && setReqDialog(null)}>
         <DialogContent>
           <DialogHeader>
@@ -272,6 +286,42 @@ export default function CalendarioPage() {
           <DialogFooter>
             <Button variant="ghost" onClick={() => setReqDialog(null)}>Cancelar</Button>
             <Button onClick={submitRequest}>Enviar solicitação</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para Visualizar Solicitação Pendente */}
+      <Dialog open={!!viewDialog} onOpenChange={(o) => !o && setViewDialog(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="size-5 text-violet-500" /> Solicitação Pendente
+            </DialogTitle>
+            <DialogDescription>
+              {viewDialog && (
+                <>Data solicitada: <b>{formatBR(parseYMD(viewDialog.data))}</b></>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-2">
+            <div className="bg-violet-50 border border-violet-100 rounded-xl p-4 space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-violet-400">Seu Motivo</Label>
+              <p className="text-sm text-violet-900 italic">"{viewDialog?.motivo}"</p>
+            </div>
+            
+            <div className="flex items-center gap-2 text-amber-600 bg-amber-50 p-3 rounded-lg border border-amber-100">
+              <AlertCircle className="size-4 shrink-0" />
+              <span className="text-xs font-medium">Aguardando aprovação administrativa</span>
+            </div>
+            
+            <div className="text-[10px] text-muted-foreground text-right">
+              Enviada em {viewDialog && new Date(viewDialog.created_at).toLocaleString('pt-BR')}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" className="w-full" onClick={() => setViewDialog(null)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

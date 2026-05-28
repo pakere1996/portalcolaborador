@@ -105,6 +105,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
+      // Prioridade 1: Minha folga mensal (Amarelo)
       if (!isAdmin && isMine) {
         result.push({
           kind: "day", date: d, iso, status: "mine", occupants, limit, birthdayUser,
@@ -113,10 +114,20 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
+      // Prioridade 2: Minha folga semanal fixa (Azul)
       if (!isAdmin && isFixedOff) {
         result.push({
           kind: "day", date: d, iso, status: "fixed", occupants, limit,
           label: "Semanal", tooltip: "Sua folga semanal fixa"
+        });
+        continue;
+      }
+
+      // Prioridade 3: Minha solicitação pendente (Roxo) - DEVE VIR ANTES DO BLOQUEIO
+      if (hasPending) {
+        result.push({
+          kind: "day", date: d, iso, status: "pending", occupants, limit,
+          label: isAdmin ? "Pendente" : "Sua solicitação", tooltip: "Há solicitações aguardando aprovação"
         });
         continue;
       }
@@ -146,14 +157,6 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         result.push({
           kind: "day", date: d, iso, status: "birthday", occupants, limit,
           tooltip: "Indisponível: Reservado para aniversariante"
-        });
-        continue;
-      }
-
-      if (hasPending) {
-        result.push({
-          kind: "day", date: d, iso, status: "pending", occupants, limit,
-          label: isAdmin ? "Pendente" : "Sua solicitação", tooltip: "Há solicitações aguardando aprovação"
         });
         continue;
       }
