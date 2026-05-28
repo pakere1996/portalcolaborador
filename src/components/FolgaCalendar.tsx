@@ -117,7 +117,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
           tooltip:
             `${occupants.length}/${limit} ocupado` +
             (isFull ? " (Lotado)" : "") +
-            (birthdayUser ? ` | 🎂 Aniversário` : ""),
+            (birthdayUser ? ` | 🎂 Aniversário` : "") +
+            ` — ${occupants.map(o => o.userName).join(", ")}`,
         });
         continue;
       }
