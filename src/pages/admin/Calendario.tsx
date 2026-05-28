@@ -270,6 +270,10 @@ export default function AdminCalendar() {
         year={year} month0={month0}
         occupantsByDate={occupantsByDate} manualBlocked={manualMap}
         dayLimits={dayLimits}
+        myUserId={user?.id ?? null}
+        allFolgas={folgas}
+        allProfiles={profiles}
+        pendingRequests={pendentes}
         isAdmin={true}
         onPrev={goPrev} onNext={goNext}
         onSelectDay={onSelect}
@@ -288,7 +292,7 @@ export default function AdminCalendar() {
 
           {dlg && (
             <div className="space-y-8 py-6">
-              {/* Informações de Bloqueio - AGORA SEMPRE VISÍVEL SE BLOQUEADO */}
+              {/* Informações de Bloqueio */}
               {currentBlock && (
                 <div className="bg-rose-50/80 p-6 rounded-[2rem] border border-rose-100 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-center justify-between">

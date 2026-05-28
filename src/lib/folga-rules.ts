@@ -92,16 +92,28 @@ export function autoBlockedDatesForMonth(year: number, month0: number): { date: 
 export function calculateDateStatus(params: {
   date: Date;
   myUserId: string | null;
-  allFolgas: { user_id: string; data: string }[];
-  allProfiles: { id: string; folga_fixa_semana: number | null }[];
-  manualBlocked: Map<string, { reason: string; liberada: boolean }>;
-  dayLimits: Map<string, number>;
-  birthdayByDate: Map<string, { userId: string }>;
-  pendingRequests: { data: string }[];
+  allFolgas?: { user_id: string; data: string }[];
+  allProfiles?: { id: string; folga_fixa_semana: number | null }[];
+  manualBlocked?: Map<string, { reason: string; liberada: boolean }>;
+  dayLimits?: Map<string, number>;
+  birthdayByDate?: Map<string, { userId: string }>;
+  pendingRequests?: { data: string }[];
   isAdmin: boolean;
   locked?: { unlockDateBR: string } | null;
 }): DateStatus {
-  const { date, myUserId, allFolgas, allProfiles, manualBlocked, dayLimits, birthdayByDate, pendingRequests, isAdmin, locked } = params;
+  const { 
+    date, 
+    myUserId, 
+    allFolgas = [], 
+    allProfiles = [], 
+    manualBlocked = new Map(), 
+    dayLimits = new Map(), 
+    birthdayByDate = new Map(), 
+    pendingRequests = [], 
+    isAdmin, 
+    locked 
+  } = params;
+  
   const iso = ymd(date);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
