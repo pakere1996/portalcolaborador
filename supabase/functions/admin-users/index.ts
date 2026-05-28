@@ -21,30 +21,52 @@ serve(async (req) => {
 
     if (action === 'create') {
       const email = `${payload.cpf}@pakere.com.br`
-      const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
-        email,
-        password: payload.senha,
-        email_confirm: true,
-        user_metadata: { nome: payload.nome, cpf: payload.cpf, cargo: payload.cargo }
-      })
+      
+      // Busca se o usuário já existe no sistema de autenticação
+      const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers()
+      const existingAuth = users.find(u => u.email === email)
 
-      if (authErr) throw authErr
+      let userId;
 
-      const { error: profErr } = await supabaseAdmin.from('profiles').update({
+      if (existingAuth) {
+        userId = existingAuth.id
+        // Se já existe, apenas atualizamos a senha para garantir o acesso
+        await supabaseAdmin.auth.admin.updateUserById(userId, { password: payload.senha })
+      } else {
+        // Se não existe, cria do zero
+        const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password: payload.senha,
+          email_confirm: true,
+          user_metadata: { nome: payload.nome, cpf: payload.cpf, cargo: payload.cargo }
+        })
+        if (authErr) throw authErr
+        userId = authUser.user.id
+      }
+
+      // Garante que o perfil no banco de dados esteja correto (Upsert)
+      const { error: profErr } = await supabaseAdmin.from('profiles').upsert({
+        id: userId,
         nome: payload.nome,
+        cpf: payload.cpf,
         cargo: payload.cargo,
         data_admissao: payload.dataAdmissao,
         data_nascimento: payload.dataNascimento,
         folga_fixa_semana: payload.folgaFixaSemana,
         aprovacao_status: 'aprovado',
-        ativo: true
-      }).eq('id', authUser.user.id)
+        ativo: true,
+        updated_at: new Date().toISOString()
+      })
 
       if (profErr) throw profErr
 
-      await supabaseAdmin.from('user_roles').insert({ user_id: authUser.user.id, role: payload.role || 'funcionario' })
+      // Garante a permissão de funcionário
+      await supabaseAdmin.from('user_roles').upsert({ 
+        user_id: userId, 
+        role: payload.role || 'funcionario' 
+      }, { onConflict: 'user_id,role' })
       
-      return new Response(JSON.stringify({ success: true, userId: authUser.user.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ success: true, userId }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     if (action === 'reset-password') {
@@ -54,14 +76,12 @@ serve(async (req) => {
     }
 
     if (action === 'delete') {
-      const { error } = await supabaseAdmin.auth.admin.deleteUser(payload.targetUserId)
-      if (error) throw error
-      return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-    }
-
-    if (action === 'approve') {
-      const { error } = await supabaseAdmin.from('profiles').update({ aprovacao_status: payload.approve ? 'aprovado' : 'recusado', ativo: payload.approve }).eq('id', payload.targetUserId)
-      if (error) throw error
+      try {
+        await supabaseAdmin.auth.admin.deleteUser(payload.targetUserId)
+      } catch (e) {
+        console.warn("[admin-users] Usuário não encontrado no Auth ao deletar")
+      }
+      await supabaseAdmin.from('profiles').delete().eq('id', payload.targetUserId)
       return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
