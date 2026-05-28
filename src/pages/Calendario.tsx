@@ -25,7 +25,7 @@ export default function CalendarioPage() {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month0, setMonth0] = useState(today.getMonth());
-  const [folgas, setFolgas] = useState<{ user_id: string; data: string; nome?: string }[]>([]);
+  const [folgas, setFolgas] = useState<{ user_id: string; data: string; nome: string; type: "monthly" | "pending" }[]>([]);
   const [manual, setManual] = useState<{ data: string; motivo: string; liberada: boolean }[]>([]);
   const [limites, setLimites] = useState<{ data: string; limite_colaboradores: number }[]>([]);
   const [prios, setPrios] = useState<{ user_id: string; data: string; status: string; nome?: string }[]>([]);
@@ -52,12 +52,23 @@ export default function CalendarioPage() {
       return;
     }
 
-    const allFolgas = (allFolgasRes.data ?? []) as { user_id: string; data: string }[];
-    const combined = allFolgas.map(f => ({
-      user_id: f.user_id,
-      data: f.data,
-      nome: f.user_id === user.id ? "Sua folga" : "Indisponível"
-    }));
+    const folgasData = (allFolgasRes.data ?? []) as { user_id: string; data: string }[];
+    const pendingData = (pendingRes.data ?? []) as { data: string }[];
+
+    const combined: { user_id: string; data: string; nome: string; type: "monthly" | "pending" }[] = [
+      ...folgasData.map(f => ({
+        user_id: f.user_id,
+        data: f.data,
+        nome: f.user_id === user.id ? "Sua folga" : "Indisponível",
+        type: 'monthly' as const
+      })),
+      ...pendingData.map(p => ({
+        user_id: user.id,
+        data: p.data,
+        nome: "Sua solicitação",
+        type: 'pending' as const
+      }))
+    ];
 
     setFolgas(combined);
     setManual(blockRes.data ?? []);
@@ -65,7 +76,7 @@ export default function CalendarioPage() {
     setPrios(((prioRes.data ?? []) as { user_id: string; data: string; status: string }[]).map((p) => ({
       ...p, nome: p.user_id === user.id ? "Sua prioridade" : "Reservado",
     })));
-    setPendingReqs(new Set((pendingRes.data ?? []).map(r => r.data)));
+    setPendingReqs(new Set(pendingData.map(r => r.data)));
   };
 
   useEffect(() => { load(); }, [year, month0, user]);
@@ -86,7 +97,7 @@ export default function CalendarioPage() {
     const m = new Map<string, DayOccupant[]>();
     for (const f of folgas) {
       const arr = m.get(f.data) ?? [];
-      arr.push({ userId: f.user_id, userName: f.nome });
+      arr.push({ userId: f.user_id, userName: f.nome, type: f.type });
       m.set(f.data, arr);
     }
     return m;
@@ -114,7 +125,7 @@ export default function CalendarioPage() {
   const unlock = unlockDateForMonth(year, month0);
 
   const mk = `${year}-${String(month0 + 1).padStart(2, "0")}`;
-  const myFolgaThisMonth = folgas.find((f) => f.user_id === user?.id && monthKey(parseYMD(f.data)) === mk);
+  const myFolgaThisMonth = folgas.find((f) => f.user_id === user?.id && f.type === 'monthly' && monthKey(parseYMD(f.data)) === mk);
 
   const goPrev = () => {
     const d = new Date(year, month0 - 1, 1);

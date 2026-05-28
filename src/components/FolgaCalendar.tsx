@@ -10,7 +10,7 @@ import {
   autoBlockedDatesForMonth,
 } from "@/lib/folga-rules";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Cake, Users, AlertCircle, Lock, LockOpen } from "lucide-react";
+import { ChevronLeft, ChevronRight, Cake, Users, AlertCircle, Lock, LockOpen, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -56,6 +56,7 @@ export interface FolgaCalendarProps {
   onNext: () => void;
   onSelectDay?: (iso: string, info: { status: string; reason?: string }) => void;
   locked?: { unlockDateBR: string } | null;
+  pendingRequests?: Set<string>;
 }
 
 export function FolgaCalendar(props: FolgaCalendarProps) {
@@ -211,8 +212,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
               blocked: "bg-rose-50/80 border-rose-200 border-2",
               taken: "bg-rose-50/80 border-rose-200 border-2",
               birthday: "bg-rose-50/80 border-rose-200 border-2",
-              mine: "bg-amber-50/60",
-              fixed: "bg-blue-50/60",
+              mine: "bg-amber-100/60 border-amber-300 border-2",
+              fixed: "bg-blue-50/60 border-blue-200 border-2",
               pending: "bg-violet-50/90 border-violet-400 border-2 animate-pulse",
               past: "bg-slate-50/40 text-slate-300",
               weekday: "bg-white hover:bg-slate-50/40",
@@ -233,8 +234,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                 className={cn(
                   "min-h-[100px] md:min-h-[140px] p-3 flex flex-col relative transition-all duration-300 group border-none",
                   statusStyles[c.status],
-                  c.status !== 'available' && !isBlocked && c.status !== 'pending' && isSunday && c.status !== 'past' && "bg-rose-50/40",
-                  c.status !== 'available' && !isBlocked && c.status !== 'pending' && isSaturday && c.status !== 'past' && "bg-amber-50/40",
+                  c.status !== 'available' && !isBlocked && c.status !== 'pending' && c.status !== 'mine' && isSunday && c.status !== 'past' && "bg-rose-50/40",
+                  c.status !== 'available' && !isBlocked && c.status !== 'pending' && c.status !== 'mine' && isSaturday && c.status !== 'past' && "bg-amber-50/40",
                   isClickable && "cursor-pointer hover:shadow-lg hover:z-10 hover:scale-[1.02]"
                 )}
                 onClick={() => onSelectDay?.(c.iso, { status: c.status, reason: c.tooltip })}
@@ -244,13 +245,17 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     "text-sm font-bold tracking-tight",
                     c.status === 'available' ? "text-emerald-700" : (isSunday || isSaturday) && c.status !== 'past' ? "text-slate-900" : "text-slate-400",
                     c.status === 'past' && "text-slate-200",
-                    c.status === 'pending' && "text-violet-700"
+                    c.status === 'pending' && "text-violet-700",
+                    c.status === 'mine' && "text-amber-700"
                   )}>
                     {c.date.getDate()}
                   </span>
                   <div className="flex gap-1">
                     {c.status === 'available' && (
                       <LockOpen className="size-3.5 text-emerald-500 drop-shadow-[0_0_3px_rgba(16,185,129,0.3)]" />
+                    )}
+                    {c.status === 'mine' && (
+                      <CheckCircle2 className="size-4 text-amber-600 drop-shadow-[0_0_3px_rgba(217,119,6,0.3)]" />
                     )}
                     {c.status === 'pending' && <AlertCircle className="size-4 text-violet-600" />}
                     {isBlocked && <Lock className="size-3.5 text-rose-400" />}
@@ -293,7 +298,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                 {isWeekend && c.status !== 'past' && (
                   <div className={cn(
                     "mt-auto text-[10px] font-bold flex items-center gap-1",
-                    c.status === 'taken' ? "text-rose-600" : "text-slate-400"
+                    c.status === 'taken' ? "text-rose-600" : "text-slate-400",
+                    c.status === 'mine' && "text-amber-700"
                   )}>
                     <Users className="size-3" /> {monthlyCount}/{c.limit}
                   </div>
