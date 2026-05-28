@@ -29,7 +29,7 @@ export type DayInfo =
       kind: "weekend";
       date: Date;
       iso: string;
-      status: "available" | "blocked" | "taken" | "mine" | "past" | "birthday";
+      status: "available" | "blocked" | "taken" | "mine" | "past" | "birthday" | "pending";
       occupants: DayOccupant[];
       limit: number;
       birthdayUser?: { userId: string; userName?: string };
@@ -41,11 +41,12 @@ export interface FolgaCalendarProps {
   year: number;
   month0: number;
   occupantsByDate?: Map<string, DayOccupant[]>;
-  takenByDate?: Map<string, { userId: string; userName?: string }>;
   manualBlocked: Map<string, { reason: string; liberada: boolean }>;
   dayLimits?: Map<string, number>;
   birthdayByDate?: Map<string, { userId: string; userName?: string }>;
+  pendingRequests?: Set<string>;
   myUserId?: string | null;
+  isAdmin?: boolean;
   onPrev: () => void;
   onNext: () => void;
   onSelectDay?: (iso: string, info: { status: string; reason?: string }) => void;
@@ -55,13 +56,16 @@ export interface FolgaCalendarProps {
 export function FolgaCalendar(props: FolgaCalendarProps) {
   const {
     year, month0,
-    occupantsByDate, takenByDate,
+    occupantsByDate,
     manualBlocked,
     dayLimits,
     birthdayByDate,
+    pendingRequests,
     myUserId,
+    isAdmin,
     onPrev, onNext, onSelectDay, locked,
   } = props;
+  
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -71,12 +75,9 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     const days = getMonthDays(year, month0);
     const auto = new Map(autoBlockedDatesForMonth(year, month0).map((b) => [b.date, b.reason]));
 
-    const occ = new Map<string, DayOccupant[]>();
-    if (occupantsByDate) {
-      for (const [k, v] of occupantsByDate) occ.set(k, v);
-    } else if (takenByDate) {
-      for (const [k, v] of takenByDate) occ.set(k, [v]);
-    }
+    const myFolgaThisMonth = Array.from(occupantsByDate?.values() || []).some(occList => 
+      occList.some(o => o.userId === myUserId)
+    );
 
     const result: DayInfo[] = [];
     for (let i = 0; i < lead; i++) result.push({ kind: "blank" });
@@ -84,107 +85,100 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     for (const d of days) {
       const type = dayType(d);
       const iso = ymd(d);
+      
       if (!type) {
         result.push({ kind: "weekday", date: d, label: String(d.getDate()) });
         continue;
       }
 
       const limit = dayLimits?.get(iso) ?? 1;
-      const occupants = occ.get(iso) ?? [];
+      const occupants = occupantsByDate?.get(iso) ?? [];
       const birthdayUser = birthdayByDate?.get(iso);
-
-      if (d < today) {
-        result.push({ kind: "weekend", date: d, iso, status: "past", occupants, limit, birthdayUser });
-        continue;
-      }
-
-      const mineHere = !!myUserId && occupants.some((o) => o.userId === myUserId);
+      const isMine = !!myUserId && occupants.some((o) => o.userId === myUserId);
       const isFull = occupants.length >= limit;
+      const isPending = pendingRequests?.has(iso);
 
-      // 1. Minha folga (Sempre azul)
-      if (mineHere) {
+      // 1. Datas Passadas (Cinza)
+      if (d < today) {
+        result.push({ kind: "weekend", date: d, iso, status: "past", occupants, limit, tooltip: "Data passada" });
+        continue;
+      }
+
+      // 2. Mês Bloqueado (Vermelho)
+      if (locked) {
         result.push({
-          kind: "weekend",
-          date: d,
-          iso,
-          status: "mine",
-          occupants,
-          limit,
-          birthdayUser,
-          label: "Sua folga",
-          tooltip: `Sua folga registrada (${occupants.length}/${limit})`,
+          kind: "weekend", date: d, iso, status: "blocked", occupants, limit,
+          tooltip: `Folgas ainda não liberadas (Abre em ${locked.unlockDateBR})`
         });
         continue;
       }
 
-      // 2. Lotado (Vermelho) - Se atingiu o limite, fica vermelho independente de quem está lá
-      if (isFull) {
+      // 3. Minha Folga (Azul/Destaque)
+      if (isMine) {
         result.push({
-          kind: "weekend",
-          date: d,
-          iso,
-          status: "taken",
-          occupants,
-          limit,
-          birthdayUser,
-          label: "Lotado",
-          tooltip: `Lotado (${occupants.length}/${limit}) — ${occupants.map(o => o.userName).join(", ")}`,
+          kind: "weekend", date: d, iso, status: "mine", occupants, limit, birthdayUser,
+          label: "Sua folga", tooltip: "Sua folga registrada nesta data"
         });
         continue;
       }
 
-      // 3. Bloqueios (Vermelho)
+      // 4. Solicitação Pendente (Amarelo)
+      if (isPending) {
+        result.push({
+          kind: "weekend", date: d, iso, status: "pending", occupants, limit,
+          label: "Pendente", tooltip: "Você tem uma solicitação pendente para esta data"
+        });
+        continue;
+      }
+
+      // 5. Bloqueios Manuais ou Automáticos (Vermelho)
       const manual = manualBlocked.get(iso);
       const autoReason = auto.get(iso);
-      const blockedReason =
-        manual && !manual.liberada ? manual.reason : autoReason && !manual?.liberada ? autoReason : null;
+      const blockedReason = (manual && !manual.liberada) ? manual.reason : (autoReason && !manual?.liberada ? autoReason : null);
 
       if (blockedReason) {
         result.push({
-          kind: "weekend",
-          date: d,
-          iso,
-          status: "blocked",
-          occupants,
-          limit,
-          birthdayUser,
-          tooltip: `Bloqueado: ${blockedReason}`,
+          kind: "weekend", date: d, iso, status: "blocked", occupants, limit,
+          tooltip: `Data bloqueada: ${blockedReason}`
         });
         continue;
       }
 
-      // 4. Prioridade de aniversário de outro (Vermelho)
+      // 6. Prioridade de Aniversário de Outro (Vermelho)
       if (birthdayUser && birthdayUser.userId !== myUserId) {
         result.push({
-          kind: "weekend",
-          date: d,
-          iso,
-          status: "birthday",
-          occupants,
-          limit,
-          birthdayUser,
-          tooltip: `🎂 Reservado para Aniversariante`,
+          kind: "weekend", date: d, iso, status: "birthday", occupants, limit,
+          tooltip: "Indisponível: Reservado para aniversariante"
         });
         continue;
       }
 
-      // 5. Disponível (Verde) - Pode ter gente mas não está lotado
+      // 7. Lotado (Vermelho)
+      if (isFull) {
+        result.push({
+          kind: "weekend", date: d, iso, status: "taken", occupants, limit,
+          label: "Lotado", tooltip: "Limite de colaboradores atingido"
+        });
+        continue;
+      }
+
+      // 8. Já possui folga no mês (Vermelho para as outras datas)
+      if (myFolgaThisMonth && !isAdmin) {
+        result.push({
+          kind: "weekend", date: d, iso, status: "blocked", occupants, limit,
+          tooltip: "Você já possui uma folga marcada neste mês"
+        });
+        continue;
+      }
+
+      // 9. Disponível (Verde)
       result.push({
-        kind: "weekend",
-        date: d,
-        iso,
-        status: "available",
-        occupants,
-        limit,
-        birthdayUser,
-        label: occupants.length > 0 ? occupants[0].userName?.split(" ")[0] : undefined,
-        tooltip: occupants.length > 0 
-          ? `${occupants.length}/${limit} ocupado — ${occupants.map(o => o.userName).join(", ")}`
-          : limit > 1 ? `Disponível (0/${limit})` : "Disponível",
+        kind: "weekend", date: d, iso, status: "available", occupants, limit,
+        tooltip: limit > 1 ? `Disponível (${occupants.length}/${limit})` : "Disponível para seleção"
       });
     }
     return result;
-  }, [year, month0, occupantsByDate, takenByDate, manualBlocked, dayLimits, birthdayByDate, myUserId, today]);
+  }, [year, month0, occupantsByDate, manualBlocked, dayLimits, birthdayByDate, pendingRequests, myUserId, today, locked, isAdmin]);
 
   return (
     <TooltipProvider>
@@ -202,7 +196,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         </div>
 
         {locked && (
-          <div className="mb-6 rounded-xl bg-pending/10 border border-pending/20 text-pending-foreground px-4 py-3 text-sm flex items-center gap-3">
+          <div className="mb-6 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 text-sm flex items-center gap-3">
             <Info className="size-4 shrink-0" />
             <span>As escolhas para este mês abrem em <b>{locked.unlockDateBR}</b>.</span>
           </div>
@@ -221,52 +215,45 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
               return (
                 <div
                   key={i}
-                  className="aspect-square rounded-xl flex items-center justify-center text-sm text-muted-foreground/40 bg-muted/10 border border-transparent"
+                  className="aspect-square rounded-xl flex items-center justify-center text-sm text-muted-foreground/40 bg-muted/5"
                 >
                   {c.label}
                 </div>
               );
             }
-            const isClickable = !!onSelectDay && !locked;
             
-            // Unificando cores: birthday (de outros), blocked e taken ficam vermelhos
-            const isRed = c.status === "blocked" || c.status === "taken" || c.status === "birthday";
+            const isClickable = !!onSelectDay && (isAdmin || (c.status !== "past" && c.status !== "blocked" && c.status !== "taken" && c.status !== "birthday"));
             
-            const classes = cn(
-              "aspect-square rounded-xl flex flex-col items-center justify-center text-sm font-bold relative overflow-hidden border-2 transition-all duration-200",
-              c.status === "available" && "bg-available/10 border-available/20 text-available hover:scale-105 hover:shadow-md",
-              isRed && "bg-unavailable/10 border-unavailable/20 text-unavailable shadow-inner",
-              c.status === "mine" && "bg-mine border-mine text-mine-foreground shadow-lg scale-105 z-10",
-              c.status === "past" && "bg-muted/20 border-transparent text-muted-foreground/30",
-              isClickable && "cursor-pointer",
-              !isClickable && "cursor-default"
-            );
+            const statusColors = {
+              available: "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/20",
+              blocked: "bg-red-500/10 border-red-500/30 text-red-600",
+              taken: "bg-red-500/10 border-red-500/30 text-red-600",
+              birthday: "bg-red-500/10 border-red-500/30 text-red-600",
+              mine: "bg-blue-600 border-blue-700 text-white shadow-md scale-105 z-10",
+              pending: "bg-amber-500/10 border-amber-500/30 text-amber-600",
+              past: "bg-muted/20 border-transparent text-muted-foreground/40",
+            };
 
             return (
               <Tooltip key={i}>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    disabled={!isClickable}
                     onClick={() => onSelectDay?.(c.iso, { status: c.status, reason: c.tooltip })}
-                    className={classes}
+                    className={cn(
+                      "aspect-square rounded-xl flex flex-col items-center justify-center text-sm font-bold relative transition-all duration-200 border-2",
+                      statusColors[c.status],
+                      isClickable ? "cursor-pointer" : "cursor-default"
+                    )}
                   >
                     {c.birthdayUser && (
-                      <Cake className={cn("absolute top-1 right-1 size-3", c.status === 'mine' ? 'text-white' : 'text-pending')} />
-                    )}
-                    {c.limit > 1 && c.status !== 'past' && (
-                      <span className={cn(
-                        "absolute top-1 left-1 text-[9px] px-1 rounded font-black",
-                        c.status === 'mine' ? 'bg-white/20 text-white' : 'bg-black/10 text-foreground/80'
-                      )}>
-                        {c.occupants.length}/{c.limit}
-                      </span>
+                      <Cake className={cn("absolute top-1 right-1 size-3", c.status === 'mine' ? 'text-white' : 'text-amber-500')} />
                     )}
                     <span className="text-lg leading-none">{c.date.getDate()}</span>
                     {c.label && (
                       <span className={cn(
                         "text-[9px] truncate px-1 mt-1 max-w-full font-medium",
-                        c.status === 'mine' ? 'text-white/90' : 'text-muted-foreground'
+                        c.status === 'mine' ? 'text-white/90' : 'text-current/70'
                       )}>
                         {c.label}
                       </span>
@@ -283,11 +270,12 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
           })}
         </div>
 
-        <div className="flex flex-wrap gap-4 mt-8 pt-6 border-t border-border text-[11px] font-bold uppercase tracking-tight">
-          <Legend color="bg-available" label="Livre" />
-          <Legend color="bg-unavailable" label="Bloqueado / Lotado" />
-          <Legend color="bg-mine" label="Sua Folga" />
-          <Legend color="bg-pending" label="Aniversário" />
+        <div className="flex flex-wrap gap-4 mt-8 pt-6 border-t border-border text-[10px] font-bold uppercase tracking-tight">
+          <Legend color="bg-emerald-500" label="Disponível" />
+          <Legend color="bg-red-500" label="Indisponível / Lotado" />
+          <Legend color="bg-amber-500" label="Solicitação Pendente" />
+          <Legend color="bg-blue-600" label="Sua Folga" />
+          <Legend color="bg-muted" label="Passado" />
         </div>
       </div>
     </TooltipProvider>

@@ -29,6 +29,7 @@ export default function CalendarioPage() {
   const [manual, setManual] = useState<{ data: string; motivo: string; liberada: boolean }[]>([]);
   const [limites, setLimites] = useState<{ data: string; limite_colaboradores: number }[]>([]);
   const [prios, setPrios] = useState<{ user_id: string; data: string; status: string; nome?: string }[]>([]);
+  const [pendingReqs, setPendingReqs] = useState<Set<string>>(new Set());
   const [reqDialog, setReqDialog] = useState<{ iso: string; reason: string } | null>(null);
   const [reqMotivo, setReqMotivo] = useState("");
 
@@ -38,27 +39,24 @@ export default function CalendarioPage() {
     const endDate = new Date(year, month0 + 1, 0);
     const end = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
 
-    // Buscamos todas as folgas, bloqueios, limites e prioridades do mês
-    const [allFolgasRes, blockRes, limRes, prioRes] = await Promise.all([
+    const [allFolgasRes, blockRes, limRes, prioRes, pendingRes] = await Promise.all([
       supabase.from("folgas").select("user_id, data").gte("data", start).lte("data", end),
       supabase.from("datas_bloqueadas").select("data, motivo, liberada").gte("data", start).lte("data", end),
       supabase.from("dia_config").select("data, limite_colaboradores").gte("data", start).lte("data", end),
       supabase.from("prioridade_aniversario").select("user_id, data, status").eq("status", "ativa").gte("data", start).lte("data", end),
+      supabase.from("solicitacoes_especiais").select("data").eq("user_id", user.id).eq("status", "pendente").gte("data", start).lte("data", end),
     ]);
 
     if (allFolgasRes.error) {
-      console.error("Erro ao carregar folgas:", allFolgasRes.error);
       toast.error("Erro ao carregar dados do calendário");
       return;
     }
 
     const allFolgas = (allFolgasRes.data ?? []) as { user_id: string; data: string }[];
-
-    // Mapeamos as folgas para identificar quais são do usuário logado e quais são de outros
     const combined = allFolgas.map(f => ({
       user_id: f.user_id,
       data: f.data,
-      nome: f.user_id === user.id ? "Sua folga" : "Ocupado"
+      nome: f.user_id === user.id ? "Sua folga" : "Indisponível"
     }));
 
     setFolgas(combined);
@@ -67,6 +65,7 @@ export default function CalendarioPage() {
     setPrios(((prioRes.data ?? []) as { user_id: string; data: string; status: string }[]).map((p) => ({
       ...p, nome: p.user_id === user.id ? "Sua prioridade" : "Reservado",
     })));
+    setPendingReqs(new Set((pendingRes.data ?? []).map(r => r.data)));
   };
 
   useEffect(() => { load(); }, [year, month0, user]);
@@ -76,6 +75,7 @@ export default function CalendarioPage() {
       .channel("calendario-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "folgas" }, () => load())
       .on("postgres_changes", { event: "*", schema: "public", table: "prioridade_aniversario" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "solicitacoes_especiais" }, () => load())
       .on("postgres_changes", { event: "*", schema: "public", table: "dia_config" }, () => load())
       .on("postgres_changes", { event: "*", schema: "public", table: "datas_bloqueadas" }, () => load())
       .subscribe();
@@ -146,31 +146,20 @@ export default function CalendarioPage() {
       }).select("id").maybeSingle();
       
       if (error || !inserted) {
-        const msg = error?.message ?? "Erro desconhecido";
-        if (msg.toLowerCase().includes("limite") || msg.toLowerCase().includes("lotado")) {
-          toast.error("Esta data já atingiu o limite de colaboradores.");
-        } else if (msg.toLowerCase().includes("aniversariante") || msg.toLowerCase().includes("reservad")) {
-          toast.error("Esta data está reservada para um aniversariante.");
-        } else {
-          toast.error("Não foi possível registrar a folga", { description: msg });
-        }
+        toast.error("Não foi possível registrar a folga", { description: error?.message || "Data indisponível" });
         await load();
         return;
       }
       toast.success(`Folga registrada para ${formatBR(d)}`);
       load();
-    } else if (info.status === "birthday") {
-      toast.info("Data reservada para aniversariante");
-    } else if (info.status === "blocked") {
-      setReqDialog({ iso, reason: info.reason ?? "Data bloqueada" });
     } else if (info.status === "mine") {
       if (!confirm("Deseja cancelar sua folga nesta data?")) return;
       const { error } = await supabase.from("folgas").delete().eq("user_id", user.id).eq("data", iso);
       if (error) return toast.error(error.message);
       toast.success("Folga cancelada");
       load();
-    } else if (info.status === "taken") {
-      toast.info("Esta data atingiu o limite de colaboradores.");
+    } else if (info.status === "blocked" || info.status === "taken" || info.status === "birthday") {
+      setReqDialog({ iso, reason: info.reason ?? "Data indisponível" });
     }
   };
 
@@ -212,22 +201,22 @@ export default function CalendarioPage() {
       </div>
 
       {myFolgaThisMonth && (
-        <div className="rounded-xl bg-mine/15 border border-mine/40 px-4 py-3 text-sm">
+        <div className="rounded-xl bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700">
           Sua folga em <b>{MONTH_NAMES[month0]}</b>:{" "}
           <b>{formatBR(parseYMD(myFolgaThisMonth.data))}</b>. Clique nela para cancelar.
         </div>
       )}
 
       {myBirthdayPrio && (
-        <div className="rounded-xl bg-pending/15 border border-pending/40 px-4 py-3 text-sm flex items-center justify-between gap-3 flex-wrap">
+        <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm flex items-center justify-between gap-3 flex-wrap text-amber-700">
           <div className="flex items-center gap-2">
-            <Cake className="size-4 text-pending" />
+            <Cake className="size-4 text-amber-500" />
             <span>
               Seu aniversário cai em <b>{formatBR(parseYMD(myBirthdayPrio.data))}</b>.
               Você tem <b>prioridade exclusiva</b> nesta data.
             </span>
           </div>
-          <Button variant="ghost" size="sm" onClick={abdicarPrio}>Desistir da prioridade</Button>
+          <Button variant="ghost" size="sm" onClick={abdicarPrio} className="text-amber-700 hover:bg-amber-100">Desistir da prioridade</Button>
         </div>
       )}
 
@@ -238,6 +227,7 @@ export default function CalendarioPage() {
         manualBlocked={manualMap}
         dayLimits={dayLimits}
         birthdayByDate={birthdayByDate}
+        pendingRequests={pendingReqs}
         myUserId={user?.id ?? null}
         onPrev={goPrev}
         onNext={goNext}
@@ -248,7 +238,7 @@ export default function CalendarioPage() {
       <div className="text-xs text-muted-foreground">
         Datas bloqueadas automaticamente:{" "}
         {autoBlockedDatesForMonth(year, month0).map((b) => formatBR(parseYMD(b.date))).join(", ") || "nenhuma"}.
-        Você pode <b>solicitar exceção</b> clicando em uma data vermelha bloqueada.
+        Você pode <b>solicitar exceção</b> clicando em uma data vermelha.
       </div>
 
       <Dialog open={!!reqDialog} onOpenChange={(o) => !o && setReqDialog(null)}>
