@@ -10,7 +10,7 @@ import {
   autoBlockedDatesForMonth,
 } from "@/lib/folga-rules";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Cake, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Cake, Users, AlertCircle, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -82,7 +82,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     for (let i = 0; i < lead; i++) result.push({ kind: "blank" });
 
     for (const d of days) {
-      const type = dayType(d); // "sabado" | "domingo" | null
+      const type = dayType(d);
       const iso = ymd(d);
       const isWeekend = !!type;
       const isFixedOff = !isAdmin && fixedDayOfWeek !== null && fixedDayOfWeek !== undefined && d.getDay() === fixedDayOfWeek;
@@ -204,12 +204,12 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
             
             const statusStyles = {
               available: "bg-white hover:bg-emerald-50/40",
-              blocked: "bg-slate-50/80 text-slate-400",
-              taken: "bg-slate-50/80 text-slate-400",
-              birthday: "bg-slate-50/80 text-slate-400",
+              blocked: "bg-rose-50/80 border-rose-200 border-2",
+              taken: "bg-rose-50/80 border-rose-200 border-2",
+              birthday: "bg-rose-50/80 border-rose-200 border-2",
               mine: "bg-amber-50/60",
               fixed: "bg-blue-50/60",
-              pending: "bg-orange-50/60",
+              pending: "bg-violet-50/90 border-violet-400 border-2 animate-pulse",
               past: "bg-slate-50/40 text-slate-300",
               weekday: "bg-white hover:bg-slate-50/40",
             };
@@ -217,8 +217,10 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
             const tagColors = {
               fixed: "bg-blue-100/80 text-blue-700 border-blue-200/50",
               monthly: "bg-amber-100/80 text-amber-700 border-amber-200/50",
-              pending: "bg-orange-100/80 text-orange-700 border-orange-200/50",
+              pending: "bg-violet-600 text-white border-violet-700 shadow-md",
             };
+
+            const isBlocked = c.status === 'blocked' || c.status === 'taken' || c.status === 'birthday';
 
             return (
               <div
@@ -226,8 +228,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                 className={cn(
                   "min-h-[100px] md:min-h-[140px] p-3 flex flex-col relative transition-all duration-300 group border-none",
                   statusStyles[c.status],
-                  isSunday && c.status !== 'past' && "bg-rose-50/40",
-                  isSaturday && c.status !== 'past' && "bg-amber-50/40",
+                  !isBlocked && c.status !== 'pending' && isSunday && c.status !== 'past' && "bg-rose-50/40",
+                  !isBlocked && c.status !== 'pending' && isSaturday && c.status !== 'past' && "bg-amber-50/40",
                   isClickable && "cursor-pointer hover:shadow-lg hover:z-10 hover:scale-[1.02]"
                 )}
                 onClick={() => onSelectDay?.(c.iso, { status: c.status, reason: c.tooltip })}
@@ -236,11 +238,16 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                   <span className={cn(
                     "text-sm font-bold tracking-tight",
                     (isSunday || isSaturday) && c.status !== 'past' ? "text-slate-900" : "text-slate-400",
-                    c.status === 'past' && "text-slate-200"
+                    c.status === 'past' && "text-slate-200",
+                    c.status === 'pending' && "text-violet-700"
                   )}>
                     {c.date.getDate()}
                   </span>
-                  {c.birthdayUser && <Cake className="size-3.5 text-amber-400 animate-pulse" />}
+                  <div className="flex gap-1">
+                    {c.status === 'pending' && <AlertCircle className="size-4 text-violet-600" />}
+                    {isBlocked && <Lock className="size-3.5 text-rose-400" />}
+                    {c.birthdayUser && <Cake className="size-3.5 text-amber-400 animate-pulse" />}
+                  </div>
                 </div>
 
                 {isAdmin && c.occupants.length > 0 && (
@@ -289,8 +296,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
           <Legend color="bg-emerald-400" label="Disponível" />
           <Legend color="bg-blue-400" label="Folga Semanal" />
           <Legend color="bg-amber-400" label="Folga Mensal" />
-          <Legend color="bg-orange-400" label="Pendente" />
-          <Legend color="bg-slate-300" label="Indisponível" />
+          <Legend color="bg-violet-500" label="Pendente" />
+          <Legend color="bg-rose-400" label="Bloqueado" />
         </div>
       </div>
     </TooltipProvider>
