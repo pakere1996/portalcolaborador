@@ -23,7 +23,7 @@ export default function AdminDashboard() {
     const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     const end = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
 
-    const [funcs, folgasC, pend, blocC, trocasP, config, prios] = await Promise.all([
+    const [funcs, folgasC, pend, blocC, trocasP, configRes, priosRes] = await Promise.all([
       supabase.from("profiles").select("*", { count: "exact", head: true }).eq("ativo", true),
       supabase.from("folgas").select("*", { count: "exact", head: true }).gte("data", start).lte("data", end),
       supabase.from("solicitacoes_especiais").select("*", { count: "exact", head: true }).eq("status", "pendente"),
@@ -46,9 +46,9 @@ export default function AdminDashboard() {
     folgasData?.forEach(f => counts.set(f.data, (counts.get(f.data) || 0) + 1));
     
     const limits = new Map<string, number>();
-    config?.forEach(c => limits.set(c.data, c.limite_colaboradores));
+    configRes.data?.forEach(c => limits.set(c.data, c.limite_colaboradores));
 
-    const prioDates = new Set(prios?.map(p => p.data));
+    const prioDates = new Set(priosRes.data?.map(p => p.data));
 
     const proximos: any[] = [];
     let d = new Date();
