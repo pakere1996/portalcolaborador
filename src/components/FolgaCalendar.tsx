@@ -99,22 +99,14 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         locked
       });
 
-      // LOG DE DEPURAÇÃO PARA FINS DE SEMANA
+      // LOG DE DEPURAÇÃO SIMPLIFICADO
       if (isWknd && !isAdmin) {
         const limit = dayLimits.get(iso) ?? 1;
         const monthlyCount = allFolgas.filter(f => f.data === iso).length;
         const fixedCount = allProfiles.filter(p => p.folga_fixa_semana === d.getDay()).length;
         const total = monthlyCount + fixedCount;
-
-        console.log(`[Render] ${iso}:`, {
-          status: statusInfo.status,
-          limite: limit,
-          ocupacaoTotal: total,
-          folgasMensais: monthlyCount,
-          folgasFixas: fixedCount,
-          allFolgasCount: allFolgas.length,
-          allProfilesCount: allProfiles.length
-        });
+        
+        console.log(`[Render] ${iso} -> Status: ${statusInfo.status} | Ocupação: ${total}/${limit} (Mensais: ${monthlyCount}, Fixas: ${fixedCount})`);
       }
 
       result.push({
