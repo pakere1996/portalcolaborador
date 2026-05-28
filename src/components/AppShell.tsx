@@ -141,16 +141,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             )}
           </div>
-
-          {/* Espaço para novos módulos no futuro */}
-          <div className="pt-4 px-3">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/50 mb-2">
-              Outros Módulos
-            </div>
-            <div className="text-xs text-muted-foreground/40 italic px-1">
-              Em breve...
-            </div>
-          </div>
         </nav>
 
         {/* Rodapé da Sidebar */}
