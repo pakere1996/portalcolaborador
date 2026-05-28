@@ -4,13 +4,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeftRight, Check, X as XIcon, Info, Clock } from "lucide-react";
+import { ArrowLeftRight, Check, X as XIcon, Info, Clock, User } from "lucide-react";
 import { formatBR, parseYMD } from "@/lib/folga-rules";
+import { cn } from "@/lib/utils";
 
 interface Troca {
   id: string;
   solicitante_id: string;
-  destinatario_id: string;
+  destinatario_id: string | null;
   data_destinatario: string;
   data_solicitante: string | null;
   mensagem: string | null;
@@ -21,16 +22,34 @@ interface Troca {
 export default function TrocasPage() {
   const { user } = useAuth();
   const [trocas, setTrocas] = useState<Troca[]>([]);
-  const [nomeMap, setNomeMap] = useState<Map<string, string>>(new Map());
+  const [myFolgas, setMyFolgas] = useState<string[]>([]);
 
   const load = async () => {
     if (!user) return;
-    const [{ data: ts }, { data: ps }] = await Promise.all([
-      supabase.from("trocas_folga").select("*").or(`solicitante_id.eq.${user.id},destinatario_id.eq.${user.id}`).order("created_at", { ascending: false }),
-      supabase.from("profiles").select("id, nome"),
-    ]);
-    setTrocas((ts ?? []) as Troca[]);
-    setNomeMap(new Map((ps ?? []).map((p) => [p.id, p.nome])));
+    
+    // 1. Carregar minhas folgas para saber quais trocas públicas posso aceitar
+    const { data: f } = await supabase.from("folgas").select("data").eq("user_id", user.id);
+    const { data: p } = await supabase.from("profiles").select("folga_fixa_semana").eq("id", user.id).single();
+    
+    const folgaDates = (f ?? []).map(x => x.data);
+    setMyFolgas(folgaDates);
+
+    // 2. Carregar trocas: minhas solicitações OU solicitações públicas para datas que eu folgo
+    const { data: ts } = await supabase
+      .from("trocas_folga")
+      .select("*")
+      .or(`solicitante_id.eq.${user.id},destinatario_id.eq.${user.id},destinatario_id.is.null`)
+      .order("created_at", { ascending: false });
+
+    // Filtrar trocas públicas: apenas se a data_destinatario for uma das minhas folgas
+    const filtered = (ts ?? []).filter(t => {
+      if (t.solicitante_id === user.id) return true;
+      if (t.destinatario_id === user.id) return true;
+      if (t.destinatario_id === null && folgaDates.includes(t.data_destinatario)) return true;
+      return false;
+    });
+
+    setTrocas(filtered as Troca[]);
   };
 
   useEffect(() => {
@@ -42,14 +61,26 @@ export default function TrocasPage() {
   }, [user?.id]);
 
   const processarTroca = async (t: Troca, aprovar: boolean) => {
+    if (!user) return;
+    
     if (!aprovar) {
-      await supabase.from("trocas_folga").update({ status: "recusada", respondido_em: new Date().toISOString() }).eq("id", t.id);
-      toast.success("Troca recusada");
+      // Se for uma troca pública, apenas ignora (não remove para os outros)
+      // Se for direcionada, recusa
+      if (t.destinatario_id) {
+        await supabase.from("trocas_folga").update({ status: "recusada", respondido_em: new Date().toISOString() }).eq("id", t.id);
+      }
+      toast.success("Solicitação ignorada");
+      load();
       return;
     }
 
     // Lógica de Troca Automática
-    const { error: updateErr } = await supabase.from("trocas_folga").update({ status: "aprovada", respondido_em: new Date().toISOString() }).eq("id", t.id);
+    const { error: updateErr } = await supabase.from("trocas_folga").update({ 
+      status: "aprovada", 
+      destinatario_id: user.id, // Assume a troca
+      respondido_em: new Date().toISOString() 
+    }).eq("id", t.id);
+    
     if (updateErr) return toast.error(updateErr.message);
 
     // 1. O solicitante ganha a folga na data do destinatário
@@ -58,22 +89,24 @@ export default function TrocasPage() {
       data: t.data_destinatario,
       mes: t.data_destinatario.substring(0, 7),
       tipo: "troca",
-      criado_por: user?.id
+      criado_por: user.id
     });
 
-    // 2. O destinatário trabalha na sua data original (cancelamento temporário)
+    // 2. O destinatário (eu) trabalha na sua data original (cancelamento temporário)
     await supabase.from("folgas_canceladas").insert({
-      user_id: t.destinatario_id,
+      user_id: user.id,
       data: t.data_destinatario,
       motivo: "Troca de folga aprovada"
     });
 
-    toast.success("Troca realizada com sucesso! O calendário foi atualizado.");
+    toast.success("Troca realizada com sucesso! Seu calendário foi atualizado.");
+    load();
   };
 
   const cancelar = async (id: string) => {
     await supabase.from("trocas_folga").update({ status: "cancelada" }).eq("id", id);
     toast.success("Solicitação cancelada");
+    load();
   };
 
   return (
@@ -82,12 +115,12 @@ export default function TrocasPage() {
         <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
           <ArrowLeftRight className="size-6 text-primary" /> Minhas Trocas
         </h1>
-        <p className="text-muted-foreground mt-1">Gerencie suas solicitações de permuta temporária.</p>
+        <p className="text-muted-foreground mt-1">Gerencie suas solicitações de permuta anônima.</p>
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-start gap-3 text-sm text-blue-800">
         <Info className="size-5 shrink-0 mt-0.5" />
-        <p>As trocas são <b>temporárias</b> e válidas apenas para as datas selecionadas. Sua escala fixa não será alterada.</p>
+        <p>As trocas são <b>anônimas</b>. Você não verá quem solicitou nem quem recebeu até que a troca seja concluída.</p>
       </div>
 
       <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xl">
@@ -97,21 +130,25 @@ export default function TrocasPage() {
           <ul className="divide-y divide-border">
             {trocas.map((t) => {
               const isSol = t.solicitante_id === user?.id;
-              const outroNome = nomeMap.get(isSol ? t.destinatario_id : t.solicitante_id) ?? "Colega";
+              const isPublic = t.destinatario_id === null;
               
               return (
                 <li key={t.id} className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-muted/10 transition-colors">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={isSol ? "bg-blue-50 text-blue-600" : "bg-orange-50 text-orange-600"}>
-                        {isSol ? "Você solicitou" : "Solicitaram a você"}
+                      <Badge variant="outline" className={cn(
+                        isSol ? "bg-blue-50 text-blue-600" : "bg-orange-50 text-orange-600",
+                        "border-current/20"
+                      )}>
+                        {isSol ? "Sua solicitação" : "Solicitação de troca"}
                       </Badge>
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Clock className="size-3" /> {new Date(t.created_at).toLocaleDateString('pt-BR')}
                       </span>
                     </div>
-                    <div className="font-bold text-lg">
-                      {isSol ? `Trocar com ${outroNome}` : `${outroNome} quer trocar`}
+                    <div className="font-bold text-lg flex items-center gap-2">
+                      <User className="size-4 text-muted-foreground" />
+                      {isSol ? (isPublic ? "Aguardando interessado..." : "Troca em andamento") : "Existe um interessado na sua folga"}
                     </div>
                     <div className="text-sm text-muted-foreground">
                       Data da folga: <b className="text-foreground">{formatBR(parseYMD(t.data_destinatario))}</b>
@@ -134,8 +171,8 @@ export default function TrocasPage() {
                           <Button variant="outline" size="sm" onClick={() => cancelar(t.id)}>Cancelar</Button>
                         ) : (
                           <>
-                            <Button variant="destructive" size="sm" onClick={() => processarTroca(t, false)}><XIcon className="size-4 mr-1" /> Recusar</Button>
-                            <Button size="sm" onClick={() => processarTroca(t, true)}><Check className="size-4 mr-1" /> Aceitar</Button>
+                            <Button variant="ghost" size="sm" onClick={() => processarTroca(t, false)}>Ignorar</Button>
+                            <Button size="sm" onClick={() => processarTroca(t, true)}><Check className="size-4 mr-1" /> Aceitar Troca</Button>
                           </>
                         )}
                       </div>

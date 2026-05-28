@@ -20,7 +20,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Cake, Clock, AlertCircle, ArrowLeftRight, ShieldAlert, User, RefreshCw } from "lucide-react";
+import { Calendar as CalIcon, Clock, AlertCircle, ArrowLeftRight, ShieldAlert, Info, RefreshCw } from "lucide-react";
 
 interface Solic {
   id: string;
@@ -32,7 +32,7 @@ interface Solic {
 }
 
 export default function CalendarioPage() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month0, setMonth0] = useState(today.getMonth());
@@ -45,7 +45,7 @@ export default function CalendarioPage() {
   const [allProfiles, setAllProfiles] = useState<any[]>([]);
   const [canceledFolgas, setCanceledFolgas] = useState<any[]>([]);
   
-  const [smartSwap, setSmartSwap] = useState<{ iso: string; occupants: any[] } | null>(null);
+  const [smartSwap, setSmartSwap] = useState<{ iso: string } | null>(null);
   const [changeFolgaDialog, setChangeFolgaDialog] = useState<{ newIso: string; oldFolga: any } | null>(null);
   const [reqDialog, setReqDialog] = useState<{ iso: string; reason: string } | null>(null);
   const [viewDialog, setViewDialog] = useState<Solic | null>(null);
@@ -129,7 +129,6 @@ export default function CalendarioPage() {
     });
 
     if (statusInfo.status === "available") {
-      // Verifica se já tem folga mensal (sabado/domingo) neste mês
       const myFolgaThisMonth = folgas.find((f) => 
         f.user_id === user.id && 
         monthKey(parseYMD(f.data)) === mk && 
@@ -162,46 +161,22 @@ export default function CalendarioPage() {
       const solic = pendingSolics.find(s => s.data === iso && s.user_id === user.id);
       if (solic) setViewDialog(solic);
     } else if (statusInfo.status === "taken" || statusInfo.status === "birthday" || statusInfo.status === "blocked" || !dayType(parseYMD(iso))) {
-      // Identificar quem folga no dia para oferecer troca
-      const d = parseYMD(iso);
-      const wd = d.getDay();
-      
-      const occupants = [
-        ...folgas.filter(f => f.data === iso).map(f => ({ id: f.user_id, nome: allProfiles.find(p => p.id === f.user_id)?.nome, tipo: 'mensal' })),
-        ...allProfiles.filter(p => p.folga_fixa_semana === wd && !canceledFolgas.some(c => c.user_id === p.id && c.data === iso)).map(p => ({ id: p.id, nome: p.nome, tipo: 'semanal' }))
-      ].filter(o => o.id !== user.id);
-
-      setSmartSwap({ iso, occupants });
+      setSmartSwap({ iso });
     }
   };
 
   const doChangeFolga = async () => {
     if (!user || !changeFolgaDialog) return;
     setBusy(true);
-    
     try {
-      // 1. Remove a antiga
-      const { error: delErr } = await supabase
-        .from("folgas")
-        .delete()
-        .eq("id", changeFolgaDialog.oldFolga.id);
-      
+      const { error: delErr } = await supabase.from("folgas").delete().eq("id", changeFolgaDialog.oldFolga.id);
       if (delErr) throw delErr;
-
-      // 2. Cria a nova
       const d = parseYMD(changeFolgaDialog.newIso);
       const type = dayType(d);
-      
       const { error: insErr } = await supabase.from("folgas").insert({
-        user_id: user.id, 
-        data: changeFolgaDialog.newIso, 
-        mes: mk, 
-        tipo: type!, 
-        criado_por: user.id,
+        user_id: user.id, data: changeFolgaDialog.newIso, mes: mk, tipo: type!, criado_por: user.id,
       });
-
       if (insErr) throw insErr;
-
       toast.success("Folga alterada com sucesso!");
       setChangeFolgaDialog(null);
       load();
@@ -212,16 +187,18 @@ export default function CalendarioPage() {
     }
   };
 
-  const requestSwap = async (destId: string) => {
-    if (!user) return;
+  const requestPublicSwap = async () => {
+    if (!user || !smartSwap) return;
+    setBusy(true);
     const { error } = await supabase.from("trocas_folga").insert({
       solicitante_id: user.id,
-      destinatario_id: destId,
-      data_destinatario: smartSwap!.iso,
-      mensagem: `Solicitação de troca para o dia ${formatBR(parseYMD(smartSwap!.iso))}`,
+      destinatario_id: null, // Solicitação pública/anônima
+      data_destinatario: smartSwap.iso,
+      mensagem: `Solicitação de troca anônima para o dia ${formatBR(parseYMD(smartSwap.iso))}`,
     });
+    setBusy(false);
     if (error) return toast.error(error.message);
-    toast.success("Solicitação de troca enviada!");
+    toast.success("Solicitação de troca enviada! Os colaboradores que folgam neste dia serão notificados.");
     setSmartSwap(null);
     load();
   };
@@ -260,94 +237,54 @@ export default function CalendarioPage() {
         locked={unlocked ? null : { unlockDateBR: formatBR(unlock) }}
       />
 
-      {/* Diálogo de Mudança de Folga (Troca Direta) */}
+      {/* Diálogo de Mudança de Folga */}
       <Dialog open={!!changeFolgaDialog} onOpenChange={(o) => !o && setChangeFolgaDialog(null)}>
         <DialogContent className="rounded-[2rem]">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <RefreshCw className="size-5 text-primary" /> Alterar Folga Mensal
             </DialogTitle>
-            <DialogDescription>
-              Você já possui uma folga agendada para este mês. Deseja trocá-la?
-            </DialogDescription>
+            <DialogDescription>Deseja trocar sua folga atual por esta nova data disponível?</DialogDescription>
           </DialogHeader>
-          
           <div className="py-6 space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 bg-muted/50 rounded-2xl border border-border text-center">
                 <Label className="text-[10px] font-black uppercase text-muted-foreground">Folga Atual</Label>
-                <div className="text-lg font-bold mt-1 text-muted-foreground line-through">
-                  {changeFolgaDialog && formatBR(parseYMD(changeFolgaDialog.oldFolga.data))}
-                </div>
+                <div className="text-lg font-bold mt-1 text-muted-foreground line-through">{changeFolgaDialog && formatBR(parseYMD(changeFolgaDialog.oldFolga.data))}</div>
               </div>
               <div className="p-4 bg-primary/5 rounded-2xl border border-primary/20 text-center">
                 <Label className="text-[10px] font-black uppercase text-primary">Nova Folga</Label>
-                <div className="text-lg font-bold mt-1 text-primary">
-                  {changeFolgaDialog && formatBR(parseYMD(changeFolgaDialog.newIso))}
-                </div>
+                <div className="text-lg font-bold mt-1 text-primary">{changeFolgaDialog && formatBR(parseYMD(changeFolgaDialog.newIso))}</div>
               </div>
             </div>
-            
-            <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl text-sm text-blue-800 flex items-start gap-3">
-              <Info className="size-5 shrink-0" />
-              <p>Ao confirmar, sua folga antiga será liberada para outros colaboradores e a nova será registrada imediatamente.</p>
-            </div>
           </div>
-
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="ghost" onClick={() => setChangeFolgaDialog(null)} disabled={busy}>Cancelar</Button>
-            <Button onClick={doChangeFolga} disabled={busy} className="px-8">
-              {busy ? "Alterando..." : "Confirmar Troca"}
-            </Button>
+            <Button onClick={doChangeFolga} disabled={busy} className="px-8">{busy ? "Alterando..." : "Confirmar Troca"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Diálogo Inteligente de Troca (Com outros) */}
+      {/* Diálogo de Troca Anônima */}
       <Dialog open={!!smartSwap} onOpenChange={(o) => !o && setSmartSwap(null)}>
         <DialogContent className="rounded-[2rem]">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <ArrowLeftRight className="size-5 text-primary" /> Opções para {smartSwap && formatBR(parseYMD(smartSwap.iso))}
             </DialogTitle>
-            <DialogDescription>
-              Este dia possui restrições ou já atingiu o limite.
-            </DialogDescription>
+            <DialogDescription>Este dia já atingiu o limite de folgas ou possui restrições.</DialogDescription>
           </DialogHeader>
-          
           <div className="space-y-4 py-4">
-            {smartSwap?.occupants.length ? (
-              <div className="space-y-3">
-                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Colaboradores de folga neste dia:</Label>
-                {smartSwap.occupants.map(occ => (
-                  <div key={occ.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-2xl border border-border">
-                    <div className="flex items-center gap-3">
-                      <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                        {occ.nome?.charAt(0)}
-                      </div>
-                      <div>
-                        <div className="font-bold">{occ.nome}</div>
-                        <div className="text-xs text-muted-foreground capitalize">Folga {occ.tipo}</div>
-                      </div>
-                    </div>
-                    <Button size="sm" onClick={() => requestSwap(occ.id)}>Solicitar Troca</Button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl text-sm text-amber-800 flex items-start gap-3">
-                <AlertCircle className="size-5 shrink-0" />
-                <p>Ninguém possui folga agendada para este dia.</p>
-              </div>
-            )}
-
-            <div className="pt-4 border-t border-border">
-              <Button 
-                variant="outline" 
-                className="w-full h-12 rounded-xl border-primary/20 text-primary hover:bg-primary/5"
-                onClick={() => setReqDialog({ iso: smartSwap!.iso, reason: "Solicitação de exceção administrativa" })}
-              >
-                <ShieldAlert className="size-4 mr-2" /> Solicitar exceção ao administrador
+            <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl text-sm text-amber-800 flex items-start gap-3">
+              <AlertCircle className="size-5 shrink-0" />
+              <p>Você pode solicitar uma troca anônima com os colaboradores que folgam neste dia ou pedir uma exceção ao administrador.</p>
+            </div>
+            <div className="grid gap-3">
+              <Button className="w-full h-12 rounded-xl font-bold" onClick={requestPublicSwap} disabled={busy}>
+                <ArrowLeftRight className="size-4 mr-2" /> Solicitar troca de folga
+              </Button>
+              <Button variant="outline" className="w-full h-12 rounded-xl border-primary/20 text-primary hover:bg-primary/5" onClick={() => setReqDialog({ iso: smartSwap!.iso, reason: "" })}>
+                <ShieldAlert className="size-4 mr-2" /> Solicitar exceção administrativa
               </Button>
             </div>
           </div>
@@ -361,13 +298,7 @@ export default function CalendarioPage() {
             <DialogTitle>Solicitar exceção administrativa</DialogTitle>
             <DialogDescription>Data: {reqDialog && formatBR(parseYMD(reqDialog.iso))}</DialogDescription>
           </DialogHeader>
-          <Textarea
-            placeholder="Explique o motivo da sua solicitação para o administrador..."
-            value={reqMotivo}
-            onChange={(e) => setReqMotivo(e.target.value)}
-            rows={5}
-            className="rounded-xl"
-          />
+          <Textarea placeholder="Explique o motivo da sua solicitação..." value={reqMotivo} onChange={(e) => setReqMotivo(e.target.value)} rows={5} className="rounded-xl" />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setReqDialog(null)}>Cancelar</Button>
             <Button onClick={submitRequest}>Enviar Solicitação</Button>
@@ -385,19 +316,9 @@ export default function CalendarioPage() {
             <Label className="text-[10px] font-black uppercase text-violet-400">Seu Motivo</Label>
             <p className="text-sm text-violet-900 italic mt-1">"{viewDialog?.motivo}"</p>
           </div>
-          <DialogFooter>
-            <Button variant="outline" className="w-full" onClick={() => setViewDialog(null)}>Fechar</Button>
-          </DialogFooter>
+          <DialogFooter><Button variant="outline" className="w-full" onClick={() => setViewDialog(null)}>Fechar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-function Info({ className }: { className?: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
-    </svg>
   );
 }
