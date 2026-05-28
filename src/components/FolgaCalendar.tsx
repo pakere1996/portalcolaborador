@@ -103,7 +103,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
 
       if (occupants.length > 0) {
         const status = mineHere ? "mine" : isFull ? "taken" : "available";
-        const label = mineHere ? "Sua folga" : isFull ? "Lotado" : "Ocupado";
+        const label = mineHere ? "Sua folga" : isFull ? "Lotado" : occupants[0].userName?.split(" ")[0];
         
         result.push({
           kind: "weekend",
@@ -113,7 +113,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
           occupants,
           limit,
           birthdayUser,
-          label: occupants.length > 0 ? label : undefined,
+          label,
           tooltip:
             `${occupants.length}/${limit} ocupado` +
             (isFull ? " (Lotado)" : "") +
@@ -188,7 +188,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         </div>
 
         {locked && (
-          <div className="mb-6 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-700 px-4 py-3 text-sm flex items-center gap-3">
+          <div className="mb-6 rounded-xl bg-pending/10 border border-pending/20 text-pending-foreground px-4 py-3 text-sm flex items-center gap-3">
             <Info className="size-4 shrink-0" />
             <span>As escolhas para este mês abrem em <b>{locked.unlockDateBR}</b>.</span>
           </div>
@@ -216,11 +216,11 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
             const isClickable = !!onSelectDay && !locked;
             const classes = cn(
               "aspect-square rounded-xl flex flex-col items-center justify-center text-sm font-bold relative overflow-hidden border-2 transition-all duration-200",
-              c.status === "available" && "bg-emerald-50 border-emerald-100 text-emerald-700 hover:scale-105 hover:shadow-md",
-              c.status === "blocked" && "bg-red-50 border-red-100 text-red-700 opacity-80",
-              c.status === "taken" && "bg-slate-200 border-slate-300 text-slate-600 shadow-inner",
-              c.status === "mine" && "bg-blue-600 border-blue-700 text-white shadow-lg scale-105 z-10",
-              c.status === "birthday" && "bg-amber-50 border-amber-200 text-amber-700",
+              c.status === "available" && "bg-available/10 border-available/20 text-available hover:scale-105 hover:shadow-md",
+              c.status === "blocked" && "bg-unavailable/10 border-unavailable/20 text-unavailable opacity-80",
+              c.status === "taken" && "bg-unavailable/10 border-unavailable/20 text-unavailable shadow-inner",
+              c.status === "mine" && "bg-mine border-mine text-mine-foreground shadow-lg scale-105 z-10",
+              c.status === "birthday" && "bg-pending/10 border-pending/20 text-pending-foreground",
               c.status === "past" && "bg-muted/20 border-transparent text-muted-foreground/30",
               isClickable && "cursor-pointer",
               !isClickable && "cursor-default"
@@ -236,7 +236,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     className={classes}
                   >
                     {c.birthdayUser && (
-                      <Cake className={cn("absolute top-1 right-1 size-3", c.status === 'mine' ? 'text-white' : 'text-amber-500')} />
+                      <Cake className={cn("absolute top-1 right-1 size-3", c.status === 'mine' ? 'text-white' : 'text-pending')} />
                     )}
                     {c.limit > 1 && c.status !== 'past' && (
                       <span className={cn(
@@ -250,7 +250,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     {c.label && (
                       <span className={cn(
                         "text-[9px] truncate px-1 mt-1 max-w-full font-medium",
-                        c.status === 'mine' ? 'text-blue-100' : 'text-muted-foreground'
+                        c.status === 'mine' ? 'text-white/90' : 'text-muted-foreground'
                       )}>
                         {c.label}
                       </span>
@@ -268,11 +268,10 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         </div>
 
         <div className="flex flex-wrap gap-4 mt-8 pt-6 border-t border-border text-[11px] font-bold uppercase tracking-tight">
-          <Legend color="bg-emerald-500" label="Livre" />
-          <Legend color="bg-red-500" label="Bloqueado" />
-          <Legend color="bg-blue-600" label="Sua Folga" />
-          <Legend color="bg-amber-500" label="Aniversário" />
-          <Legend color="bg-slate-400" label="Lotado" />
+          <Legend color="bg-available" label="Livre" />
+          <Legend color="bg-unavailable" label="Bloqueado / Lotado" />
+          <Legend color="bg-mine" label="Sua Folga" />
+          <Legend color="bg-pending" label="Aniversário" />
         </div>
       </div>
     </TooltipProvider>
