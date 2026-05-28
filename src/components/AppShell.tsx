@@ -51,7 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <img src={logo} alt="Pakerê" className="size-10 rounded-lg object-cover" />
           <div>
             <div className="font-bold text-lg leading-tight">Pakerê</div>
-            <div className="text-xs text-muted-foreground">Gestão de Folgas</div>
+            <div className="text-xs text-muted-foreground">Portal do Colaborador</div>
           </div>
         </div>
         <nav className="p-3 space-y-1">
