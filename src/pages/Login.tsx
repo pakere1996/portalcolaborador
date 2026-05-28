@@ -28,14 +28,24 @@ export default function LoginPage() {
       toast.error("CPF inválido", { description: "Digite os 11 dígitos do CPF." });
       return;
     }
+    
+    const email = cpfToEmail(cpf);
+    console.log("[Login] Tentando entrar com:", { email, cpf });
+    
     setBusy(true);
     const { error } = await supabase.auth.signInWithPassword({
-      email: cpfToEmail(cpf),
+      email,
       password,
     });
     setBusy(false);
+    
     if (error) {
-      toast.error("Não foi possível entrar", { description: "CPF ou senha incorretos." });
+      console.error("[Login] Erro do Supabase:", error);
+      toast.error("Não foi possível entrar", { 
+        description: error.message === "Invalid login credentials" 
+          ? "CPF ou senha incorretos." 
+          : `Erro: ${error.message}` 
+      });
       return;
     }
     toast.success("Bem-vindo!");
