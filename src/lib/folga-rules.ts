@@ -69,7 +69,6 @@ export function getMonthDays(year: number, month0: number): Date[] {
   return days;
 }
 
-// Removida a regra hardcoded de pagamento. Agora tudo vem do banco de dados.
 export function autoBlockedDatesForMonth(year: number, month0: number): { date: string; reason: string }[] {
   return [];
 }
@@ -113,29 +112,29 @@ export function calculateDateStatus(params: {
   const type = dayType(date);
   const isWknd = !!type;
 
-  // 2. Minha Folga Mensal (Prioridade Visual)
+  // 2. Bloqueio Administrativo (PRIORIDADE MÁXIMA)
+  const manual = manualBlocked.get(iso);
+  if (manual && !manual.liberada) {
+    return { status: "blocked", reason: manual.reason };
+  }
+
+  // 3. Minha Folga Mensal
   const isMine = myUserId && allFolgas.some(f => f.user_id === myUserId && f.data === iso);
   if (!isAdmin && isMine) {
     return { status: "mine", label: "Sua folga", reason: "Sua folga mensal registrada" };
   }
 
-  // 3. Minha Folga Fixa
+  // 4. Minha Folga Fixa
   const myProfile = allProfiles.find(p => p.id === myUserId);
   const isMyFixed = !isAdmin && myProfile?.folga_fixa_semana === date.getDay();
   if (!isAdmin && isMyFixed) {
     return { status: "fixed", label: "Semanal", reason: "Sua folga semanal fixa" };
   }
 
-  // 4. Minha Solicitação Pendente
+  // 5. Minha Solicitação Pendente
   const hasMyPending = !isAdmin && pendingRequests.some(r => r.data === iso);
   if (!isAdmin && hasMyPending) {
     return { status: "pending", label: "Sua solicitação", reason: "Aguardando aprovação" };
-  }
-
-  // 5. Bloqueio Administrativo (Manual ou Automático via Regra do Banco)
-  const manual = manualBlocked.get(iso);
-  if (manual && !manual.liberada) {
-    return { status: "blocked", reason: manual.reason };
   }
 
   // 6. Bloqueio por Mês Trancado (Apenas FDS)
@@ -149,7 +148,7 @@ export function calculateDateStatus(params: {
     return { status: "birthday", label: "Indisponível", reason: "Reservado para aniversariante" };
   }
 
-  // 8. Cálculo de Ocupação Real (Mensais + Fixas de Terceiros)
+  // 8. Cálculo de Ocupação Real
   if (isWknd) {
     const limit = dayLimits.get(iso) ?? 1;
     const monthlyCount = allFolgas.filter(f => f.data === iso).length;
