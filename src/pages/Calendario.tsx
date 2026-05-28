@@ -55,6 +55,7 @@ export default function CalendarioPage() {
     const endDate = new Date(year, month0 + 1, 0);
     const end = ymd(endDate);
 
+    // Buscamos folgas de TODOS os usuários para calcular ocupação
     const [allFolgasRes, blockRes, limRes, prioRes, pendingRes, profilesRes] = await Promise.all([
       supabase.from("folgas").select("user_id, data").gte("data", start).lte("data", end),
       supabase.from("datas_bloqueadas").select("data, motivo, liberada").gte("data", start).lte("data", end),
@@ -70,7 +71,6 @@ export default function CalendarioPage() {
     
     setAllProfiles(profs);
 
-    // Consolidar folgas mensais e solicitações pendentes
     const combined: { user_id: string; data: string; type: "monthly" | "pending" | "fixed" }[] = [
       ...folgasData.map(f => ({
         user_id: f.user_id,
@@ -110,7 +110,7 @@ export default function CalendarioPage() {
   const occupantsByDate = useMemo(() => {
     const m = new Map<string, DayOccupant[]>();
     
-    // 1. Adicionar folgas fixas de todos os colaboradores
+    // 1. Adicionar folgas fixas de toda a equipe
     const days = getMonthDays(year, month0);
     for (const d of days) {
       const iso = ymd(d);
@@ -128,10 +128,9 @@ export default function CalendarioPage() {
       });
     }
 
-    // 2. Adicionar folgas mensais e pendentes
+    // 2. Adicionar folgas mensais e pendentes de toda a equipe
     for (const f of folgas) {
       const arr = m.get(f.data) ?? [];
-      // Evitar duplicar se o usuário já tem folga fixa no mesmo dia (raro mas possível)
       if (!arr.some(x => x.userId === f.user_id)) {
         arr.push({ 
           userId: f.user_id, 
