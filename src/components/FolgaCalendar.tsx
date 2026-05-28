@@ -38,6 +38,7 @@ export type DayInfo =
       birthdayUser?: { userId: string; userName?: string };
       label?: string;
       tooltip?: string;
+      blockedReason?: string;
     };
 
 export interface FolgaCalendarProps {
@@ -133,7 +134,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
       if (blockedReason) {
         result.push({
           kind: "day", date: d, iso, status: "blocked", occupants, limit,
-          tooltip: `Data bloqueada: ${blockedReason}`
+          tooltip: `Data bloqueada: ${blockedReason}`,
+          blockedReason: blockedReason
         });
         continue;
       }
@@ -254,6 +256,15 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     {c.birthdayUser && <Cake className="size-3.5 text-amber-400 animate-pulse" />}
                   </div>
                 </div>
+
+                {isAdmin && c.status === 'blocked' && c.blockedReason && (
+                  <div className="mb-3">
+                    <div className="text-[10px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-1.5 bg-rose-100/50 px-2 py-1 rounded-lg border border-rose-200/50 w-fit max-w-full">
+                      <Lock className="size-2.5 shrink-0" />
+                      <span className="truncate">{c.blockedReason}</span>
+                    </div>
+                  </div>
+                )}
 
                 {isAdmin && c.occupants.length > 0 && (
                   <div className="flex flex-col gap-1.5 overflow-hidden">
