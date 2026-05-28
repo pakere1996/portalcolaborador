@@ -7,13 +7,13 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Filter, User, Trash2, Plus } from "lucide-react";
+import { Calendar as CalIcon, Filter, User, Trash2, Plus, Settings2, Save } from "lucide-react";
 import { dayType, formatBR, monthKey, parseYMD, ymd } from "@/lib/folga-rules";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 export default function AdminCalendar() {
@@ -33,6 +33,8 @@ export default function AdminCalendar() {
 
   const [dlg, setDlg] = useState<{ iso: string; status: string } | null>(null);
   const [assignUser, setAssignUser] = useState<string>("");
+  const [editLimit, setEditLimit] = useState<number>(1);
+  const [savingLimit, setSavingLimit] = useState(false);
 
   const load = async () => {
     const start = `${year}-${String(month0 + 1).padStart(2, "0")}-01`;
@@ -55,6 +57,15 @@ export default function AdminCalendar() {
   };
 
   useEffect(() => { load(); }, [year, month0]);
+
+  useEffect(() => {
+    const ch = supabase
+      .channel("admin-calendar-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "dia_config" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "folgas" }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
 
   const occupantsByDate = useMemo(() => {
     const m = new Map<string, DayOccupant[]>();
@@ -124,6 +135,7 @@ export default function AdminCalendar() {
   const onSelect = (iso: string) => {
     setDlg({ iso, status: "" });
     setAssignUser("");
+    setEditLimit(dayLimits.get(iso) ?? 1);
   };
 
   const assignFolga = async (iso: string) => {
@@ -139,6 +151,21 @@ export default function AdminCalendar() {
     setDlg(null); load();
   };
 
+  const saveDayLimit = async () => {
+    if (!dlg) return;
+    setSavingLimit(true);
+    const { error } = await supabase.from("dia_config").upsert({
+      data: dlg.iso,
+      limite_colaboradores: editLimit,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "data" });
+    
+    setSavingLimit(false);
+    if (error) return toast.error(error.message);
+    toast.success("Limite atualizado");
+    load();
+  };
+
   const removeFolga = async (iso: string, userId: string) => {
     const f = folgas.find((x) => x.data === iso && x.user_id === userId);
     if (!f) return;
@@ -150,6 +177,8 @@ export default function AdminCalendar() {
 
   const goPrev = () => { const d = new Date(year, month0 - 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); };
   const goNext = () => { const d = new Date(year, month0 + 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); };
+
+  const isWeekend = dlg ? !!dayType(parseYMD(dlg.iso)) : false;
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -222,7 +251,41 @@ export default function AdminCalendar() {
           </DialogHeader>
 
           {dlg && (
-            <div className="space-y-10 py-6">
+            <div className="space-y-8 py-6">
+              {/* Configuração de Limite (Apenas FDS) */}
+              {isWeekend && (
+                <div className="bg-slate-50/80 p-6 rounded-[2rem] border border-slate-100 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                      <Settings2 className="size-3.5" /> Configuração do Dia
+                    </h3>
+                    <div className="text-[10px] font-bold text-slate-400">
+                      Ocupação: {occupantsByDate.get(dlg.iso)?.filter(o => o.type === 'monthly').length ?? 0}/{dayLimits.get(dlg.iso) ?? 1}
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <Label className="text-[10px] font-bold text-slate-500 mb-1.5 block">Limite de Colaboradores</Label>
+                      <Input 
+                        type="number" 
+                        min={1} 
+                        max={10} 
+                        value={editLimit} 
+                        onChange={(e) => setEditLimit(Number(e.target.value))}
+                        className="bg-white border-slate-200 rounded-xl h-12 font-bold"
+                      />
+                    </div>
+                    <Button 
+                      onClick={saveDayLimit} 
+                      disabled={savingLimit}
+                      className="h-12 px-6 rounded-xl mt-auto"
+                    >
+                      <Save className="size-4 mr-2" /> {savingLimit ? "..." : "Salvar"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-5">
                 <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Escala do Dia</h3>
                 <div className="grid gap-4">

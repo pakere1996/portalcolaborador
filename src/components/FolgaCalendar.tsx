@@ -157,7 +157,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
       if (isWeekend && isFull) {
         result.push({
           kind: "day", date: d, iso, status: "taken", occupants, limit,
-          label: "Indisponível", tooltip: "Limite de folgas mensais atingido"
+          label: "Lotado", tooltip: "Limite de folgas mensais atingido"
         });
         continue;
       }
@@ -201,6 +201,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
             const dayOfWeek = c.date.getDay();
             const isSunday = dayOfWeek === 0;
             const isSaturday = dayOfWeek === 6;
+            const isWeekend = isSunday || isSaturday;
             
             const statusStyles = {
               available: "bg-emerald-50/40 border-emerald-200/50 border-2 hover:bg-emerald-100/60",
@@ -221,6 +222,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
             };
 
             const isBlocked = c.status === 'blocked' || c.status === 'taken' || c.status === 'birthday';
+            const monthlyCount = c.kind === 'day' ? c.occupants.filter(o => o.type === 'monthly').length : 0;
 
             return (
               <div
@@ -282,6 +284,15 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     c.status === 'pending' ? tagColors.pending : 'bg-slate-100 text-slate-500 border-slate-200'
                   )}>
                     {c.label}
+                  </div>
+                )}
+
+                {isWeekend && c.status !== 'past' && (
+                  <div className={cn(
+                    "mt-auto text-[10px] font-bold flex items-center gap-1",
+                    c.status === 'taken' ? "text-rose-600" : "text-slate-400"
+                  )}>
+                    <Users className="size-3" /> {monthlyCount}/{c.limit}
                   </div>
                 )}
 
