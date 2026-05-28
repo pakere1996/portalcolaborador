@@ -94,11 +94,12 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
       const occupants = occupantsByDate?.get(iso) ?? [];
       const birthdayUser = birthdayByDate?.get(iso);
       
-      const monthlyOccupants = occupants.filter(o => o.type === 'monthly');
-      const isFull = monthlyOccupants.length >= limit;
+      // Para o limite, contam tanto folgas mensais quanto folgas fixas
+      const totalOccupants = occupants.filter(o => o.type === 'monthly' || o.type === 'fixed');
+      const isFull = totalOccupants.length >= limit;
       
       const isMine = !!myUserId && occupants.some((o) => o.userId === myUserId && o.type === 'monthly');
-      const hasPending = occupants.some(o => o.type === 'pending');
+      const hasPending = !!myUserId && occupants.some(o => o.userId === myUserId && o.type === 'pending');
 
       if (d < today) {
         result.push({ kind: "day", date: d, iso, status: "past", occupants, limit, tooltip: "Data passada" });
@@ -124,10 +125,19 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
       }
 
       // Prioridade 3: Minha solicitação pendente (Roxo)
-      if (hasPending) {
+      if (!isAdmin && hasPending) {
         result.push({
           kind: "day", date: d, iso, status: "pending", occupants, limit,
-          label: isAdmin ? "Pendente" : "Sua solicitação", tooltip: "Há solicitações aguardando aprovação"
+          label: "Sua solicitação", tooltip: "Sua solicitação aguardando aprovação"
+        });
+        continue;
+      }
+      
+      // Para Admin, mostrar se há qualquer pendência
+      if (isAdmin && occupants.some(o => o.type === 'pending')) {
+        result.push({
+          kind: "day", date: d, iso, status: "pending", occupants, limit,
+          label: "Pendente", tooltip: "Há solicitações aguardando aprovação"
         });
         continue;
       }
@@ -156,23 +166,23 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
       if (!isAdmin && isWeekend && birthdayUser && birthdayUser.userId !== myUserId) {
         result.push({
           kind: "day", date: d, iso, status: "birthday", occupants, limit,
-          tooltip: "Indisponível: Reservado para aniversariante"
+          label: "Indisponível", tooltip: "Indisponível: Reservado para aniversariante"
         });
         continue;
       }
 
-      // Se estiver lotado por outros colaboradores
+      // Se estiver lotado por outros colaboradores (mensais ou fixas)
       if (isWeekend && isFull) {
         result.push({
           kind: "day", date: d, iso, status: "taken", occupants, limit,
-          label: "Indisponível", tooltip: "Limite de folgas mensais atingido"
+          label: "Indisponível", tooltip: "Limite de folgas atingido"
         });
         continue;
       }
 
       result.push({
         kind: "day", date: d, iso, status: isWeekend ? "available" : "weekday", occupants, limit,
-        tooltip: isWeekend ? (limit > 1 ? `Disponível (${monthlyOccupants.length}/${limit})` : "Disponível") : undefined
+        tooltip: isWeekend ? (limit > 1 ? `Disponível (${totalOccupants.length}/${limit})` : "Disponível") : undefined
       });
     }
     return result;
@@ -230,7 +240,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
             };
 
             const isBlocked = c.status === 'blocked' || c.status === 'taken' || c.status === 'birthday';
-            const monthlyCount = c.kind === 'day' ? c.occupants.filter(o => o.type === 'monthly').length : 0;
+            const totalCount = c.kind === 'day' ? c.occupants.filter(o => o.type === 'monthly' || o.type === 'fixed').length : 0;
 
             return (
               <div
@@ -305,7 +315,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     c.status === 'taken' ? "text-rose-600" : "text-slate-400",
                     c.status === 'mine' && "text-amber-700"
                   )}>
-                    <Users className="size-3" /> {monthlyCount}/{c.limit}
+                    <Users className="size-3" /> {totalCount}/{c.limit}
                   </div>
                 )}
 

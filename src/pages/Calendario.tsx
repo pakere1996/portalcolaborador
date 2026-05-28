@@ -11,6 +11,8 @@ import {
   monthKey,
   parseYMD,
   unlockDateForMonth,
+  ymd,
+  getMonthDays,
 } from "@/lib/folga-rules";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,11 +37,14 @@ export default function CalendarioPage() {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month0, setMonth0] = useState(today.getMonth());
-  const [folgas, setFolgas] = useState<{ user_id: string; data: string; nome: string; type: "monthly" | "pending" }[]>([]);
+  
+  const [folgas, setFolgas] = useState<{ user_id: string; data: string; type: "monthly" | "pending" | "fixed" }[]>([]);
   const [manual, setManual] = useState<{ data: string; motivo: string; liberada: boolean }[]>([]);
   const [limites, setLimites] = useState<{ data: string; limite_colaboradores: number }[]>([]);
   const [prios, setPrios] = useState<{ user_id: string; data: string; status: string; nome?: string }[]>([]);
   const [pendingSolics, setPendingSolics] = useState<Solic[]>([]);
+  const [allProfiles, setAllProfiles] = useState<{ id: string; folga_fixa_semana: number | null }[]>([]);
+  
   const [reqDialog, setReqDialog] = useState<{ iso: string; reason: string } | null>(null);
   const [viewDialog, setViewDialog] = useState<Solic | null>(null);
   const [reqMotivo, setReqMotivo] = useState("");
@@ -48,35 +53,33 @@ export default function CalendarioPage() {
     if (!user) return;
     const start = `${year}-${String(month0 + 1).padStart(2, "0")}-01`;
     const endDate = new Date(year, month0 + 1, 0);
-    const end = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
+    const end = ymd(endDate);
 
-    const [allFolgasRes, blockRes, limRes, prioRes, pendingRes] = await Promise.all([
+    const [allFolgasRes, blockRes, limRes, prioRes, pendingRes, profilesRes] = await Promise.all([
       supabase.from("folgas").select("user_id, data").gte("data", start).lte("data", end),
       supabase.from("datas_bloqueadas").select("data, motivo, liberada").gte("data", start).lte("data", end),
       supabase.from("dia_config").select("data, limite_colaboradores").gte("data", start).lte("data", end),
       supabase.from("prioridade_aniversario").select("user_id, data, status").eq("status", "ativa").gte("data", start).lte("data", end),
       supabase.from("solicitacoes_especiais").select("*").eq("user_id", user.id).eq("status", "pendente").gte("data", start).lte("data", end),
+      supabase.from("profiles").select("id, folga_fixa_semana").eq("ativo", true),
     ]);
-
-    if (allFolgasRes.error) {
-      toast.error("Erro ao carregar dados do calendário");
-      return;
-    }
 
     const folgasData = (allFolgasRes.data ?? []) as { user_id: string; data: string }[];
     const pendingData = (pendingRes.data ?? []) as Solic[];
+    const profs = (profilesRes.data ?? []) as { id: string; folga_fixa_semana: number | null }[];
+    
+    setAllProfiles(profs);
 
-    const combined: { user_id: string; data: string; nome: string; type: "monthly" | "pending" }[] = [
+    // Consolidar folgas mensais e solicitações pendentes
+    const combined: { user_id: string; data: string; type: "monthly" | "pending" | "fixed" }[] = [
       ...folgasData.map(f => ({
         user_id: f.user_id,
         data: f.data,
-        nome: f.user_id === user.id ? "Sua folga" : "Indisponível",
         type: 'monthly' as const
       })),
       ...pendingData.map(p => ({
         user_id: user.id,
         data: p.data,
-        nome: "Sua solicitação",
         type: 'pending' as const
       }))
     ];
@@ -106,13 +109,40 @@ export default function CalendarioPage() {
 
   const occupantsByDate = useMemo(() => {
     const m = new Map<string, DayOccupant[]>();
+    
+    // 1. Adicionar folgas fixas de todos os colaboradores
+    const days = getMonthDays(year, month0);
+    for (const d of days) {
+      const iso = ymd(d);
+      const wd = d.getDay();
+      const fixedOnes = allProfiles.filter(p => p.folga_fixa_semana === wd);
+      
+      fixedOnes.forEach(p => {
+        const arr = m.get(iso) ?? [];
+        arr.push({ 
+          userId: p.id, 
+          userName: p.id === user?.id ? "Sua folga" : "Indisponível", 
+          type: "fixed" 
+        });
+        m.set(iso, arr);
+      });
+    }
+
+    // 2. Adicionar folgas mensais e pendentes
     for (const f of folgas) {
       const arr = m.get(f.data) ?? [];
-      arr.push({ userId: f.user_id, userName: f.nome, type: f.type });
-      m.set(f.data, arr);
+      // Evitar duplicar se o usuário já tem folga fixa no mesmo dia (raro mas possível)
+      if (!arr.some(x => x.userId === f.user_id)) {
+        arr.push({ 
+          userId: f.user_id, 
+          userName: f.user_id === user?.id ? (f.type === 'pending' ? "Sua solicitação" : "Sua folga") : "Indisponível", 
+          type: f.type 
+        });
+        m.set(f.data, arr);
+      }
     }
     return m;
-  }, [folgas]);
+  }, [folgas, allProfiles, year, month0, user?.id]);
 
   const manualMap = useMemo(() => {
     const m = new Map<string, { reason: string; liberada: boolean }>();
@@ -135,7 +165,7 @@ export default function CalendarioPage() {
   const unlocked = isMonthUnlocked(year, month0);
   const unlock = unlockDateForMonth(year, month0);
 
-  const mk = `${year}-${String(month0 + 1).padStart(2, "0")}`;
+  const mk = monthKey(new Date(year, month0, 1));
   const myFolgaThisMonth = folgas.find((f) => f.user_id === user?.id && f.type === 'monthly' && monthKey(parseYMD(f.data)) === mk);
 
   const goPrev = () => {
