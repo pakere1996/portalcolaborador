@@ -22,9 +22,24 @@ import AdminFuncionarios from "@/pages/admin/Funcionarios";
 function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
   const { session, role, loading } = useAuth();
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
+  // Se ainda está carregando, mostra tela de espera
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <div className="size-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm font-medium text-muted-foreground">Verificando permissões...</p>
+      </div>
+    );
+  }
+
+  // Se não tem sessão, vai para o login
   if (!session) return <Navigate to="/login" replace />;
-  if (adminOnly && role !== "admin") return <Navigate to="/calendario" replace />;
+
+  // Se a rota é admin e o usuário não é admin
+  if (adminOnly && role !== "admin") {
+    console.warn("[App] Acesso negado: Usuário não é administrador. Role atual:", role);
+    return <Navigate to="/calendario" replace />;
+  }
 
   return <AppShell>{children}</AppShell>;
 }
