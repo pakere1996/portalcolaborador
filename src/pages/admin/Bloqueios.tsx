@@ -14,7 +14,7 @@ import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Ban, Pencil, Plus, Trash2 } from "lucide-react";
+import { Ban, Pencil, Plus, Trash2, CalendarDays, Globe } from "lucide-react";
 import { MONTH_NAMES, formatBR, parseYMD } from "@/lib/folga-rules";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +23,7 @@ interface Regra {
   id: string;
   descricao: string;
   tipo: Tipo;
-  mes: number;
+  mes: number | null;
   dia: number | null;
   ordinal: number | null;
   dia_semana: number | null;
@@ -57,8 +57,8 @@ const DIAS_SEMANA = [
 const emptyRegra = (): Regra => ({
   id: "",
   descricao: "",
-  tipo: "fixa_anual",
-  mes: 1,
+  tipo: "pos_pagamento",
+  mes: null, // Padrão: Todos os meses
   dia: 1,
   ordinal: null,
   dia_semana: null,
@@ -83,7 +83,7 @@ export default function BloqueiosAdmin() {
     const start = `${ano}-01-01`;
     const end = `${ano}-12-31`;
     const [{ data: r, error: er }, { data: d, error: ed }] = await Promise.all([
-      supabase.from("bloqueio_regras").select("*").order("mes").order("descricao"),
+      supabase.from("bloqueio_regras").select("*").order("mes", { nullsFirst: true }).order("descricao"),
       supabase.from("datas_bloqueadas").select("id, data, motivo, auto, liberada").gte("data", start).lte("data", end).order("data"),
     ]);
     if (er) toast.error("Erro ao carregar regras", { description: er.message });
@@ -100,7 +100,7 @@ export default function BloqueiosAdmin() {
 
   const saveRegra = async () => {
     if (!edit.descricao.trim()) return toast.error("Informe a descrição");
-    const payload: Partial<Regra> = {
+    const payload: any = {
       descricao: edit.descricao.trim(),
       tipo: edit.tipo,
       mes: edit.mes,
@@ -112,7 +112,7 @@ export default function BloqueiosAdmin() {
     
     const { error } = edit.id
       ? await supabase.from("bloqueio_regras").update(payload).eq("id", edit.id)
-      : await supabase.from("bloqueio_regras").insert(payload as Regra);
+      : await supabase.from("bloqueio_regras").insert(payload);
 
     if (error) return toast.error("Erro ao salvar", { description: error.message });
     
@@ -149,6 +149,7 @@ export default function BloqueiosAdmin() {
   const toggleLiberada = async (d: DataBloqueada) => {
     const { error } = await supabase.from("datas_bloqueadas").update({ liberada: !d.liberada }).eq("id", d.id);
     if (error) return toast.error(error.message);
+    toast.success(d.liberada ? "Data bloqueada novamente" : "Data liberada com sucesso");
     await load();
   };
 
@@ -164,15 +165,16 @@ export default function BloqueiosAdmin() {
   }, [datas, mesFiltro, tipoFiltro]);
 
   const formatRegra = (r: Regra) => {
+    const mesStr = r.mes === null ? "Todos os meses" : MONTH_NAMES[r.mes - 1];
     if (r.tipo === "fixa_anual") {
-      return `${String(r.dia).padStart(2, "0")}/${String(r.mes).padStart(2, "0")} (todo ano)`;
+      return `${String(r.dia).padStart(2, "0")}/${r.mes === null ? "Anual" : String(r.mes).padStart(2, "0")} (${mesStr})`;
     }
     if (r.tipo === "pos_pagamento") {
-      return `1º Fim de semana após dia 05 de ${MONTH_NAMES[r.mes - 1]}`;
+      return `1º Fim de semana após dia 05 (${mesStr})`;
     }
     const ord = ORDINAIS.find((o) => o.v === r.ordinal)?.label ?? "?";
     const ds = DIAS_SEMANA.find((d) => d.v === r.dia_semana)?.label ?? "?";
-    return `${ord} ${ds} de ${MONTH_NAMES[r.mes - 1]}`;
+    return `${ord} ${ds} (${mesStr})`;
   };
 
   return (
@@ -183,7 +185,7 @@ export default function BloqueiosAdmin() {
             <Ban className="size-6 text-primary" /> Gestão de Bloqueios
           </h1>
           <p className="text-muted-foreground mt-1">
-            Configure regras gerais ou gerencie datas específicas do calendário.
+            Configure regras anuais ou gerencie datas específicas do calendário.
           </p>
         </div>
         <Button onClick={openNew}>
@@ -200,7 +202,7 @@ export default function BloqueiosAdmin() {
         <TabsContent value="regras" className="space-y-2 mt-4">
           {regras.length === 0 && (
             <div className="rounded-xl border border-dashed p-12 text-center text-muted-foreground">
-              Nenhuma regra cadastrada. Clique em "Nova regra" para começar.
+              Nenhuma regra cadastrada.
             </div>
           )}
           {regras.map((r) => (
@@ -208,8 +210,12 @@ export default function BloqueiosAdmin() {
               <div className="flex-1 min-w-[240px]">
                 <div className="font-semibold flex items-center gap-2">
                   {r.descricao}
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted font-bold uppercase tracking-wider">
-                    {r.tipo === "fixa_anual" ? "Fixa" : r.tipo === "pos_pagamento" ? "Pagamento" : "Dinâmica"}
+                  <span className={cn(
+                    "text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider",
+                    r.mes === null ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                  )}>
+                    {r.mes === null ? <Globe className="size-3 inline mr-1" /> : <CalendarDays className="size-3 inline mr-1" />}
+                    {r.mes === null ? "Anual" : "Mensal"}
                   </span>
                 </div>
                 <div className="text-sm text-muted-foreground">{formatRegra(r)}</div>
@@ -269,34 +275,21 @@ export default function BloqueiosAdmin() {
             </div>
           </div>
 
-          {datasFiltradas.length === 0 && (
-            <div className="rounded-xl border border-dashed p-12 text-center text-muted-foreground">
-              Nenhum bloqueio encontrado para os filtros selecionados.
-            </div>
-          )}
           <div className="grid gap-2">
             {datasFiltradas.map((d) => (
-              <div key={d.id} className="rounded-xl border bg-card p-4 flex items-center gap-4 flex-wrap hover:bg-muted/5 transition-colors">
+              <div key={d.id} className={cn(
+                "rounded-xl border p-4 flex items-center gap-4 flex-wrap transition-colors",
+                d.liberada ? "bg-emerald-50/30 border-emerald-100" : "bg-card border-border"
+              )}>
                 <div className="flex-1 min-w-[240px]">
                   <div className="font-bold text-slate-900">{formatBR(parseYMD(d.data))}</div>
                   <div className="text-sm text-muted-foreground">{d.motivo}</div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className={cn(
-                    "text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest",
-                    d.auto ? "bg-blue-50 text-blue-600 border border-blue-100" : "bg-amber-50 text-amber-600 border border-amber-100"
-                  )}>
-                    {d.auto ? "Automática" : "Manual"}
-                  </span>
-                  {d.liberada && (
-                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 font-black uppercase tracking-widest">
-                      Liberada
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-4 pl-4 border-l border-border">
+                <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
-                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">{d.liberada ? "Liberada" : "Bloqueada"}</Label>
+                    <Label className={cn("text-[10px] font-bold uppercase", d.liberada ? "text-emerald-600" : "text-rose-600")}>
+                      {d.liberada ? "Liberada" : "Bloqueada"}
+                    </Label>
                     <Switch checked={!d.liberada} onCheckedChange={() => toggleLiberada(d)} />
                   </div>
                   <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={() => removeData(d)}>
@@ -314,7 +307,7 @@ export default function BloqueiosAdmin() {
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold">{edit.id ? "Editar regra" : "Nova regra de bloqueio"}</DialogTitle>
             <DialogDescription>
-              Regras automáticas facilitam o bloqueio de feriados e datas recorrentes.
+              Regras anuais aplicam o bloqueio a todos os meses automaticamente.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -323,7 +316,7 @@ export default function BloqueiosAdmin() {
               <Input
                 value={edit.descricao}
                 onChange={(e) => setEdit({ ...edit, descricao: e.target.value })}
-                placeholder="Ex.: Feriado Municipal, Dia das Mães..."
+                placeholder="Ex.: Bloqueio Pós-Pagamento"
                 className="rounded-xl"
               />
             </div>
@@ -333,17 +326,21 @@ export default function BloqueiosAdmin() {
                 <Select value={edit.tipo} onValueChange={(v) => setEdit({ ...edit, tipo: v as Tipo })}>
                   <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="fixa_anual">Data Fixa (Todo ano)</SelectItem>
-                    <SelectItem value="dinamica">Data Dinâmica</SelectItem>
                     <SelectItem value="pos_pagamento">Fim de semana após dia 5</SelectItem>
+                    <SelectItem value="fixa_anual">Data Fixa</SelectItem>
+                    <SelectItem value="dinamica">Data Dinâmica</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label className="font-bold">Mês</Label>
-                <Select value={String(edit.mes)} onValueChange={(v) => setEdit({ ...edit, mes: Number(v) })}>
+                <Label className="font-bold">Mês de Aplicação</Label>
+                <Select 
+                  value={edit.mes === null ? "anual" : String(edit.mes)} 
+                  onValueChange={(v) => setEdit({ ...edit, mes: v === "anual" ? null : Number(v) })}
+                >
                   <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="anual">Todos os meses (Anual)</SelectItem>
                     {MONTH_NAMES.map((m, i) => (
                       <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
                     ))}
