@@ -40,24 +40,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadProfile = async (uid: string) => {
     try {
-      console.log("[Auth] Iniciando busca de dados para:", uid);
+      console.log("[Auth] Carregando dados para o usuário:", uid);
       
-      // Buscamos perfil e roles separadamente para evitar que um erro em um trave o outro
-      const { data: p, error: pErr } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
-      if (pErr) console.error("[Auth] Erro ao carregar perfil:", pErr);
+      // Buscamos perfil e roles em paralelo
+      const [profRes, rolesRes] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
+        supabase.from("user_roles").select("role").eq("user_id", uid)
+      ]);
 
-      const { data: r, error: rErr } = await supabase.from("user_roles").select("role").eq("user_id", uid);
-      if (rErr) console.error("[Auth] Erro ao carregar roles:", rErr);
+      if (profRes.error) console.error("[Auth] Erro Perfil:", profRes.error);
+      if (rolesRes.error) console.error("[Auth] Erro Roles:", rolesRes.error);
 
+      const p = profRes.data as Profile | null;
+      
       if (p && p.ativo === false) {
-        console.warn("[Auth] Usuário inativo.");
+        console.warn("[Auth] Usuário inativo, deslogando...");
         await supabase.auth.signOut();
         return;
       }
 
-      setProfile(p as Profile);
-      const roles = (r ?? []).map((x: any) => x.role);
+      setProfile(p);
       
+      const roles = (rolesRes.data ?? []).map((x: any) => x.role);
+      console.log("[Auth] Roles encontradas:", roles);
+
       if (roles.includes("admin")) {
         setRole("admin");
       } else if (roles.includes("funcionario")) {
@@ -66,32 +72,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRole(null);
       }
       
-      console.log("[Auth] Dados carregados com sucesso.");
     } catch (err) {
-      console.error("[Auth] Erro inesperado:", err);
+      console.error("[Auth] Erro crítico no loadProfile:", err);
     } finally {
-      // Garante que o loading termine sempre
       setLoading(false);
     }
   };
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
-      console.log("[Auth] Evento Supabase:", event);
-      setSession(currentSession);
+      console.log("[Auth] Evento Auth:", event);
       
-      if (currentSession?.user) {
-        await loadProfile(currentSession.user.id);
-      } else {
+      if (event === 'SIGNED_OUT') {
+        setSession(null);
         setProfile(null);
         setRole(null);
+        setLoading(false);
+        return;
+      }
+
+      if (currentSession) {
+        setSession(currentSession);
+        await loadProfile(currentSession.user.id);
+      } else {
         setLoading(false);
       }
     });
 
+    // Checagem inicial
     supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      if (s?.user) {
+      if (s) {
+        setSession(s);
         loadProfile(s.user.id);
       } else {
         setLoading(false);
@@ -103,9 +114,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    setSession(null);
-    setProfile(null);
-    setRole(null);
     window.location.href = "/login";
   };
 
