@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth-context";
 import { FolgaCalendar, type DayOccupant } from "@/components/FolgaCalendar";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +13,7 @@ import { Calendar as CalIcon } from "lucide-react";
 import { dayType, formatBR, monthKey, parseYMD } from "@/lib/folga-rules";
 
 export default function AdminCalendar() {
+  const { user } = useAuth();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month0, setMonth0] = useState(today.getMonth());
@@ -98,7 +100,6 @@ export default function AdminCalendar() {
     const d = parseYMD(iso);
     const tipo = dayType(d);
     if (!tipo) return toast.error("Apenas sábado ou domingo");
-    const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase.from("folgas").insert({
       user_id: assignUser, data: iso, mes: monthKey(d), tipo, criado_por: user?.id,
     });
@@ -140,6 +141,7 @@ export default function AdminCalendar() {
         year={year} month0={month0}
         occupantsByDate={occupantsByDate} manualBlocked={manualMap}
         dayLimits={dayLimits}
+        myUserId={user?.id ?? null}
         onPrev={goPrev} onNext={goNext}
         onSelectDay={onSelect}
         locked={null}
