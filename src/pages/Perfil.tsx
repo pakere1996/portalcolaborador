@@ -6,8 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { UserCircle, Save, MapPin, Mail, Phone } from "lucide-react";
+import { UserCircle, Save, MapPin, Mail, Phone, Cake, CalendarDays } from "lucide-react";
 import { formatCPF } from "@/lib/cpf";
+
+const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
 export default function PerfilPage() {
   const { profile, refresh } = useAuth();
@@ -65,7 +67,7 @@ export default function PerfilPage() {
       </div>
 
       <div className="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-6 border-b border-border">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-border">
           <div>
             <Label className="text-xs text-muted-foreground uppercase">Nome</Label>
             <div className="font-semibold">{profile.nome}</div>
@@ -82,6 +84,22 @@ export default function PerfilPage() {
             <Label className="text-xs text-muted-foreground uppercase">Data de Admissão</Label>
             <div className="text-sm">
               {profile.data_admissao ? new Date(profile.data_admissao + "T00:00:00").toLocaleDateString("pt-BR") : "—"}
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground uppercase flex items-center gap-1">
+              <Cake className="size-3 text-amber-500" /> Data de Nascimento
+            </Label>
+            <div className="text-sm">
+              {profile.data_nascimento ? new Date(profile.data_nascimento + "T00:00:00").toLocaleDateString("pt-BR") : "—"}
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground uppercase flex items-center gap-1">
+              <CalendarDays className="size-3 text-blue-500" /> Folga Fixa Semanal
+            </Label>
+            <div className="text-sm font-medium text-blue-600">
+              {profile.folga_fixa_semana != null ? WEEKDAYS[profile.folga_fixa_semana] : "Não definida"}
             </div>
           </div>
         </div>
