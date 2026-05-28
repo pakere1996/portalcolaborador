@@ -12,9 +12,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Filter, User, Info } from "lucide-react";
+import { Calendar as CalIcon, Filter, User, Info, Trash2, Plus } from "lucide-react";
 import { dayType, formatBR, monthKey, parseYMD, ymd } from "@/lib/folga-rules";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 export default function AdminCalendar() {
   const { user } = useAuth();
@@ -22,22 +23,17 @@ export default function AdminCalendar() {
   const [year, setYear] = useState(today.getFullYear());
   const [month0, setMonth0] = useState(today.getMonth());
   
-  // Data
   const [folgas, setFolgas] = useState<any[]>([]);
   const [manual, setManual] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [limites, setLimites] = useState<any[]>([]);
   const [pendentes, setPendentes] = useState<any[]>([]);
   
-  // Filters
   const [filterUser, setFilterUser] = useState("all");
   const [filterType, setFilterType] = useState("all");
 
-  // Dialog
   const [dlg, setDlg] = useState<{ iso: string; status: string } | null>(null);
   const [assignUser, setAssignUser] = useState<string>("");
-  const [blockReason, setBlockReason] = useState("");
-  const [limitInput, setLimitInput] = useState<number>(1);
 
   const load = async () => {
     const start = `${year}-${String(month0 + 1).padStart(2, "0")}-01`;
@@ -65,7 +61,6 @@ export default function AdminCalendar() {
     const m = new Map<string, DayOccupant[]>();
     const nm = new Map(profiles.map(p => [p.id, p.nome]));
 
-    // 1. Folgas Fixas (Calculadas para cada dia do mês)
     const days = getMonthDays(year, month0);
     for (const d of days) {
       const iso = ymd(d);
@@ -77,12 +72,11 @@ export default function AdminCalendar() {
         if (filterType !== "all" && filterType !== "fixed") return;
         
         const arr = m.get(iso) ?? [];
-        arr.push({ userId: p.id, userName: p.nome, type: "fixed", origin: "Cadastro Administrativo" });
+        arr.push({ userId: p.id, userName: p.nome, type: "fixed", origin: "Folga Semanal Fixa" });
         m.set(iso, arr);
       });
     }
 
-    // 2. Folgas Mensais
     folgas.forEach(f => {
       if (filterUser !== "all" && f.user_id !== filterUser) return;
       if (filterType !== "all" && filterType !== "monthly") return;
@@ -93,12 +87,11 @@ export default function AdminCalendar() {
         userId: f.user_id, 
         userName: nm.get(f.user_id) || "Desconhecido", 
         type: "monthly", 
-        origin: f.criado_por ? "Manual/Admin" : "Sorteio/Sistema" 
+        origin: f.criado_por ? "Atribuição Manual" : "Sorteio Automático" 
       });
       m.set(iso, arr);
     });
 
-    // 3. Pendentes
     pendentes.forEach(p => {
       if (filterUser !== "all" && p.user_id !== filterUser) return;
       if (filterType !== "all" && filterType !== "pending") return;
@@ -109,7 +102,7 @@ export default function AdminCalendar() {
         userId: p.user_id, 
         userName: nm.get(p.user_id) || "Desconhecido", 
         type: "pending", 
-        origin: "Solicitação do Colaborador" 
+        origin: "Solicitação Pendente" 
       });
       m.set(iso, arr);
     });
@@ -129,11 +122,9 @@ export default function AdminCalendar() {
     return m;
   }, [limites]);
 
-  const onSelect = (iso: string, info: { status: string }) => {
-    setDlg({ iso, status: info.status });
+  const onSelect = (iso: string) => {
+    setDlg({ iso, status: "" });
     setAssignUser("");
-    setBlockReason("");
-    setLimitInput(dayLimits.get(iso) ?? 1);
   };
 
   const assignFolga = async (iso: string) => {
@@ -162,22 +153,23 @@ export default function AdminCalendar() {
   const goNext = () => { const d = new Date(year, month0 + 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-8 max-w-7xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-            <CalIcon className="size-6 text-primary" /> Calendário Geral
+          <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
+            <CalIcon className="size-8 text-primary" /> Calendário Geral
           </h1>
-          <p className="text-muted-foreground mt-1">Visão completa da escala e folgas da equipe.</p>
+          <p className="text-slate-500 mt-1">Gestão centralizada de escalas e folgas da equipe.</p>
         </div>
       </div>
 
-      {/* Filtros */}
-      <div className="bg-card border border-border rounded-xl p-4 flex flex-wrap gap-4 items-end shadow-sm">
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-wrap gap-6 items-end shadow-sm">
         <div className="space-y-2">
-          <Label className="text-xs flex items-center gap-1"><User className="size-3" /> Colaborador</Label>
+          <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+            <User className="size-3" /> Colaborador
+          </Label>
           <Select value={filterUser} onValueChange={setFilterUser}>
-            <SelectTrigger className="w-[200px]">
+            <SelectTrigger className="w-[240px] bg-slate-50 border-slate-200 rounded-xl">
               <SelectValue placeholder="Todos" />
             </SelectTrigger>
             <SelectContent>
@@ -187,9 +179,11 @@ export default function AdminCalendar() {
           </Select>
         </div>
         <div className="space-y-2">
-          <Label className="text-xs flex items-center gap-1"><Filter className="size-3" /> Tipo de Folga</Label>
+          <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+            <Filter className="size-3" /> Tipo de Folga
+          </Label>
           <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[200px] bg-slate-50 border-slate-200 rounded-xl">
               <SelectValue placeholder="Todos" />
             </SelectTrigger>
             <SelectContent>
@@ -200,7 +194,7 @@ export default function AdminCalendar() {
             </SelectContent>
           </Select>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => { setFilterUser("all"); setFilterType("all"); }}>
+        <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-600" onClick={() => { setFilterUser("all"); setFilterType("all"); }}>
           Limpar Filtros
         </Button>
       </div>
@@ -215,77 +209,76 @@ export default function AdminCalendar() {
       />
 
       <Dialog open={!!dlg} onOpenChange={(o) => !o && setDlg(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg rounded-3xl border-none shadow-2xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CalIcon className="size-5 text-primary" />
+            <DialogTitle className="text-2xl font-bold text-slate-900 flex items-center gap-3">
+              <div className="size-10 rounded-2xl bg-primary/10 flex items-center justify-center">
+                <CalIcon className="size-5 text-primary" />
+              </div>
               {dlg && formatBR(parseYMD(dlg.iso))}
             </DialogTitle>
           </DialogHeader>
 
           {dlg && (
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Escala do Dia</h3>
-                <div className="space-y-2">
+            <div className="space-y-8 py-4">
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Escala do Dia</h3>
+                <div className="grid gap-3">
                   {occupantsByDate.get(dlg.iso)?.map((occ, idx) => (
-                    <div key={idx} className="bg-muted/30 p-3 rounded-lg border border-border/50">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-bold text-sm">{occ.userName}</span>
-                        <Badge className={cn(
-                          "text-[10px]",
-                          occ.type === 'fixed' ? "bg-blue-600" :
-                          occ.type === 'monthly' ? "bg-amber-400 text-amber-900" :
-                          "bg-orange-500"
-                        )}>
-                          {occ.type === 'fixed' ? "Fixa" : occ.type === 'monthly' ? "Mensal" : "Pendente"}
-                        </Badge>
-                      </div>
-                      <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-                        <Info className="size-3" /> Origem: {occ.origin}
+                    <div key={idx} className="group bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between transition-all hover:bg-white hover:shadow-md">
+                      <div className="flex items-center gap-4">
+                        <div className={cn(
+                          "size-2 rounded-full",
+                          occ.type === 'fixed' ? "bg-blue-400" :
+                          occ.type === 'monthly' ? "bg-amber-400" :
+                          "bg-orange-400"
+                        )} />
+                        <div>
+                          <div className="font-bold text-slate-900">{occ.userName}</div>
+                          <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{occ.origin}</div>
+                        </div>
                       </div>
                       {occ.type === 'monthly' && (
                         <Button 
                           variant="ghost" 
-                          size="sm" 
-                          className="w-full mt-2 h-7 text-xs text-destructive hover:bg-destructive/10"
+                          size="icon" 
+                          className="size-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                           onClick={() => removeFolga(dlg.iso, occ.userId)}
                         >
-                          Remover Folga
+                          <Trash2 className="size-4" />
                         </Button>
                       )}
                     </div>
                   ))}
                   {!occupantsByDate.get(dlg.iso)?.length && (
-                    <div className="text-sm text-muted-foreground text-center py-4 italic">Ninguém escalado para este dia.</div>
+                    <div className="text-sm text-slate-400 text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                      Ninguém escalado para este dia.
+                    </div>
                   )}
                 </div>
               </div>
 
-              <div className="border-t border-border pt-4 space-y-4">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Ações Rápidas</h3>
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <Label className="text-xs">Atribuir Folga Mensal</Label>
-                    <div className="flex gap-2">
-                      <Select value={assignUser} onValueChange={setAssignUser}>
-                        <SelectTrigger className="flex-1">
-                          <SelectValue placeholder="Selecionar..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <Button size="sm" onClick={() => assignFolga(dlg.iso)}>Atribuir</Button>
-                    </div>
-                  </div>
+              <div className="space-y-4 pt-4 border-t border-slate-100">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Atribuir Folga Manual</h3>
+                <div className="flex gap-3">
+                  <Select value={assignUser} onValueChange={setAssignUser}>
+                    <SelectTrigger className="flex-1 bg-slate-50 border-slate-200 rounded-xl h-11">
+                      <SelectValue placeholder="Escolher colaborador..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button className="h-11 px-6 rounded-xl shadow-lg shadow-primary/20" onClick={() => assignFolga(dlg.iso)}>
+                    <Plus className="size-4 mr-2" /> Atribuir
+                  </Button>
                 </div>
               </div>
             </div>
           )}
 
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setDlg(null)}>Fechar</Button>
+          <DialogFooter className="sm:justify-center">
+            <Button variant="ghost" className="text-slate-400 font-bold uppercase tracking-widest text-[10px]" onClick={() => setDlg(null)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
