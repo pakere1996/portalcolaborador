@@ -39,10 +39,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const loadProfile = async (uid: string) => {
+    // Timeout de segurança: se o banco não responder em 6 segundos, libera a tela
+    const timeout = setTimeout(() => {
+      console.warn("[Auth] Timeout ao carregar perfil. Liberando tela...");
+      setLoading(false);
+    }, 6000);
+
     try {
       console.log("[Auth] Carregando dados para o usuário:", uid);
       
-      // Buscamos perfil e roles em paralelo
       const [profRes, rolesRes] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
         supabase.from("user_roles").select("role").eq("user_id", uid)
@@ -54,15 +59,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const p = profRes.data as Profile | null;
       
       if (p && p.ativo === false) {
-        console.warn("[Auth] Usuário inativo, deslogando...");
         await supabase.auth.signOut();
         return;
       }
 
       setProfile(p);
-      
       const roles = (rolesRes.data ?? []).map((x: any) => x.role);
-      console.log("[Auth] Roles encontradas:", roles);
 
       if (roles.includes("admin")) {
         setRole("admin");
@@ -75,14 +77,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error("[Auth] Erro crítico no loadProfile:", err);
     } finally {
+      clearTimeout(timeout);
       setLoading(false);
     }
   };
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
-      console.log("[Auth] Evento Auth:", event);
-      
       if (event === 'SIGNED_OUT') {
         setSession(null);
         setProfile(null);
@@ -99,7 +100,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    // Checagem inicial
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       if (s) {
         setSession(s);
