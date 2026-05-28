@@ -54,7 +54,6 @@ export default function CalendarioPage() {
     const endDate = new Date(year, month0 + 1, 0);
     const end = ymd(endDate);
 
-    // Buscamos folgas de TODOS os usuários para calcular ocupação real
     const [allFolgasRes, blockRes, limRes, prioRes, pendingRes, profilesRes] = await Promise.all([
       supabase.from("folgas").select("user_id, data").gte("data", start).lte("data", end),
       supabase.from("datas_bloqueadas").select("data, motivo, liberada").gte("data", start).lte("data", end),
@@ -63,6 +62,10 @@ export default function CalendarioPage() {
       supabase.from("solicitacoes_especiais").select("*").eq("user_id", user.id).eq("status", "pendente").gte("data", start).lte("data", end),
       supabase.from("profiles").select("id, folga_fixa_semana").eq("ativo", true),
     ]);
+
+    // Verificação de erros de permissão (RLS/Grants)
+    if (allFolgasRes.error) console.error("Erro ao carregar folgas da equipe:", allFolgasRes.error);
+    if (profilesRes.error) console.error("Erro ao carregar perfis da equipe:", profilesRes.error);
 
     setFolgas((allFolgasRes.data ?? []) as { user_id: string; data: string }[]);
     setManual((blockRes.data ?? []) as { data: string; motivo: string; liberada: boolean }[]);
@@ -111,7 +114,6 @@ export default function CalendarioPage() {
   const onSelectDay = async (iso: string) => {
     if (!user) return;
     
-    // USAR A MESMA LÓGICA UNIFICADA PARA VALIDAR O CLIQUE
     const { status, reason } = calculateDateStatus({
       date: parseYMD(iso),
       myUserId: user.id,
