@@ -60,11 +60,21 @@ serve(async (req) => {
 
       if (profErr) throw profErr
 
-      // Garante a permissão de funcionário
-      await supabaseAdmin.from('user_roles').upsert({ 
-        user_id: userId, 
-        role: payload.role || 'funcionario' 
-      }, { onConflict: 'user_id,role' })
+      // LÓGICA DE ROLE PROTEGIDA:
+      // Só atribui 'funcionario' se o usuário não for 'admin'
+      const { data: existingRoles } = await supabaseAdmin
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId);
+      
+      const roles = (existingRoles || []).map(r => r.role);
+      
+      if (!roles.includes('admin')) {
+        await supabaseAdmin.from('user_roles').upsert({ 
+          user_id: userId, 
+          role: payload.role || 'funcionario' 
+        }, { onConflict: 'user_id,role' })
+      }
       
       return new Response(JSON.stringify({ success: true, userId }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }

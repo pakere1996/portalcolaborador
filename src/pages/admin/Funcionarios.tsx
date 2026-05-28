@@ -12,7 +12,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Plus, Users, Pencil, Trash2, KeyRound, Cake, CalendarDays, RefreshCw } from "lucide-react";
+import { Plus, Users, Pencil, Trash2, KeyRound, Cake, CalendarDays, RefreshCw, Shield } from "lucide-react";
 import { formatCPF, isValidCPFLength, onlyDigits } from "@/lib/cpf";
 import { adminApi } from "@/lib/admin-api";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +30,7 @@ interface Profile {
   data_demissao: string | null;
   data_nascimento: string | null;
   folga_fixa_semana: number | null;
+  role?: string;
 }
 
 const blankForm = {
@@ -59,12 +60,24 @@ export default function Funcionarios() {
   const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
 
   const load = async () => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, nome, cpf, cargo, ativo, aprovacao_status, data_admissao, data_demissao, data_nascimento, folga_fixa_semana")
-      .order("nome");
-    setList((data ?? []) as Profile[]);
+    const [{ data: profs }, { data: roles }] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, nome, cpf, cargo, ativo, aprovacao_status, data_admissao, data_demissao, data_nascimento, folga_fixa_semana")
+        .order("nome"),
+      supabase.from("user_roles").select("user_id, role")
+    ]);
+
+    const roleMap = new Map((roles ?? []).map(r => [r.user_id, r.role]));
+    
+    const combined = (profs ?? []).map(p => ({
+      ...p,
+      role: roleMap.get(p.id) || "funcionario"
+    }));
+
+    setList(combined as Profile[]);
   };
+
   useEffect(() => { load(); }, []);
 
   const create = async () => {
@@ -105,7 +118,7 @@ export default function Funcionarios() {
         dataAdmissao: p.data_admissao,
         dataNascimento: p.data_nascimento,
         folgaFixaSemana: p.folga_fixa_semana,
-        role: "funcionario",
+        role: p.role, // Mantém o papel atual
       });
       toast.success("Acesso sincronizado!", { 
         id: toastId,
@@ -268,7 +281,10 @@ export default function Funcionarios() {
               {list.map((p) => (
                 <tr key={p.id} className="hover:bg-muted/20 transition-colors">
                   <td className="p-4">
-                    <div className="font-bold text-foreground">{p.nome}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="font-bold text-foreground">{p.nome}</div>
+                      {p.role === "admin" && <Shield className="size-3 text-primary" title="Administrador" />}
+                    </div>
                     <div className="text-[10px] text-muted-foreground font-mono">{formatCPF(p.cpf)}</div>
                     {p.aprovacao_status === "pendente" && (
                       <Badge variant="outline" className="mt-1 bg-orange-50 text-orange-600 border-orange-200 text-[9px]">Pendente</Badge>
