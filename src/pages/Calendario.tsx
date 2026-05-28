@@ -13,6 +13,7 @@ import {
   unlockDateForMonth,
   ymd,
   getMonthDays,
+  calculateDateStatus,
 } from "@/lib/folga-rules";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,10 +39,10 @@ export default function CalendarioPage() {
   const [year, setYear] = useState(today.getFullYear());
   const [month0, setMonth0] = useState(today.getMonth());
   
-  const [folgas, setFolgas] = useState<{ user_id: string; data: string; type: "monthly" | "pending" | "fixed" }[]>([]);
+  const [folgas, setFolgas] = useState<{ user_id: string; data: string }[]>([]);
   const [manual, setManual] = useState<{ data: string; motivo: string; liberada: boolean }[]>([]);
   const [limites, setLimites] = useState<{ data: string; limite_colaboradores: number }[]>([]);
-  const [prios, setPrios] = useState<{ user_id: string; data: string; status: string; nome?: string }[]>([]);
+  const [prios, setPrios] = useState<{ user_id: string; data: string; status: string }[]>([]);
   const [pendingSolics, setPendingSolics] = useState<Solic[]>([]);
   const [allProfiles, setAllProfiles] = useState<{ id: string; folga_fixa_semana: number | null }[]>([]);
   
@@ -55,7 +56,6 @@ export default function CalendarioPage() {
     const endDate = new Date(year, month0 + 1, 0);
     const end = ymd(endDate);
 
-    // Buscamos folgas de TODOS os usuários para calcular ocupação
     const [allFolgasRes, blockRes, limRes, prioRes, pendingRes, profilesRes] = await Promise.all([
       supabase.from("folgas").select("user_id, data").gte("data", start).lte("data", end),
       supabase.from("datas_bloqueadas").select("data, motivo, liberada").gte("data", start).lte("data", end),
@@ -65,32 +65,12 @@ export default function CalendarioPage() {
       supabase.from("profiles").select("id, folga_fixa_semana").eq("ativo", true),
     ]);
 
-    const folgasData = (allFolgasRes.data ?? []) as { user_id: string; data: string }[];
-    const pendingData = (pendingRes.data ?? []) as Solic[];
-    const profs = (profilesRes.data ?? []) as { id: string; folga_fixa_semana: number | null }[];
-    
-    setAllProfiles(profs);
-
-    const combined: { user_id: string; data: string; type: "monthly" | "pending" | "fixed" }[] = [
-      ...folgasData.map(f => ({
-        user_id: f.user_id,
-        data: f.data,
-        type: 'monthly' as const
-      })),
-      ...pendingData.map(p => ({
-        user_id: user.id,
-        data: p.data,
-        type: 'pending' as const
-      }))
-    ];
-
-    setFolgas(combined);
-    setManual(blockRes.data ?? []);
-    setLimites(limRes.data ?? []);
-    setPrios(((prioRes.data ?? []) as { user_id: string; data: string; status: string }[]).map((p) => ({
-      ...p, nome: p.user_id === user.id ? "Sua prioridade" : "Reservado",
-    })));
-    setPendingSolics(pendingData);
+    setFolgas((allFolgasRes.data ?? []) as { user_id: string; data: string }[]);
+    setManual((blockRes.data ?? []) as { data: string; motivo: string; liberada: boolean }[]);
+    setLimites((limRes.data ?? []) as { data: string; limite_colaboradores: number }[]);
+    setPrios((prioRes.data ?? []) as { user_id: string; data: string; status: string }[]);
+    setPendingSolics((pendingRes.data ?? []) as Solic[]);
+    setAllProfiles((profilesRes.data ?? []) as { id: string; folga_fixa_semana: number | null }[]);
   };
 
   useEffect(() => { load(); }, [year, month0, user]);
@@ -107,42 +87,6 @@ export default function CalendarioPage() {
     return () => { supabase.removeChannel(ch); };
   }, [year, month0, user?.id]);
 
-  const occupantsByDate = useMemo(() => {
-    const m = new Map<string, DayOccupant[]>();
-    
-    // 1. Adicionar folgas fixas de toda a equipe
-    const days = getMonthDays(year, month0);
-    for (const d of days) {
-      const iso = ymd(d);
-      const wd = d.getDay();
-      const fixedOnes = allProfiles.filter(p => p.folga_fixa_semana === wd);
-      
-      fixedOnes.forEach(p => {
-        const arr = m.get(iso) ?? [];
-        arr.push({ 
-          userId: p.id, 
-          userName: p.id === user?.id ? "Sua folga" : "Indisponível", 
-          type: "fixed" 
-        });
-        m.set(iso, arr);
-      });
-    }
-
-    // 2. Adicionar folgas mensais e pendentes de toda a equipe
-    for (const f of folgas) {
-      const arr = m.get(f.data) ?? [];
-      if (!arr.some(x => x.userId === f.user_id)) {
-        arr.push({ 
-          userId: f.user_id, 
-          userName: f.user_id === user?.id ? (f.type === 'pending' ? "Sua solicitação" : "Sua folga") : "Indisponível", 
-          type: f.type 
-        });
-        m.set(f.data, arr);
-      }
-    }
-    return m;
-  }, [folgas, allProfiles, year, month0, user?.id]);
-
   const manualMap = useMemo(() => {
     const m = new Map<string, { reason: string; liberada: boolean }>();
     for (const b of manual) m.set(b.data, { reason: b.motivo, liberada: b.liberada });
@@ -156,64 +100,65 @@ export default function CalendarioPage() {
   }, [limites]);
 
   const birthdayByDate = useMemo(() => {
-    const m = new Map<string, { userId: string; userName?: string }>();
-    for (const p of prios) m.set(p.data, { userId: p.user_id, userName: p.nome });
+    const m = new Map<string, { userId: string }>();
+    for (const p of prios) m.set(p.data, { userId: p.user_id });
     return m;
   }, [prios]);
 
   const unlocked = isMonthUnlocked(year, month0);
   const unlock = unlockDateForMonth(year, month0);
-
   const mk = monthKey(new Date(year, month0, 1));
-  const myFolgaThisMonth = folgas.find((f) => f.user_id === user?.id && f.type === 'monthly' && monthKey(parseYMD(f.data)) === mk);
 
-  const goPrev = () => {
-    const d = new Date(year, month0 - 1, 1);
-    setYear(d.getFullYear()); setMonth0(d.getMonth());
-  };
-  const goNext = () => {
-    const d = new Date(year, month0 + 1, 1);
-    setYear(d.getFullYear()); setMonth0(d.getMonth());
-  };
-
-  const onSelectDay = async (iso: string, info: { status: string; reason?: string }) => {
+  const onSelectDay = async (iso: string) => {
     if (!user) return;
     
-    if (info.status === "available") {
+    // USAR A MESMA LÓGICA UNIFICADA PARA VALIDAR O CLIQUE
+    const { status, reason } = calculateDateStatus({
+      date: parseYMD(iso),
+      myUserId: user.id,
+      allFolgas: folgas,
+      allProfiles: allProfiles,
+      manualBlocked: manualMap,
+      dayLimits: dayLimits,
+      birthdayByDate: birthdayByDate,
+      pendingRequests: pendingSolics,
+      isAdmin: false,
+      locked: unlocked ? null : { unlockDateBR: formatBR(unlock) }
+    });
+
+    if (status === "available") {
+      const myFolgaThisMonth = folgas.find((f) => f.user_id === user.id && monthKey(parseYMD(f.data)) === mk);
       if (myFolgaThisMonth) {
         toast.error("Você já possui uma folga selecionada neste mês.");
         return;
       }
+      
       const d = parseYMD(iso);
       const type = dayType(d);
       if (!type) return;
       
       const { data: inserted, error } = await supabase.from("folgas").insert({
-        user_id: user.id,
-        data: iso,
-        mes: mk,
-        tipo: type,
-        criado_por: user.id,
+        user_id: user.id, data: iso, mes: mk, tipo: type, criado_por: user.id,
       }).select("id").maybeSingle();
       
       if (error || !inserted) {
         toast.error("Não foi possível registrar a folga", { description: error?.message || "Data indisponível" });
-        await load();
+        load();
         return;
       }
       toast.success(`Folga registrada para ${formatBR(d)}`);
       load();
-    } else if (info.status === "mine") {
+    } else if (status === "mine") {
       if (!confirm("Deseja cancelar sua folga nesta data?")) return;
       const { error } = await supabase.from("folgas").delete().eq("user_id", user.id).eq("data", iso);
       if (error) return toast.error(error.message);
       toast.success("Folga cancelada");
       load();
-    } else if (info.status === "pending") {
+    } else if (status === "pending") {
       const solic = pendingSolics.find(s => s.data === iso);
       if (solic) setViewDialog(solic);
-    } else if (info.status === "blocked" || info.status === "taken" || info.status === "birthday") {
-      setReqDialog({ iso, reason: info.reason ?? "Data indisponível" });
+    } else if (status === "blocked" || status === "taken" || status === "birthday") {
+      setReqDialog({ iso, reason: reason ?? "Data indisponível" });
     }
   };
 
@@ -255,13 +200,6 @@ export default function CalendarioPage() {
         </p>
       </div>
 
-      {myFolgaThisMonth && (
-        <div className="rounded-xl bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700">
-          Sua folga em <b>{MONTH_NAMES[month0]}</b>:{" "}
-          <b>{formatBR(parseYMD(myFolgaThisMonth.data))}</b>. Clique nela para cancelar.
-        </div>
-      )}
-
       {myBirthdayPrio && (
         <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm flex items-center justify-between gap-3 flex-wrap text-amber-700">
           <div className="flex items-center gap-2">
@@ -278,14 +216,15 @@ export default function CalendarioPage() {
       <FolgaCalendar
         year={year}
         month0={month0}
-        occupantsByDate={occupantsByDate}
         manualBlocked={manualMap}
         dayLimits={dayLimits}
-        birthdayByDate={birthdayByDate}
+        birthdayByDate={birthdayByDate as any}
         myUserId={user?.id ?? null}
-        fixedDayOfWeek={profile?.folga_fixa_semana}
-        onPrev={goPrev}
-        onNext={goNext}
+        allFolgas={folgas}
+        allProfiles={allProfiles}
+        pendingRequests={pendingSolics}
+        onPrev={() => { const d = new Date(year, month0 - 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); }}
+        onNext={() => { const d = new Date(year, month0 + 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); }}
         onSelectDay={onSelectDay}
         locked={unlocked ? null : { unlockDateBR: formatBR(unlock) }}
       />
@@ -296,7 +235,6 @@ export default function CalendarioPage() {
         Você pode <b>solicitar exceção</b> clicando em uma data vermelha.
       </div>
 
-      {/* Modal para Nova Solicitação */}
       <Dialog open={!!reqDialog} onOpenChange={(o) => !o && setReqDialog(null)}>
         <DialogContent>
           <DialogHeader>
@@ -320,7 +258,6 @@ export default function CalendarioPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal para Visualizar Solicitação Pendente */}
       <Dialog open={!!viewDialog} onOpenChange={(o) => !o && setViewDialog(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -333,23 +270,16 @@ export default function CalendarioPage() {
               )}
             </DialogDescription>
           </DialogHeader>
-          
           <div className="space-y-4 py-2">
             <div className="bg-violet-50 border border-violet-100 rounded-xl p-4 space-y-2">
               <Label className="text-[10px] font-black uppercase tracking-widest text-violet-400">Seu Motivo</Label>
               <p className="text-sm text-violet-900 italic">"{viewDialog?.motivo}"</p>
             </div>
-            
             <div className="flex items-center gap-2 text-amber-600 bg-amber-50 p-3 rounded-lg border border-amber-100">
               <AlertCircle className="size-4 shrink-0" />
               <span className="text-xs font-medium">Aguardando aprovação administrativa</span>
             </div>
-            
-            <div className="text-[10px] text-muted-foreground text-right">
-              Enviada em {viewDialog && new Date(viewDialog.created_at).toLocaleString('pt-BR')}
-            </div>
           </div>
-
           <DialogFooter>
             <Button variant="outline" className="w-full" onClick={() => setViewDialog(null)}>Fechar</Button>
           </DialogFooter>
