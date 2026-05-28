@@ -8,6 +8,7 @@ import SetupPage from "@/pages/Setup";
 import CalendarioPage from "@/pages/Calendario";
 import HistoricoPage from "@/pages/Historico";
 import TrocasPage from "@/pages/Trocas";
+import PerfilPage from "@/pages/Perfil";
 
 // Admin Pages
 import AdminDashboard from "@/pages/admin/Dashboard";
@@ -39,6 +40,7 @@ export default function App() {
       <Route path="/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
       <Route path="/historico" element={<ProtectedRoute><HistoricoPage /></ProtectedRoute>} />
       <Route path="/trocas" element={<ProtectedRoute><TrocasPage /></ProtectedRoute>} />
+      <Route path="/perfil" element={<ProtectedRoute><PerfilPage /></ProtectedRoute>} />
 
       {/* Admin */}
       <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />

@@ -15,6 +15,9 @@ interface Profile {
   data_demissao?: string | null;
   data_nascimento?: string | null;
   folga_fixa_semana?: number | null;
+  endereco?: string | null;
+  email_contato?: string | null;
+  whatsapp?: string | null;
 }
 
 interface AuthState {

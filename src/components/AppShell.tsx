@@ -55,6 +55,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         path.startsWith("/historico") || 
                         (path.startsWith("/admin") && path !== "/admin/funcionarios");
 
+  const cadastroPath = role === "admin" ? "/admin/funcionarios" : "/perfil";
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
       {/* Header Mobile */}
@@ -85,21 +87,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-180px)]">
-          {/* Cadastro Colaborador (Admin Only) */}
-          {role === "admin" && (
-            <Link
-              to="/admin/funcionarios"
-              className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors mb-2",
-                path === "/admin/funcionarios"
-                  ? "bg-primary/15 text-primary font-bold"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
-              )}
-            >
-              <Users className="size-4" />
-              <span>Cadastro Colaborador</span>
-            </Link>
-          )}
+          {/* Cadastro Colaborador */}
+          <Link
+            to={cadastroPath}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors mb-2",
+              path === cadastroPath
+                ? "bg-primary/15 text-primary font-bold"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent"
+            )}
+          >
+            <Users className="size-4" />
+            <span>Cadastro Colaborador</span>
+          </Link>
 
           {/* Grupo Folgas */}
           <div className="space-y-1">
