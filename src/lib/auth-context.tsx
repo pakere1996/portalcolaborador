@@ -39,52 +39,71 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const loadProfile = async (uid: string) => {
-    // Timeout de segurança: se o banco não responder em 6 segundos, libera a tela
-    const timeout = setTimeout(() => {
-      console.warn("[Auth] Timeout ao carregar perfil. Liberando tela...");
-      setLoading(false);
-    }, 6000);
-
+    console.log("[Auth] Iniciando carregamento de dados para:", uid);
+    
     try {
-      console.log("[Auth] Carregando dados para o usuário:", uid);
-      
+      // Carregamos perfil e roles em paralelo para performance
       const [profRes, rolesRes] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
         supabase.from("user_roles").select("role").eq("user_id", uid)
       ]);
 
-      if (profRes.error) console.error("[Auth] Erro Perfil:", profRes.error);
-      if (rolesRes.error) console.error("[Auth] Erro Roles:", rolesRes.error);
+      if (profRes.error) {
+        console.error("[Auth] Erro ao buscar perfil:", profRes.error);
+      }
+      
+      if (rolesRes.error) {
+        console.error("[Auth] Erro ao buscar roles:", rolesRes.error);
+      }
 
       const p = profRes.data as Profile | null;
       
       if (p && p.ativo === false) {
+        console.warn("[Auth] Usuário inativo, deslogando...");
         await supabase.auth.signOut();
         return;
       }
 
       setProfile(p);
+      
       const roles = (rolesRes.data ?? []).map((x: any) => x.role);
+      console.log("[Auth] Roles encontradas:", roles);
 
       if (roles.includes("admin")) {
         setRole("admin");
       } else if (roles.includes("funcionario")) {
         setRole("funcionario");
       } else {
+        // Se não tem role no banco, mas o usuário existe, pode ser um erro de sincronização
+        console.warn("[Auth] Nenhuma role encontrada para o usuário.");
         setRole(null);
       }
       
     } catch (err) {
       console.error("[Auth] Erro crítico no loadProfile:", err);
     } finally {
-      clearTimeout(timeout);
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    // 1. Verificar sessão atual imediatamente
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      if (s) {
+        console.log("[Auth] Sessão inicial encontrada");
+        setSession(s);
+        loadProfile(s.user.id);
+      } else {
+        console.log("[Auth] Nenhuma sessão inicial");
+        setLoading(false);
+      }
+    });
+
+    // 2. Ouvir mudanças de estado (login/logout)
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
-      if (event === 'SIGNED_OUT') {
+      console.log("[Auth] Evento de autenticação:", event);
+      
+      if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
         setSession(null);
         setProfile(null);
         setRole(null);
@@ -95,17 +114,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (currentSession) {
         setSession(currentSession);
         await loadProfile(currentSession.user.id);
-      } else {
-        setLoading(false);
-      }
-    });
-
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      if (s) {
-        setSession(s);
-        loadProfile(s.user.id);
-      } else {
-        setLoading(false);
       }
     });
 
