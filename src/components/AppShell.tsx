@@ -12,7 +12,8 @@ import {
   Users, 
   X,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Settings
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [folgasOpen, setFolgasOpen] = useState(true);
 
-  // Fecha o menu mobile ao mudar de rota
   useEffect(() => {
     setOpen(false);
   }, [path]);
@@ -49,13 +49,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/bloqueios", label: "Datas Bloqueadas", icon: Ban },
   ];
 
-  const folgaNav = role === "admin" ? adminFolgaNav : employeeFolgaNav;
+  const isAdmin = role === "admin";
+  const folgaNav = isAdmin ? adminFolgaNav : employeeFolgaNav;
   const isFolgaActive = path.startsWith("/calendario") || 
                         path.startsWith("/trocas") || 
                         path.startsWith("/historico") || 
                         (path.startsWith("/admin") && path !== "/admin/funcionarios");
 
-  const cadastroPath = role === "admin" ? "/admin/funcionarios" : "/perfil";
+  const cadastroPath = isAdmin ? "/admin/funcionarios" : "/perfil";
+  const cadastroLabel = isAdmin ? "Gestão de Equipe" : "Meu Cadastro";
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
@@ -87,7 +89,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-180px)]">
-          {/* Cadastro Colaborador */}
+          {/* Cadastro / Gestão */}
           <Link
             to={cadastroPath}
             className={cn(
@@ -97,8 +99,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 : "text-muted-foreground hover:text-foreground hover:bg-accent"
             )}
           >
-            <Users className="size-4" />
-            <span>Cadastro Colaborador</span>
+            {isAdmin ? <Users className="size-4" /> : <Settings className="size-4" />}
+            <span>{cadastroLabel}</span>
           </Link>
 
           {/* Grupo Folgas */}
