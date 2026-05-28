@@ -85,6 +85,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     for (const d of days) {
       const iso = ymd(d);
       
+      // CHAMADA ÚNICA DA FONTE DE VERDADE PARA CADA DIA
       const { status, reason, label } = calculateDateStatus({
         date: d,
         myUserId,
