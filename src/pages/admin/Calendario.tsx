@@ -6,13 +6,12 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Filter, User, Info, Trash2, Plus } from "lucide-react";
+import { Calendar as CalIcon, Filter, User, Trash2, Plus } from "lucide-react";
 import { dayType, formatBR, monthKey, parseYMD, ymd } from "@/lib/folga-rules";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -72,7 +71,7 @@ export default function AdminCalendar() {
         if (filterType !== "all" && filterType !== "fixed") return;
         
         const arr = m.get(iso) ?? [];
-        arr.push({ userId: p.id, userName: p.nome, type: "fixed", origin: "Folga Semanal Fixa" });
+        arr.push({ userId: p.id, userName: p.nome, type: "fixed", origin: "Folga Semanal" });
         m.set(iso, arr);
       });
     }
@@ -156,45 +155,48 @@ export default function AdminCalendar() {
     <div className="space-y-8 max-w-7xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
-            <CalIcon className="size-8 text-primary" /> Calendário Geral
+          <h1 className="text-4xl font-black text-slate-900 flex items-center gap-4 tracking-tight">
+            <div className="size-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <CalIcon className="size-7 text-primary" />
+            </div>
+            Calendário Geral
           </h1>
-          <p className="text-slate-500 mt-1">Gestão centralizada de escalas e folgas da equipe.</p>
+          <p className="text-slate-500 mt-2 font-medium">Gestão centralizada de escalas e folgas da equipe.</p>
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-wrap gap-6 items-end shadow-sm">
-        <div className="space-y-2">
-          <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-            <User className="size-3" /> Colaborador
+      <div className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-wrap gap-8 items-end shadow-sm">
+        <div className="space-y-2.5">
+          <Label className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400 flex items-center gap-2">
+            <User className="size-3.5" /> Colaborador
           </Label>
           <Select value={filterUser} onValueChange={setFilterUser}>
-            <SelectTrigger className="w-[240px] bg-slate-50 border-slate-200 rounded-xl">
+            <SelectTrigger className="w-[260px] bg-slate-50/50 border-slate-200 rounded-2xl h-12 font-semibold">
               <SelectValue placeholder="Todos" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="rounded-2xl">
               <SelectItem value="all">Todos os colaboradores</SelectItem>
               {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
-          <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-            <Filter className="size-3" /> Tipo de Folga
+        <div className="space-y-2.5">
+          <Label className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400 flex items-center gap-2">
+            <Filter className="size-3.5" /> Tipo de Folga
           </Label>
           <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className="w-[200px] bg-slate-50 border-slate-200 rounded-xl">
+            <SelectTrigger className="w-[220px] bg-slate-50/50 border-slate-200 rounded-2xl h-12 font-semibold">
               <SelectValue placeholder="Todos" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="rounded-2xl">
               <SelectItem value="all">Todos os tipos</SelectItem>
-              <SelectItem value="fixed">Semanal Fixa</SelectItem>
+              <SelectItem value="fixed">Semanal</SelectItem>
               <SelectItem value="monthly">Mensal (FDS)</SelectItem>
               <SelectItem value="pending">Pendentes</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-600" onClick={() => { setFilterUser("all"); setFilterType("all"); }}>
+        <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-900 font-bold uppercase tracking-widest text-[10px] h-12 px-6" onClick={() => { setFilterUser("all"); setFilterType("all"); }}>
           Limpar Filtros
         </Button>
       </div>
@@ -209,76 +211,76 @@ export default function AdminCalendar() {
       />
 
       <Dialog open={!!dlg} onOpenChange={(o) => !o && setDlg(null)}>
-        <DialogContent className="max-w-lg rounded-3xl border-none shadow-2xl">
+        <DialogContent className="max-w-lg rounded-[2.5rem] border-none shadow-2xl p-8">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-              <div className="size-10 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <CalIcon className="size-5 text-primary" />
+            <DialogTitle className="text-3xl font-black text-slate-900 flex items-center gap-4 tracking-tight">
+              <div className="size-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+                <CalIcon className="size-6 text-primary" />
               </div>
               {dlg && formatBR(parseYMD(dlg.iso))}
             </DialogTitle>
           </DialogHeader>
 
           {dlg && (
-            <div className="space-y-8 py-4">
-              <div className="space-y-4">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Escala do Dia</h3>
-                <div className="grid gap-3">
+            <div className="space-y-10 py-6">
+              <div className="space-y-5">
+                <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Escala do Dia</h3>
+                <div className="grid gap-4">
                   {occupantsByDate.get(dlg.iso)?.map((occ, idx) => (
-                    <div key={idx} className="group bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between transition-all hover:bg-white hover:shadow-md">
-                      <div className="flex items-center gap-4">
+                    <div key={idx} className="group bg-slate-50/50 p-5 rounded-3xl border border-slate-100 flex items-center justify-between transition-all hover:bg-white hover:shadow-xl hover:scale-[1.02]">
+                      <div className="flex items-center gap-5">
                         <div className={cn(
-                          "size-2 rounded-full",
+                          "size-3 rounded-full shadow-sm",
                           occ.type === 'fixed' ? "bg-blue-400" :
                           occ.type === 'monthly' ? "bg-amber-400" :
                           "bg-orange-400"
                         )} />
                         <div>
-                          <div className="font-bold text-slate-900">{occ.userName}</div>
-                          <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{occ.origin}</div>
+                          <div className="font-black text-slate-900 text-lg tracking-tight">{occ.userName}</div>
+                          <div className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{occ.origin}</div>
                         </div>
                       </div>
                       {occ.type === 'monthly' && (
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="size-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="size-10 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-2xl opacity-0 group-hover:opacity-100 transition-all"
                           onClick={() => removeFolga(dlg.iso, occ.userId)}
                         >
-                          <Trash2 className="size-4" />
+                          <Trash2 className="size-5" />
                         </Button>
                       )}
                     </div>
                   ))}
                   {!occupantsByDate.get(dlg.iso)?.length && (
-                    <div className="text-sm text-slate-400 text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <div className="text-sm font-medium text-slate-400 text-center py-12 bg-slate-50/50 rounded-[2rem] border border-dashed border-slate-200">
                       Ninguém escalado para este dia.
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="space-y-4 pt-4 border-t border-slate-100">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Atribuir Folga Manual</h3>
-                <div className="flex gap-3">
+              <div className="space-y-5 pt-6 border-t border-slate-100">
+                <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Atribuir Folga Manual</h3>
+                <div className="flex gap-4">
                   <Select value={assignUser} onValueChange={setAssignUser}>
-                    <SelectTrigger className="flex-1 bg-slate-50 border-slate-200 rounded-xl h-11">
+                    <SelectTrigger className="flex-1 bg-slate-50/50 border-slate-200 rounded-2xl h-14 font-semibold">
                       <SelectValue placeholder="Escolher colaborador..." />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="rounded-2xl">
                       {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <Button className="h-11 px-6 rounded-xl shadow-lg shadow-primary/20" onClick={() => assignFolga(dlg.iso)}>
-                    <Plus className="size-4 mr-2" /> Atribuir
+                  <Button className="h-14 px-8 rounded-2xl shadow-xl shadow-primary/20 font-black uppercase tracking-widest text-xs" onClick={() => assignFolga(dlg.iso)}>
+                    <Plus className="size-5 mr-2" /> Atribuir
                   </Button>
                 </div>
               </div>
             </div>
           )}
 
-          <DialogFooter className="sm:justify-center">
-            <Button variant="ghost" className="text-slate-400 font-bold uppercase tracking-widest text-[10px]" onClick={() => setDlg(null)}>Fechar</Button>
+          <DialogFooter className="sm:justify-center pt-4">
+            <Button variant="ghost" className="text-slate-400 font-black uppercase tracking-[0.2em] text-[11px] hover:text-slate-900" onClick={() => setDlg(null)}>Fechar Detalhes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

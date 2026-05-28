@@ -10,7 +10,7 @@ import {
   autoBlockedDatesForMonth,
 } from "@/lib/folga-rules";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Cake, Info, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Cake, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -91,20 +91,17 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
       const occupants = occupantsByDate?.get(iso) ?? [];
       const birthdayUser = birthdayByDate?.get(iso);
       
-      // Regra de Lotação: Apenas folgas mensais contam para o limite
       const monthlyOccupants = occupants.filter(o => o.type === 'monthly');
       const isFull = monthlyOccupants.length >= limit;
       
       const isMine = !!myUserId && occupants.some((o) => o.userId === myUserId && o.type === 'monthly');
       const hasPending = occupants.some(o => o.type === 'pending');
 
-      // 1. Datas Passadas
       if (d < today) {
         result.push({ kind: "day", date: d, iso, status: "past", occupants, limit, tooltip: "Data passada" });
         continue;
       }
 
-      // 2. Minha Folga Mensal (Colaborador)
       if (!isAdmin && isMine) {
         result.push({
           kind: "day", date: d, iso, status: "mine", occupants, limit, birthdayUser,
@@ -113,16 +110,14 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      // 3. Folga Semanal Fixa (Colaborador) - Informativa, não bloqueia
       if (!isAdmin && isFixedOff) {
         result.push({
           kind: "day", date: d, iso, status: "fixed", occupants, limit,
-          label: "Fixa", tooltip: "Sua folga semanal fixa"
+          label: "Semanal", tooltip: "Sua folga semanal fixa"
         });
         continue;
       }
 
-      // 4. Mês Bloqueado (Apenas para fins de semana)
       if (!isAdmin && locked && isWeekend) {
         result.push({
           kind: "day", date: d, iso, status: "blocked", occupants, limit,
@@ -131,7 +126,6 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      // 5. Bloqueios Manuais ou Automáticos
       const manual = manualBlocked.get(iso);
       const autoReason = auto.get(iso);
       const blockedReason = (manual && !manual.liberada) ? manual.reason : (autoReason && !manual?.liberada ? autoReason : null);
@@ -144,7 +138,6 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      // 6. Prioridade de Aniversário (Apenas para fins de semana)
       if (!isAdmin && isWeekend && birthdayUser && birthdayUser.userId !== myUserId) {
         result.push({
           kind: "day", date: d, iso, status: "birthday", occupants, limit,
@@ -153,7 +146,6 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      // 7. Pendente
       if (hasPending) {
         result.push({
           kind: "day", date: d, iso, status: "pending", occupants, limit,
@@ -162,7 +154,6 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      // 8. Lotado (Apenas para fins de semana e folgas mensais)
       if (isWeekend && isFull) {
         result.push({
           kind: "day", date: d, iso, status: "taken", occupants, limit,
@@ -171,7 +162,6 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         continue;
       }
 
-      // 9. Disponível (Verde - Apenas FDS) ou Dia Útil (Branco)
       result.push({
         kind: "day", date: d, iso, status: isWeekend ? "available" : "weekday", occupants, limit,
         tooltip: isWeekend ? (limit > 1 ? `Disponível (${monthlyOccupants.length}/${limit})` : "Disponível") : undefined
@@ -182,89 +172,93 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
 
   return (
     <TooltipProvider>
-      <div className="bg-white border border-slate-200 rounded-3xl p-4 md:p-8 shadow-sm">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-bold text-slate-900">
-              {MONTH_NAMES[month0]} <span className="text-slate-400 font-medium">{year}</span>
-            </h2>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={onPrev} className="rounded-full hover:bg-slate-100">
-              <ChevronLeft className="size-5 text-slate-600" />
+      <div className="bg-white border border-slate-200 rounded-[2rem] p-6 md:p-10 shadow-sm">
+        <div className="flex items-center justify-between mb-10">
+          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">
+            {MONTH_NAMES[month0]} <span className="text-slate-300 font-medium">{year}</span>
+          </h2>
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={onPrev} className="rounded-full hover:bg-slate-100 transition-colors">
+              <ChevronLeft className="size-6 text-slate-500" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={onNext} className="rounded-full hover:bg-slate-100">
-              <ChevronRight className="size-5 text-slate-600" />
+            <Button variant="ghost" size="icon" onClick={onNext} className="rounded-full hover:bg-slate-100 transition-colors">
+              <ChevronRight className="size-6 text-slate-500" />
             </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-px bg-slate-100 border border-slate-100 rounded-2xl overflow-hidden">
+        <div className="grid grid-cols-7 gap-px bg-slate-100 border border-slate-100 rounded-3xl overflow-hidden shadow-inner">
           {WEEKDAY_LABELS.map((w) => (
-            <div key={w} className="bg-slate-50 py-3 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            <div key={w} className="bg-slate-50/80 py-4 text-center text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">
               {w}
             </div>
           ))}
 
           {cells.map((c, i) => {
-            if (c.kind === "blank") return <div key={i} className="bg-slate-50/50 aspect-square" />;
+            if (c.kind === "blank") return <div key={i} className="bg-slate-50/30 aspect-square" />;
             
             const isClickable = !!onSelectDay;
+            const dayOfWeek = c.date.getDay();
+            const isSunday = dayOfWeek === 0;
+            const isSaturday = dayOfWeek === 6;
             
             const statusStyles = {
-              available: "bg-white hover:bg-emerald-50/30",
+              available: "bg-white hover:bg-emerald-50/40",
               blocked: "bg-slate-50/80 text-slate-400",
               taken: "bg-slate-50/80 text-slate-400",
               birthday: "bg-slate-50/80 text-slate-400",
-              mine: "bg-amber-50/50",
-              fixed: "bg-blue-50/50",
-              pending: "bg-orange-50/50",
-              past: "bg-slate-50/30 text-slate-300",
-              weekday: "bg-white hover:bg-slate-50/50",
+              mine: "bg-amber-50/60",
+              fixed: "bg-blue-50/60",
+              pending: "bg-orange-50/60",
+              past: "bg-slate-50/40 text-slate-300",
+              weekday: "bg-white hover:bg-slate-50/40",
             };
 
             const tagColors = {
-              fixed: "bg-blue-100 text-blue-700 border-blue-200",
-              monthly: "bg-amber-100 text-amber-700 border-amber-200",
-              pending: "bg-orange-100 text-orange-700 border-orange-200",
+              fixed: "bg-blue-100/80 text-blue-700 border-blue-200/50",
+              monthly: "bg-amber-100/80 text-amber-700 border-amber-200/50",
+              pending: "bg-orange-100/80 text-orange-700 border-orange-200/50",
             };
 
             return (
               <div
                 key={i}
                 className={cn(
-                  "min-h-[80px] md:min-h-[120px] bg-white p-2 flex flex-col relative transition-all duration-200 group",
+                  "min-h-[100px] md:min-h-[140px] p-3 flex flex-col relative transition-all duration-300 group border-none",
                   statusStyles[c.status],
-                  isClickable && "cursor-pointer"
+                  isSunday && c.status !== 'past' && "bg-rose-50/40",
+                  isSaturday && c.status !== 'past' && "bg-amber-50/40",
+                  isClickable && "cursor-pointer hover:shadow-lg hover:z-10 hover:scale-[1.02]"
                 )}
                 onClick={() => onSelectDay?.(c.iso, { status: c.status, reason: c.tooltip })}
               >
-                <div className="flex justify-between items-start mb-2">
+                <div className="flex justify-between items-start mb-3">
                   <span className={cn(
-                    "text-xs font-bold",
-                    c.status === 'past' ? 'text-slate-300' : 'text-slate-500'
+                    "text-sm font-bold tracking-tight",
+                    (isSunday || isSaturday) && c.status !== 'past' ? "text-slate-900" : "text-slate-400",
+                    c.status === 'past' && "text-slate-200"
                   )}>
                     {c.date.getDate()}
                   </span>
-                  {c.birthdayUser && <Cake className="size-3 text-amber-400" />}
+                  {c.birthdayUser && <Cake className="size-3.5 text-amber-400 animate-pulse" />}
                 </div>
 
                 {isAdmin && c.occupants.length > 0 && (
-                  <div className="flex flex-col gap-1 overflow-hidden">
-                    {c.occupants.slice(0, 3).map((occ, idx) => (
+                  <div className="flex flex-col gap-1.5 overflow-hidden">
+                    {c.occupants.slice(0, 4).map((occ, idx) => (
                       <div
                         key={idx}
                         className={cn(
-                          "text-[9px] px-2 py-0.5 rounded-full border truncate w-fit max-w-full font-medium",
+                          "text-[10px] px-2.5 py-1 rounded-full border truncate w-fit max-w-full font-semibold shadow-sm",
                           tagColors[occ.type]
                         )}
                       >
                         {occ.userName?.split(' ')[0]}
                       </div>
                     ))}
-                    {c.occupants.length > 3 && (
-                      <div className="text-[9px] text-slate-400 font-medium pl-1 flex items-center gap-1">
-                        <Users className="size-2" /> +{c.occupants.length - 3}
+                    {c.occupants.length > 4 && (
+                      <div className="text-[10px] text-slate-400 font-bold pl-1 flex items-center gap-1 mt-1">
+                        <Users className="size-3" /> +{c.occupants.length - 4}
                       </div>
                     )}
                   </div>
@@ -272,7 +266,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
 
                 {!isAdmin && c.label && (
                   <div className={cn(
-                    "mt-auto text-[9px] font-bold px-2 py-0.5 rounded-full border w-fit",
+                    "mt-auto text-[10px] font-bold px-3 py-1 rounded-full border w-fit shadow-sm",
                     c.status === 'mine' ? tagColors.monthly : 
                     c.status === 'fixed' ? tagColors.fixed : 
                     c.status === 'pending' ? tagColors.pending : 'bg-slate-100 text-slate-500 border-slate-200'
@@ -282,8 +276,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                 )}
 
                 {c.status === 'available' && !isAdmin && (
-                  <div className="mt-auto opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span className="text-[9px] text-emerald-600 font-bold uppercase tracking-tighter">Selecionar</span>
+                  <div className="mt-auto opacity-0 group-hover:opacity-100 transition-all transform translate-y-1 group-hover:translate-y-0">
+                    <span className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">Selecionar</span>
                   </div>
                 )}
               </div>
@@ -291,9 +285,9 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
           })}
         </div>
 
-        <div className="flex flex-wrap gap-6 mt-8 pt-6 border-t border-slate-100">
+        <div className="flex flex-wrap gap-8 mt-10 pt-8 border-t border-slate-100">
           <Legend color="bg-emerald-400" label="Disponível" />
-          <Legend color="bg-blue-400" label="Folga Fixa" />
+          <Legend color="bg-blue-400" label="Folga Semanal" />
           <Legend color="bg-amber-400" label="Folga Mensal" />
           <Legend color="bg-orange-400" label="Pendente" />
           <Legend color="bg-slate-300" label="Indisponível" />
@@ -305,9 +299,9 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
 
 function Legend({ color, label }: { color: string; label: string }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className={cn("size-2 rounded-full", color)} />
-      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>
+    <div className="flex items-center gap-3">
+      <span className={cn("size-2.5 rounded-full shadow-sm", color)} />
+      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">{label}</span>
     </div>
   );
 }

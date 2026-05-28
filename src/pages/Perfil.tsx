@@ -96,7 +96,7 @@ export default function PerfilPage() {
           </div>
           <div>
             <Label className="text-xs text-muted-foreground uppercase flex items-center gap-1">
-              <CalendarDays className="size-3 text-blue-500" /> Folga Fixa Semanal
+              <CalendarDays className="size-3 text-blue-500" /> Folga Semanal
             </Label>
             <div className="text-sm font-medium text-blue-600">
               {profile.folga_fixa_semana != null ? WEEKDAYS[profile.folga_fixa_semana] : "Não definida"}

@@ -202,13 +202,13 @@ export default function Funcionarios() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Folga Fixa Semanal</Label>
+                <Label>Folga Semanal</Label>
                 <select
                   className="w-full bg-input border border-border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
                   value={form.folgaFixa}
                   onChange={(e) => setForm({ ...form, folgaFixa: e.target.value })}
                 >
-                  <option value="">— Sem folga fixa —</option>
+                  <option value="">— Sem folga semanal —</option>
                   {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
                 </select>
               </div>
@@ -233,7 +233,7 @@ export default function Funcionarios() {
                 <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Funcionário</th>
                 <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">Cargo</th>
                 <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">Nascimento</th>
-                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Folga Fixa</th>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Folga Semanal</th>
                 <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
                 <th className="text-right p-4 font-bold uppercase tracking-wider text-[10px]">Ações</th>
               </tr>
@@ -295,7 +295,6 @@ export default function Funcionarios() {
         </div>
       </div>
 
-      {/* Diálogos de Edição, Reset e Exclusão permanecem com a mesma lógica, mas com visual ajustado */}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Editar funcionário</DialogTitle></DialogHeader>
@@ -317,13 +316,13 @@ export default function Funcionarios() {
               <Input type="date" value={editForm.dataNascimento} onChange={(e) => setEditForm({ ...editForm, dataNascimento: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <Label>Folga Fixa Semanal</Label>
+              <Label>Folga Semanal</Label>
               <select
                 className="w-full bg-input border border-border rounded-md px-3 py-2 text-sm"
                 value={editForm.folgaFixa}
                 onChange={(e) => setEditForm({ ...editForm, folgaFixa: e.target.value })}
               >
-                <option value="">— Sem folga fixa —</option>
+                <option value="">— Sem folga semanal —</option>
                 {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
               </select>
             </div>

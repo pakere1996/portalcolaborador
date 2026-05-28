@@ -56,7 +56,7 @@ export default function TrocasPage() {
       .channel(`trocas-${user.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "trocas_folga" }, () => {
         load();
-        refresh(); // Atualiza o perfil local para ver a nova folga fixa
+        refresh();
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -64,10 +64,10 @@ export default function TrocasPage() {
 
   const solicitar = async () => {
     if (!user || !profile) return;
-    if (profile.folga_fixa_semana == null) return toast.error("Você não tem folga fixa definida");
+    if (profile.folga_fixa_semana == null) return toast.error("Você não tem folga semanal definida");
     if (!destId) return toast.error("Escolha um colega");
     const dest = colegas.find((c) => c.id === destId);
-    if (!dest || dest.folga_fixa_semana == null) return toast.error("Colega sem folga fixa");
+    if (!dest || dest.folga_fixa_semana == null) return toast.error("Colega sem folga semanal");
     
     const { error } = await supabase.from("trocas_folga").insert({
       solicitante_id: user.id,
@@ -94,7 +94,7 @@ export default function TrocasPage() {
     
     toast.success("Troca aprovada!");
     if (t.solicitante_aprovou || t.destinatario_aprovou) {
-      toast.info("A folga fixa foi atualizada em seu perfil.");
+      toast.info("A folga semanal foi atualizada em seu perfil.");
     }
   };
 
@@ -128,7 +128,7 @@ export default function TrocasPage() {
             <ArrowLeftRight className="size-6 text-primary" /> Trocas de Folga
           </h1>
           <p className="text-muted-foreground mt-1">
-            Sua folga fixa atual: <b className="text-primary">{profile?.folga_fixa_semana != null ? DIAS[profile.folga_fixa_semana] : "—"}</b>
+            Sua folga semanal atual: <b className="text-primary">{profile?.folga_fixa_semana != null ? DIAS[profile.folga_fixa_semana] : "—"}</b>
           </p>
         </div>
         <Button onClick={() => setOpen(true)} disabled={profile?.folga_fixa_semana == null}>
@@ -139,7 +139,7 @@ export default function TrocasPage() {
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3 text-sm text-blue-800">
         <Info className="size-5 shrink-0 mt-0.5" />
         <p>
-          Ao aprovar uma troca, sua <b>folga fixa semanal</b> será alterada automaticamente no sistema. 
+          Ao aprovar uma troca, sua <b>folga semanal</b> será alterada automaticamente no sistema. 
           Isso afetará as escalas futuras.
         </p>
       </div>
