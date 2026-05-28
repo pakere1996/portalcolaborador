@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Filter, User, Trash2, Plus, Settings2, Save } from "lucide-react";
+import { Calendar as CalIcon, Filter, User, Trash2, Plus, Settings2, Save, Lock, Info, Unlock } from "lucide-react";
 import { dayType, formatBR, monthKey, parseYMD, ymd } from "@/lib/folga-rules";
 import { cn } from "@/lib/utils";
 
@@ -63,6 +63,7 @@ export default function AdminCalendar() {
       .channel("admin-calendar-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "dia_config" }, () => load())
       .on("postgres_changes", { event: "*", schema: "public", table: "folgas" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "datas_bloqueadas" }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, []);
@@ -175,10 +176,20 @@ export default function AdminCalendar() {
     setDlg(null); load();
   };
 
+  const unlockDay = async (iso: string) => {
+    const block = manual.find(m => m.data === iso);
+    if (!block) return;
+    const { error } = await supabase.from("datas_bloqueadas").update({ liberada: true }).eq("id", block.id);
+    if (error) return toast.error(error.message);
+    toast.success("Data liberada com sucesso");
+    setDlg(null); load();
+  };
+
   const goPrev = () => { const d = new Date(year, month0 - 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); };
   const goNext = () => { const d = new Date(year, month0 + 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); };
 
   const isWeekend = dlg ? !!dayType(parseYMD(dlg.iso)) : false;
+  const currentBlock = dlg ? manual.find(m => m.data === dlg.iso && !m.liberada) : null;
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -252,6 +263,33 @@ export default function AdminCalendar() {
 
           {dlg && (
             <div className="space-y-8 py-6">
+              {/* Informações de Bloqueio */}
+              {currentBlock && (
+                <div className="bg-rose-50/80 p-6 rounded-[2rem] border border-rose-100 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-rose-400 flex items-center gap-2">
+                      <Lock className="size-3.5" /> Data Bloqueada
+                    </h3>
+                    <Badge variant="outline" className="bg-rose-100 text-rose-600 border-rose-200 text-[9px] uppercase font-black">
+                      {currentBlock.auto ? "Automático" : "Manual"}
+                    </Badge>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-lg font-black text-rose-900 leading-tight">{currentBlock.motivo}</div>
+                    <div className="text-[10px] text-rose-400 font-bold uppercase tracking-widest">
+                      Criado em: {new Date(currentBlock.created_at).toLocaleDateString('pt-BR')}
+                    </div>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    className="w-full h-12 rounded-xl border-rose-200 text-rose-600 hover:bg-rose-100 hover:text-rose-700 font-bold"
+                    onClick={() => unlockDay(dlg.iso)}
+                  >
+                    <Unlock className="size-4 mr-2" /> Liberar Data
+                  </Button>
+                </div>
+              )}
+
               {/* Configuração de Limite (Apenas FDS) */}
               {isWeekend && (
                 <div className="bg-slate-50/80 p-6 rounded-[2rem] border border-slate-100 space-y-4">
