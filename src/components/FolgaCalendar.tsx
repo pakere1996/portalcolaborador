@@ -103,7 +103,6 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
 
       if (occupants.length > 0) {
         const status = mineHere ? "mine" : isFull ? "taken" : "available";
-        // Se for "mine", mostra o nome. Se não, mostra apenas "Ocupado"
         const label = mineHere ? "Sua folga" : isFull ? "Lotado" : "Ocupado";
         
         result.push({
