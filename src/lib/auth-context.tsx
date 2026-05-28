@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -37,83 +37,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
+  const lastLoadedUid = useRef<string | null>(null);
 
   const loadProfile = async (uid: string) => {
-    console.log("[Auth] Iniciando carregamento de dados para:", uid);
+    // Evita carregar o mesmo perfil múltiplas vezes em sucessão rápida
+    if (lastLoadedUid.current === uid && profile && role) {
+      setLoading(false);
+      return;
+    }
+    
+    console.log("[Auth] Carregando dados para o usuário:", uid);
+    lastLoadedUid.current = uid;
     
     try {
-      // Carregamos perfil e roles em paralelo para performance
       const [profRes, rolesRes] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
         supabase.from("user_roles").select("role").eq("user_id", uid)
       ]);
 
-      if (profRes.error) {
-        console.error("[Auth] Erro ao buscar perfil:", profRes.error);
-      }
-      
-      if (rolesRes.error) {
-        console.error("[Auth] Erro ao buscar roles:", rolesRes.error);
-      }
+      if (profRes.error) console.error("[Auth] Erro Perfil:", profRes.error.message);
+      if (rolesRes.error) console.error("[Auth] Erro Roles:", rolesRes.error.message);
 
       const p = profRes.data as Profile | null;
       
       if (p && p.ativo === false) {
-        console.warn("[Auth] Usuário inativo, deslogando...");
+        console.warn("[Auth] Usuário inativo detectado.");
         await supabase.auth.signOut();
         return;
       }
 
+      const roles = (rolesRes.data ?? []).map((x: any) => x.role);
+      console.log("[Auth] Roles encontradas no banco:", roles);
+
       setProfile(p);
       
-      const roles = (rolesRes.data ?? []).map((x: any) => x.role);
-      console.log("[Auth] Roles encontradas:", roles);
-
       if (roles.includes("admin")) {
         setRole("admin");
       } else if (roles.includes("funcionario")) {
         setRole("funcionario");
       } else {
-        // Se não tem role no banco, mas o usuário existe, pode ser um erro de sincronização
-        console.warn("[Auth] Nenhuma role encontrada para o usuário.");
         setRole(null);
       }
       
     } catch (err) {
-      console.error("[Auth] Erro crítico no loadProfile:", err);
+      console.error("[Auth] Falha crítica no carregamento:", err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    // 1. Verificar sessão atual imediatamente
+    // 1. Verifica sessão inicial
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       if (s) {
-        console.log("[Auth] Sessão inicial encontrada");
         setSession(s);
         loadProfile(s.user.id);
       } else {
-        console.log("[Auth] Nenhuma sessão inicial");
         setLoading(false);
       }
     });
 
-    // 2. Ouvir mudanças de estado (login/logout)
+    // 2. Monitora mudanças (Login/Logout/Refresh)
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
-      console.log("[Auth] Evento de autenticação:", event);
+      console.log("[Auth] Evento:", event);
       
-      if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+      if (event === 'SIGNED_OUT') {
         setSession(null);
         setProfile(null);
         setRole(null);
+        lastLoadedUid.current = null;
         setLoading(false);
         return;
       }
 
       if (currentSession) {
         setSession(currentSession);
-        await loadProfile(currentSession.user.id);
+        loadProfile(currentSession.user.id);
       }
     });
 
