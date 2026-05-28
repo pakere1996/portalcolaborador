@@ -10,7 +10,7 @@ import {
   autoBlockedDatesForMonth,
 } from "@/lib/folga-rules";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Cake, Users, AlertCircle, Lock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Cake, Users, AlertCircle, Lock, LockOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -244,6 +244,9 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     {c.date.getDate()}
                   </span>
                   <div className="flex gap-1">
+                    {c.status === 'available' && (
+                      <LockOpen className="size-3.5 text-emerald-500 drop-shadow-[0_0_3px_rgba(16,185,129,0.3)]" />
+                    )}
                     {c.status === 'pending' && <AlertCircle className="size-4 text-violet-600" />}
                     {isBlocked && <Lock className="size-3.5 text-rose-400" />}
                     {c.birthdayUser && <Cake className="size-3.5 text-amber-400 animate-pulse" />}
