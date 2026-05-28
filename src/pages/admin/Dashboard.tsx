@@ -68,7 +68,17 @@ export default function AdminDashboard() {
     setProximasFolgas(proximos);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const ch = supabase
+      .channel("admin-dashboard-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "folgas" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "solicitacoes_especiais" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "trocas_folga" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "datas_bloqueadas" }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
 
   const handleSorteio = async () => {
     const next = new Date();

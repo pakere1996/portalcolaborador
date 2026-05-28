@@ -46,6 +46,16 @@ export default function AdminCalendar() {
 
   useEffect(() => { load(); }, [year, month0]);
 
+  useEffect(() => {
+    const ch = supabase
+      .channel("admin-calendario-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "folgas" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "datas_bloqueadas" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "dia_config" }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [year, month0]);
+
   const occupantsByDate = useMemo(() => {
     const m = new Map<string, DayOccupant[]>();
     for (const f of folgas) {
@@ -79,7 +89,7 @@ export default function AdminCalendar() {
     const v = Math.max(1, Math.min(10, Math.floor(limitInput)));
     const { error } = await supabase.from("dia_config").upsert(
       { data: iso, limite_colaboradores: v },
-      { onConflict: "data" },
+      { onConflict: "data" }
     );
     if (error) return toast.error(error.message);
     toast.success(`Limite definido: ${v} colaborador(es)`);
@@ -111,7 +121,7 @@ export default function AdminCalendar() {
   const liberateDate = async (iso: string) => {
     await supabase.from("datas_bloqueadas").upsert(
       { data: iso, motivo: "Liberada manualmente", liberada: true, auto: false },
-      { onConflict: "data" },
+      { onConflict: "data" }
     );
     toast.success("Data liberada"); setDlg(null); load();
   };
@@ -120,7 +130,7 @@ export default function AdminCalendar() {
     if (!blockReason.trim()) return toast.error("Informe o motivo");
     await supabase.from("datas_bloqueadas").upsert(
       { data: iso, motivo: blockReason.trim(), liberada: false, auto: false },
-      { onConflict: "data" },
+      { onConflict: "data" }
     );
     toast.success("Data bloqueada"); setDlg(null); load();
   };
@@ -157,7 +167,7 @@ export default function AdminCalendar() {
 
           {dlg && (
             <div className="space-y-4">
-              {(dlg.status === "taken" || dlg.status === "mine") ? (
+              {(dlg.status === "taken" || dlg.status === "mine" || occupantsByDate.get(dlg.iso)?.length) ? (
                 <div className="space-y-3">
                   <div className="text-sm font-medium mb-2">Colaboradores com folga:</div>
                   <div className="space-y-2">
@@ -167,6 +177,7 @@ export default function AdminCalendar() {
                         <Button variant="destructive" size="sm" onClick={() => removeFolga(dlg.iso, occ.userId)}>Remover</Button>
                       </div>
                     ))}
+                    {!occupantsByDate.get(dlg.iso)?.length && <div className="text-xs text-muted-foreground">Ninguém escalado.</div>}
                   </div>
                 </div>
               ) : null}
