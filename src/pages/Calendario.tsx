@@ -130,7 +130,7 @@ export default function CalendarioPage() {
     
     if (info.status === "available") {
       if (myFolgaThisMonth) {
-        toast.error("Você já escolheu uma folga neste mês.");
+        toast.error("Você já possui uma folga selecionada neste mês.");
         return;
       }
       const d = parseYMD(iso);
@@ -229,6 +229,7 @@ export default function CalendarioPage() {
         birthdayByDate={birthdayByDate}
         pendingRequests={pendingReqs}
         myUserId={user?.id ?? null}
+        fixedDayOfWeek={profile?.folga_fixa_semana}
         onPrev={goPrev}
         onNext={goNext}
         onSelectDay={onSelectDay}
