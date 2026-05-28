@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 interface Notif {
@@ -56,7 +56,7 @@ export function NotificationBell() {
       await supabase.from("notificacoes").update({ lida: true }).eq("id", n.id);
     }
     setOpen(false);
-    if (n.link) navigate({ to: n.link });
+    if (n.link) navigate(n.link);
   };
 
   const markAllRead = async () => {

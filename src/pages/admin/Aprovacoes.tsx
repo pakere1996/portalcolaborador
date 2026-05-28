@@ -1,16 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { UserCheck, Check, X } from "lucide-react";
 import { formatCPF } from "@/lib/cpf";
-import { adminApproveUser } from "@/lib/admin-users.functions";
-
-export const Route = createFileRoute("/_authenticated/admin/aprovacoes")({
-  component: AprovacoesPage,
-});
+import { adminApi } from "@/lib/admin-api";
 
 interface Pend {
   id: string;
@@ -20,10 +14,9 @@ interface Pend {
   created_at: string;
 }
 
-function AprovacoesPage() {
+export default function AprovacoesPage() {
   const [list, setList] = useState<Pend[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
-  const approveFn = useServerFn(adminApproveUser);
 
   const load = async () => {
     const { data, error } = await supabase
@@ -34,6 +27,7 @@ function AprovacoesPage() {
     if (error) toast.error(error.message);
     setList((data ?? []) as Pend[]);
   };
+  
   useEffect(() => {
     load();
   }, []);
@@ -41,7 +35,7 @@ function AprovacoesPage() {
   const decide = async (id: string, approve: boolean) => {
     setBusy(id);
     try {
-      await approveFn({ data: { targetUserId: id, approve } });
+      await adminApi.approveUser(id, approve);
       toast.success(approve ? "Cadastro aprovado" : "Cadastro recusado");
       load();
     } catch (e) {

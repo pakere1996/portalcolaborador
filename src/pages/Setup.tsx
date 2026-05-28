@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { cpfToEmail, formatCPF, isValidCPFLength, onlyDigits } from "@/lib/cpf";
@@ -9,9 +9,7 @@ import { toast } from "sonner";
 import { ShieldCheck } from "lucide-react";
 import logo from "@/assets/pakere-logo.png";
 
-export const Route = createFileRoute("/setup")({ component: Setup });
-
-function Setup() {
+export default function SetupPage() {
   const navigate = useNavigate();
   const [nome, setNome] = useState("");
   const [cpf, setCpf] = useState("");
@@ -25,7 +23,6 @@ function Setup() {
     if (password.length < 6) return toast.error("Senha deve ter pelo menos 6 caracteres");
 
     setBusy(true);
-    // Block if any admin already exists
     const { count } = await supabase
       .from("user_roles")
       .select("*", { count: "exact", head: true })
@@ -34,7 +31,7 @@ function Setup() {
     if ((count ?? 0) > 0) {
       setBusy(false);
       toast.error("Já existe um administrador. Faça login.");
-      navigate({ to: "/login" });
+      navigate("/login");
       return;
     }
 
@@ -53,26 +50,17 @@ function Setup() {
       return;
     }
 
-    // Promote to admin
-    const { error: rerr } = await supabase
-      .from("user_roles")
-      .insert({ user_id: data.user.id, role: "admin" });
-    if (rerr) {
-      // Likely RLS blocked because no admin existed yet. Try via a workaround: just notify.
-      // The trigger created funcionario role; admin promotion needs to happen server-side.
-      // Since RLS on user_roles requires admin to insert, we use the special function below.
-      const { error: rpcErr } = await supabase.rpc("promote_first_admin", { _user_id: data.user.id });
-      if (rpcErr) {
-        setBusy(false);
-        toast.error("Conta criada, mas não foi possível promover a admin.", { description: rpcErr.message });
-        return;
-      }
+    const { error: rpcErr } = await supabase.rpc("promote_first_admin", { _user_id: data.user.id });
+    if (rpcErr) {
+      setBusy(false);
+      toast.error("Conta criada, mas não foi possível promover a admin.", { description: rpcErr.message });
+      return;
     }
 
     setBusy(false);
     toast.success("Administrador criado! Faça login.");
     await supabase.auth.signOut();
-    navigate({ to: "/login" });
+    navigate("/login");
   };
 
   return (

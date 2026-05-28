@@ -1,6 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,15 +14,7 @@ import {
 import { toast } from "sonner";
 import { Plus, Users, Pencil, Trash2, KeyRound } from "lucide-react";
 import { formatCPF, isValidCPFLength, onlyDigits } from "@/lib/cpf";
-import {
-  adminCreateUser,
-  adminDeleteUser,
-  adminResetPassword,
-} from "@/lib/admin-users.functions";
-
-export const Route = createFileRoute("/_authenticated/admin/funcionarios")({
-  component: Funcionarios,
-});
+import { adminApi } from "@/lib/admin-api";
 
 const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
@@ -51,7 +41,7 @@ const blankForm = {
   folgaFixa: "",
 };
 
-function Funcionarios() {
+export default function Funcionarios() {
   const [list, setList] = useState<Profile[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(blankForm);
@@ -66,10 +56,6 @@ function Funcionarios() {
   const [newPwd, setNewPwd] = useState("");
 
   const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
-
-  const createFn = useServerFn(adminCreateUser);
-  const deleteFn = useServerFn(adminDeleteUser);
-  const resetFn = useServerFn(adminResetPassword);
 
   const load = async () => {
     const { data } = await supabase
@@ -86,17 +72,15 @@ function Funcionarios() {
     if (form.senha.length < 6) return toast.error("Senha deve ter pelo menos 6 caracteres");
     setBusy(true);
     try {
-      await createFn({
-        data: {
-          nome: form.nome.trim(),
-          cpf: onlyDigits(form.cpf),
-          cargo: form.cargo.trim() || "Funcionário",
-          senha: form.senha,
-          dataAdmissao: form.dataAdmissao || null,
-          dataNascimento: form.dataNascimento || null,
-          folgaFixaSemana: form.folgaFixa === "" ? null : Number(form.folgaFixa),
-          role: "funcionario",
-        },
+      await adminApi.createUser({
+        nome: form.nome.trim(),
+        cpf: onlyDigits(form.cpf),
+        cargo: form.cargo.trim() || "Funcionário",
+        senha: form.senha,
+        dataAdmissao: form.dataAdmissao || null,
+        dataNascimento: form.dataNascimento || null,
+        folgaFixaSemana: form.folgaFixa === "" ? null : Number(form.folgaFixa),
+        role: "funcionario",
       });
       toast.success("Funcionário cadastrado");
       setOpen(false);
@@ -150,7 +134,7 @@ function Funcionarios() {
     if (!resetting) return;
     if (newPwd.length < 6) return toast.error("Mínimo 6 caracteres");
     try {
-      await resetFn({ data: { targetUserId: resetting.id, newPassword: newPwd } });
+      await adminApi.resetPassword(resetting.id, newPwd);
       toast.success("Senha redefinida");
       setResetting(null);
       setNewPwd("");
@@ -162,7 +146,7 @@ function Funcionarios() {
   const doDelete = async () => {
     if (!confirmDelete) return;
     try {
-      await deleteFn({ data: { targetUserId: confirmDelete.id } });
+      await adminApi.deleteUser(confirmDelete.id);
       toast.success("Funcionário excluído");
       setConfirmDelete(null);
       load();
