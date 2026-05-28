@@ -40,14 +40,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadProfile = async (uid: string) => {
     try {
-      // Buscamos o perfil e a role separadamente para evitar que um erro de RLS em um trave o outro
-      const { data: prof, error: pErr } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
-      const { data: roles, error: rErr } = await supabase.from("user_roles").select("role").eq("user_id", uid);
+      console.log("[Auth] Carregando dados para:", uid);
       
-      if (pErr) console.error("[Auth] Erro ao carregar perfil:", pErr);
-      if (rErr) console.error("[Auth] Erro ao carregar roles:", rErr);
+      // Buscamos o perfil e a role
+      const [profRes, rolesRes] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
+        supabase.from("user_roles").select("role").eq("user_id", uid)
+      ]);
+      
+      if (profRes.error) console.error("[Auth] Erro Perfil:", profRes.error);
+      if (rolesRes.error) console.error("[Auth] Erro Roles:", rolesRes.error);
 
-      const p = prof as Profile | null;
+      const p = profRes.data as Profile | null;
       
       if (p && p.ativo === false) {
         console.warn("[Auth] Usuário inativo.");
@@ -56,22 +60,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setProfile(p);
-      const r = (roles ?? []).map((x: any) => x.role);
-      setRole(r.includes("admin") ? "admin" : r.includes("funcionario") ? "funcionario" : null);
+      const r = (rolesRes.data ?? []).map((x: any) => x.role);
+      
+      // Prioridade para admin
+      if (r.includes("admin")) {
+        setRole("admin");
+      } else if (r.includes("funcionario")) {
+        setRole("funcionario");
+      } else {
+        setRole(null);
+      }
+      
+      console.log("[Auth] Perfil carregado:", p?.nome, "| Role:", r);
     } catch (err) {
       console.error("[Auth] Erro crítico no contexto:", err);
     }
   };
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (evt, s) => {
+      console.log("[Auth] Evento:", evt);
       setSession(s);
       if (s?.user) {
-        loadProfile(s.user.id);
+        await loadProfile(s.user.id);
       } else {
         setProfile(null);
         setRole(null);
       }
+      setLoading(false);
     });
 
     supabase.auth.getSession().then(({ data }) => {
