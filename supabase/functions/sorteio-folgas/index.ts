@@ -15,13 +15,49 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
+    // 1. Verify JWT from Authorization header
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      console.error("[sorteio-folgas] No authorization header provided")
+      return new Response(JSON.stringify({ error: 'No authorization header' }), { 
+        status: 401, 
+        headers: corsHeaders 
+      })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token)
+
+    if (userError || !user) {
+      console.error("[sorteio-folgas] Invalid token", userError)
+      return new Response(JSON.stringify({ error: 'Invalid token' }), { 
+        status: 401, 
+        headers: corsHeaders 
+      })
+    }
+
+    // 2. Check if user has the 'admin' role
+    const { data: roleData, error: roleError } = await supabaseAdmin
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('role', 'admin')
+      .maybeSingle()
+
+    if (roleError || !roleData) {
+      console.error("[sorteio-folgas] Unauthorized access attempt", { userId: user.id, roleError })
+      return new Response(JSON.stringify({ error: 'Unauthorized: Admin role required' }), { 
+        status: 403, 
+        headers: corsHeaders 
+      })
+    }
+
     const { ano, mes } = await req.json()
     const targetAno = ano || new Date().getFullYear()
-    const targetMes = mes || new Date().getMonth() + 2 // Próximo mês por padrão
+    const targetMes = mes || new Date().getMonth() + 2 
 
     console.log(`[sorteio-folgas] Iniciando sorteio para ${targetMes}/${targetAno}`)
 
-    // Aqui chamamos a função SQL que já existe no banco para realizar o sorteio
     const { data, error } = await supabaseAdmin.rpc('sortear_folgas_mes', { _ano: targetAno, _mes: targetMes })
     
     if (error) throw error
