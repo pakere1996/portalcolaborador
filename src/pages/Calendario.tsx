@@ -64,7 +64,8 @@ export default function CalendarioPage() {
       supabase.from("dia_config").select("*").gte("data", start).lte("data", end),
       supabase.from("prioridade_aniversario").select("*").eq("status", "ativa").gte("data", start).lte("data", end),
       supabase.from("solicitacoes_especiais").select("*").eq("status", "pendente").gte("data", start).lte("data", end),
-      supabase.from("profiles").select("*").eq("ativo", true),
+      // Usamos a view 'colaboradores' que não contém o CPF para proteger dados sensíveis
+      supabase.from("colaboradores" as any).select("*").eq("ativo", true),
       supabase.from("folgas_canceladas").select("*").gte("data", start).lte("data", end),
     ]);
 
