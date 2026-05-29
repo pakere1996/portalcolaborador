@@ -108,21 +108,26 @@ export default function Funcionarios() {
   };
 
   const syncAccess = async (p: Profile) => {
+    // Gera uma senha aleatória de 8 caracteres
+    const tempPassword = Math.random().toString(36).slice(-8);
     const toastId = toast.loading(`Sincronizando acesso de ${p.nome}...`);
+    
     try {
       await adminApi.createUser({
         nome: p.nome,
         cpf: onlyDigits(p.cpf),
         cargo: p.cargo,
-        senha: "mudar123456", // Senha temporária para reparo
+        senha: tempPassword,
         dataAdmissao: p.data_admissao,
         dataNascimento: p.data_nascimento,
         folgaFixaSemana: p.folga_fixa_semana,
-        role: p.role, // Mantém o papel atual
+        role: p.role,
       });
+      
       toast.success("Acesso sincronizado!", { 
         id: toastId,
-        description: "O login foi reparado. Use a função de 'Chave' para definir a senha final." 
+        duration: 10000, // Mantém o toast visível por mais tempo para o admin copiar a senha
+        description: `O login foi reparado. Nova senha temporária: ${tempPassword}. Informe ao colaborador.` 
       });
       load();
     } catch (e) {
