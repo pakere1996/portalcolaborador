@@ -1,4 +1,4 @@
-// CPF utilities: strip / format / synthesize email
+// CPF utilities: strip / format / length check
 export function onlyDigits(s: string): string {
   return s.replace(/\D/g, "");
 }
@@ -13,9 +13,4 @@ export function formatCPF(s: string): string {
 
 export function isValidCPFLength(s: string): boolean {
   return onlyDigits(s).length === 11;
-}
-
-export function cpfToEmail(cpf: string): string {
-  // Usando um domínio com TLD válido (.com.br) para evitar rejeição do servidor de autenticação
-  return `${onlyDigits(cpf)}@pakere.com.br`;
 }

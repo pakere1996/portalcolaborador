@@ -6,13 +6,13 @@ import { Label } from "@/components/ui/label";
 import logo from "@/assets/pakere-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
-import { cpfToEmail, formatCPF, isValidCPFLength, onlyDigits } from "@/lib/cpf";
 import { toast } from "sonner";
+import { Mail, Lock } from "lucide-react";
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const { session, role, loading } = useAuth();
-  const [cpf, setCpf] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -25,28 +25,24 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const digits = onlyDigits(cpf);
-    if (digits.length !== 11) {
-      toast.error("CPF incompleto", { description: "Digite os 11 dígitos do CPF." });
+    if (!email.trim() || !email.includes("@")) {
+      toast.error("E-mail inválido", { description: "Por favor, insira um endereço de e-mail válido." });
       return;
     }
     
-    const email = cpfToEmail(cpf);
-    console.log("[Login] Tentativa de acesso:", { email, passwordLength: password.length });
-    
     setBusy(true);
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.toLowerCase().trim(),
       password,
     });
     setBusy(false);
     
     if (error) {
-      console.error("[Login] Erro retornado pelo Supabase:", error);
+      console.error("[Login] Erro:", error);
       
       if (error.message === "Invalid login credentials") {
         toast.error("Acesso negado", { 
-          description: "CPF ou senha incorretos. Verifique se o Caps Lock está ativado." 
+          description: "E-mail ou senha incorretos. Verifique seus dados." 
         });
       } else {
         toast.error("Erro no servidor", { description: error.message });
@@ -73,20 +69,23 @@ export default function LoginPage() {
           className="bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-4"
         >
           <div className="space-y-2">
-            <Label htmlFor="cpf">CPF</Label>
+            <Label htmlFor="email" className="flex items-center gap-2">
+              <Mail className="size-4 text-muted-foreground" /> E-mail
+            </Label>
             <Input
-              id="cpf"
-              inputMode="numeric"
-              value={cpf}
-              onChange={(e) => setCpf(formatCPF(e.target.value))}
-              placeholder="000.000.000-00"
-              maxLength={14}
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="seu.email@exemplo.com"
               autoFocus
-              autoComplete="username"
+              autoComplete="email"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Senha</Label>
+            <Label htmlFor="password" className="flex items-center gap-2">
+              <Lock className="size-4 text-muted-foreground" /> Senha
+            </Label>
             <Input
               id="password"
               type="password"

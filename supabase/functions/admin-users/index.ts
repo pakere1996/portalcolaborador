@@ -57,7 +57,7 @@ serve(async (req) => {
     console.log(`[admin-users] Action: ${action}`, payload)
 
     if (action === 'create') {
-      const email = `${payload.cpf}@pakere.com.br`
+      const email = payload.email.toLowerCase().trim()
       
       const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers()
       const existingAuth = users.find(u => u.email === email)
@@ -82,6 +82,7 @@ serve(async (req) => {
         id: userId,
         nome: payload.nome,
         cpf: payload.cpf,
+        email: email,
         cargo: payload.cargo,
         data_admissao: payload.dataAdmissao,
         data_nascimento: payload.dataNascimento,
