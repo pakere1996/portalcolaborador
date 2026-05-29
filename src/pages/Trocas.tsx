@@ -4,16 +4,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeftRight, Check, X as XIcon, Info, Clock, User, MessageSquare } from "lucide-react";
+import { ArrowLeftRight, Check, X as XIcon, Info, Clock, User, MessageSquare, Loader2 } from "lucide-react";
 import { formatBR, parseYMD } from "@/lib/folga-rules";
 import { cn } from "@/lib/utils";
+import { adminApi } from "@/lib/admin-api";
 
 interface Troca {
   id: string;
-  solicitante_id: string;
+  solicitante_id?: string; // Opcional pois a view não retorna
   destinatario_id: string | null;
   data_destinatario: string;
-  data_solicitante: string | null;
+  data_solicitante?: string | null;
   mensagem: string | null;
   status: string;
   created_at: string;
@@ -23,28 +24,50 @@ export default function TrocasPage() {
   const { user } = useAuth();
   const [trocas, setTrocas] = useState<Troca[]>([]);
   const [myFolgas, setMyFolgas] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   const load = async () => {
     if (!user) return;
+    setLoading(true);
     
-    const { data: f } = await supabase.from("folgas").select("data").eq("user_id", user.id);
-    const folgaDates = (f ?? []).map(x => x.data);
-    setMyFolgas(folgaDates);
+    try {
+      // 1. Buscar minhas folgas para saber quais trocas posso aceitar
+      const { data: f } = await supabase.from("folgas").select("data").eq("user_id", user.id);
+      const folgaDates = (f ?? []).map(x => x.data);
+      setMyFolgas(folgaDates);
 
-    const { data: ts } = await supabase
-      .from("trocas_folga")
-      .select("*")
-      .or(`solicitante_id.eq.${user.id},destinatario_id.eq.${user.id},destinatario_id.is.null`)
-      .order("created_at", { ascending: false });
+      // 2. Buscar trocas onde estou envolvido (RLS permite ver solicitante_id aqui)
+      const { data: personalSwaps } = await supabase
+        .from("trocas_folga")
+        .select("*")
+        .or(`solicitante_id.eq.${user.id},destinatario_id.eq.${user.id}`)
+        .order("created_at", { ascending: false });
 
-    const filtered = (ts ?? []).filter(t => {
-      if (t.solicitante_id === user.id) return true;
-      if (t.destinatario_id === user.id) return true;
-      if (t.destinatario_id === null && folgaDates.includes(t.data_destinatario)) return true;
-      return false;
-    });
+      // 3. Buscar trocas públicas através da VIEW SEGURA (solicitante_id é oculto)
+      const { data: publicSwaps } = await supabase
+        .from("v_trocas_disponiveis" as any)
+        .select("*")
+        .order("created_at", { ascending: false });
 
-    setTrocas(filtered as Troca[]);
+      // 4. Combinar e filtrar
+      const combined: Troca[] = [...(personalSwaps ?? [])];
+      
+      // Adicionar trocas públicas que eu posso aceitar e que ainda não estão na lista pessoal
+      const personalIds = new Set(combined.map(s => s.id));
+      (publicSwaps ?? []).forEach((ps: any) => {
+        if (!personalIds.has(ps.id) && folgaDates.includes(ps.data_destinatario)) {
+          combined.push(ps);
+        }
+      });
+
+      setTrocas(combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+    } catch (error) {
+      console.error("Erro ao carregar trocas:", error);
+      toast.error("Erro ao carregar dados das trocas");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -59,42 +82,27 @@ export default function TrocasPage() {
     if (!user) return;
     
     if (!aprovar) {
-      if (t.destinatario_id) {
-        await supabase.from("trocas_folga").update({ status: "recusada", respondido_em: new Date().toISOString() }).eq("id", t.id);
-      }
-      toast.success("Solicitação ignorada");
-      load();
+      toast.info("Solicitação ignorada");
+      // Opcional: marcar localmente como ignorada para esta sessão
       return;
     }
 
-    const { error: updateErr } = await supabase.from("trocas_folga").update({ 
-      status: "aprovada", 
-      destinatario_id: user.id,
-      respondido_em: new Date().toISOString() 
-    }).eq("id", t.id);
-    
-    if (updateErr) return toast.error(updateErr.message);
-
-    await supabase.from("folgas").insert({
-      user_id: t.solicitante_id,
-      data: t.data_destinatario,
-      mes: t.data_destinatario.substring(0, 7),
-      tipo: "troca",
-      criado_por: user.id
-    });
-
-    await supabase.from("folgas_canceladas").insert({
-      user_id: user.id,
-      data: t.data_destinatario,
-      motivo: "Troca de folga aprovada"
-    });
-
-    toast.success("Troca realizada com sucesso!");
-    load();
+    setProcessingId(t.id);
+    try {
+      // Usar a Edge Function para processar a aceitação de forma anônima e segura
+      await adminApi.acceptSwap(t.id);
+      toast.success("Troca realizada com sucesso!");
+      load();
+    } catch (e) {
+      toast.error("Não foi possível realizar a troca", { description: (e as Error).message });
+    } finally {
+      setProcessingId(null);
+    }
   };
 
   const cancelar = async (id: string) => {
-    await supabase.from("trocas_folga").update({ status: "cancelada" }).eq("id", id);
+    const { error } = await supabase.from("trocas_folga").update({ status: "cancelada" }).eq("id", id);
+    if (error) return toast.error(error.message);
     toast.success("Solicitação cancelada");
     load();
   };
@@ -110,17 +118,23 @@ export default function TrocasPage() {
 
       <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-start gap-3 text-sm text-blue-800">
         <Info className="size-5 shrink-0 mt-0.5" />
-        <p>As trocas são <b>anônimas</b>. Você não verá quem solicitou nem quem recebeu até que a troca seja concluída.</p>
+        <p>As trocas são <b>100% anônimas</b>. Você não verá quem solicitou nem quem recebeu até que a troca seja concluída, garantindo a privacidade de todos.</p>
       </div>
 
       <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xl">
-        {trocas.length === 0 ? (
-          <div className="p-12 text-center text-muted-foreground">Nenhuma troca registrada.</div>
+        {loading ? (
+          <div className="p-12 text-center flex flex-col items-center gap-2 text-muted-foreground">
+            <Loader2 className="size-8 animate-spin text-primary" />
+            Carregando trocas...
+          </div>
+        ) : trocas.length === 0 ? (
+          <div className="p-12 text-center text-muted-foreground">Nenhuma troca registrada ou disponível para suas datas de folga.</div>
         ) : (
           <ul className="divide-y divide-border">
             {trocas.map((t) => {
               const isSol = t.solicitante_id === user?.id;
               const isPublic = t.destinatario_id === null;
+              const isProcessing = processingId === t.id;
               
               return (
                 <li key={t.id} className="p-6 flex flex-col gap-4 hover:bg-muted/10 transition-colors">
@@ -162,8 +176,11 @@ export default function TrocasPage() {
                             <Button variant="outline" size="sm" onClick={() => cancelar(t.id)}>Cancelar</Button>
                           ) : (
                             <>
-                              <Button variant="ghost" size="sm" onClick={() => processarTroca(t, false)}>Ignorar</Button>
-                              <Button size="sm" onClick={() => processarTroca(t, true)}><Check className="size-4 mr-1" /> Aceitar Troca</Button>
+                              <Button variant="ghost" size="sm" onClick={() => processarTroca(t, false)} disabled={isProcessing}>Ignorar</Button>
+                              <Button size="sm" onClick={() => processarTroca(t, true)} disabled={isProcessing}>
+                                {isProcessing ? <Loader2 className="size-4 animate-spin mr-1" /> : <Check className="size-4 mr-1" />}
+                                Aceitar Troca
+                              </Button>
                             </>
                           )}
                         </div>

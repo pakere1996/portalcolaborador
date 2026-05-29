@@ -24,4 +24,6 @@ export const adminApi = {
   approveUser: (targetUserId: string, approve: boolean) => 
     callAdminFunction("admin-users", { action: "approve", targetUserId, approve }),
   runSorteio: (ano?: number, mes?: number) => callAdminFunction("sorteio-folgas", { ano, mes }),
+  // Nova função para processar trocas anonimamente
+  acceptSwap: (swapId: string) => callAdminFunction("trocas-handler", { action: "accept", swapId }),
 };
