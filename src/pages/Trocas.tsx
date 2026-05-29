@@ -128,7 +128,7 @@ export default function TrocasPage() {
             Carregando trocas...
           </div>
         ) : trocas.length === 0 ? (
-          <div className="p-12 text-center text-muted-foreground">Nenhuma troca registrada ou disponível para suas datas de folga.</div>
+          <div className="p-12 text-center text-muted-foreground">Nenhuma troca registrada ou disponível para suas das de folga.</div>
         ) : (
           <ul className="divide-y divide-border">
             {trocas.map((t) => {
