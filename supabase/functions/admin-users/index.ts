@@ -110,6 +110,20 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, userId }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    if (action === 'approve') {
+      const { error: profErr } = await supabaseAdmin
+        .from('profiles')
+        .update({
+          aprovacao_status: payload.approve ? 'aprovado' : 'recusado',
+          ativo: payload.approve ? true : false,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', payload.targetUserId)
+
+      if (profErr) throw profErr
+      return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     if (action === 'reset-password') {
       const { error } = await supabaseAdmin.auth.admin.updateUserById(payload.targetUserId, { password: payload.newPassword })
       if (error) throw error
