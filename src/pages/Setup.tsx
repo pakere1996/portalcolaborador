@@ -19,16 +19,13 @@ export default function SetupPage() {
 
   useEffect(() => {
     async function checkAdmins() {
-      // Usamos uma busca simples. Se houver erro de permissão, assumimos que pode haver um admin
-      const { count, error } = await supabase
-        .from("user_roles")
-        .select("*", { count: "exact", head: true })
-        .eq("role", "admin");
+      // Chamada RPC segura que ignora RLS para verificar existência de admin
+      const { data: hasAdmin, error } = await supabase.rpc("has_any_admin");
 
       if (error) {
-        console.warn("[Setup] Erro ao verificar admins (provavelmente RLS):", error);
-        // Se deu erro de permissão, é provável que já existam dados e a RLS barrou
-      } else if ((count ?? 0) > 0) {
+        console.error("[Setup] Erro ao verificar sistema:", error);
+        toast.error("Erro ao verificar estado do sistema.");
+      } else if (hasAdmin) {
         toast.info("O sistema já possui um administrador configurado.");
         navigate("/login");
       }
@@ -60,7 +57,7 @@ export default function SetupPage() {
       return;
     }
 
-    // Tenta promover a admin via RPC
+    // Tenta promover a admin via RPC (que também possui trava de segurança no banco)
     const { error: rpcErr } = await supabase.rpc("promote_first_admin", { _user_id: data.user.id });
     
     setBusy(false);
