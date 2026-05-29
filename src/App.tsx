@@ -4,7 +4,6 @@ import { AppShell } from "@/components/AppShell";
 
 // Pages
 import LoginPage from "@/pages/Login";
-import SetupPage from "@/pages/Setup";
 import CalendarioPage from "@/pages/Calendario";
 import HistoricoPage from "@/pages/Historico";
 import TrocasPage from "@/pages/Trocas";
@@ -22,7 +21,6 @@ import AdminFuncionarios from "@/pages/admin/Funcionarios";
 function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
   const { session, role, loading } = useAuth();
 
-  // Se ainda está carregando, mostra tela de espera
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4">
@@ -32,10 +30,8 @@ function ProtectedRoute({ children, adminOnly = false }: { children: React.React
     );
   }
 
-  // Se não tem sessão, vai para o login
   if (!session) return <Navigate to="/login" replace />;
 
-  // Se a rota é admin e o usuário não é admin
   if (adminOnly && role !== "admin") {
     console.warn("[App] Acesso negado: Usuário não é administrador. Role atual:", role);
     return <Navigate to="/calendario" replace />;
@@ -49,7 +45,6 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/setup" element={<SetupPage />} />
 
       {/* Colaborador */}
       <Route path="/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
