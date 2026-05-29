@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeftRight, Check, X as XIcon, Info, Clock, User } from "lucide-react";
+import { ArrowLeftRight, Check, X as XIcon, Info, Clock, User, MessageSquare } from "lucide-react";
 import { formatBR, parseYMD } from "@/lib/folga-rules";
 import { cn } from "@/lib/utils";
 
@@ -27,21 +27,16 @@ export default function TrocasPage() {
   const load = async () => {
     if (!user) return;
     
-    // 1. Carregar minhas folgas para saber quais trocas públicas posso aceitar
     const { data: f } = await supabase.from("folgas").select("data").eq("user_id", user.id);
-    const { data: p } = await supabase.from("profiles").select("folga_fixa_semana").eq("id", user.id).single();
-    
     const folgaDates = (f ?? []).map(x => x.data);
     setMyFolgas(folgaDates);
 
-    // 2. Carregar trocas: minhas solicitações OU solicitações públicas para datas que eu folgo
     const { data: ts } = await supabase
       .from("trocas_folga")
       .select("*")
       .or(`solicitante_id.eq.${user.id},destinatario_id.eq.${user.id},destinatario_id.is.null`)
       .order("created_at", { ascending: false });
 
-    // Filtrar trocas públicas: apenas se a data_destinatario for uma das minhas folgas
     const filtered = (ts ?? []).filter(t => {
       if (t.solicitante_id === user.id) return true;
       if (t.destinatario_id === user.id) return true;
@@ -64,8 +59,6 @@ export default function TrocasPage() {
     if (!user) return;
     
     if (!aprovar) {
-      // Se for uma troca pública, apenas ignora (não remove para os outros)
-      // Se for direcionada, recusa
       if (t.destinatario_id) {
         await supabase.from("trocas_folga").update({ status: "recusada", respondido_em: new Date().toISOString() }).eq("id", t.id);
       }
@@ -74,16 +67,14 @@ export default function TrocasPage() {
       return;
     }
 
-    // Lógica de Troca Automática
     const { error: updateErr } = await supabase.from("trocas_folga").update({ 
       status: "aprovada", 
-      destinatario_id: user.id, // Assume a troca
+      destinatario_id: user.id,
       respondido_em: new Date().toISOString() 
     }).eq("id", t.id);
     
     if (updateErr) return toast.error(updateErr.message);
 
-    // 1. O solicitante ganha a folga na data do destinatário
     await supabase.from("folgas").insert({
       user_id: t.solicitante_id,
       data: t.data_destinatario,
@@ -92,14 +83,13 @@ export default function TrocasPage() {
       criado_por: user.id
     });
 
-    // 2. O destinatário (eu) trabalha na sua data original (cancelamento temporário)
     await supabase.from("folgas_canceladas").insert({
       user_id: user.id,
       data: t.data_destinatario,
       motivo: "Troca de folga aprovada"
     });
 
-    toast.success("Troca realizada com sucesso! Seu calendário foi atualizado.");
+    toast.success("Troca realizada com sucesso!");
     load();
   };
 
@@ -133,51 +123,63 @@ export default function TrocasPage() {
               const isPublic = t.destinatario_id === null;
               
               return (
-                <li key={t.id} className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-muted/10 transition-colors">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={cn(
-                        isSol ? "bg-blue-50 text-blue-600" : "bg-orange-50 text-orange-600",
-                        "border-current/20"
-                      )}>
-                        {isSol ? "Sua solicitação" : "Solicitação de troca"}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Clock className="size-3" /> {new Date(t.created_at).toLocaleDateString('pt-BR')}
-                      </span>
-                    </div>
-                    <div className="font-bold text-lg flex items-center gap-2">
-                      <User className="size-4 text-muted-foreground" />
-                      {isSol ? (isPublic ? "Aguardando interessado..." : "Troca em andamento") : "Existe um interessado na sua folga"}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      Data da folga: <b className="text-foreground">{formatBR(parseYMD(t.data_destinatario))}</b>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <Badge className={cn(
-                      "border",
-                      t.status === 'pendente' ? "bg-pending/20 text-pending-foreground border-pending/40" :
-                      t.status === 'aprovada' ? "bg-available/20 text-available border-available/40" :
-                      "bg-muted text-muted-foreground border-border"
-                    )}>
-                      {t.status}
-                    </Badge>
-
-                    {t.status === 'pendente' && (
-                      <div className="flex gap-2">
-                        {isSol ? (
-                          <Button variant="outline" size="sm" onClick={() => cancelar(t.id)}>Cancelar</Button>
-                        ) : (
-                          <>
-                            <Button variant="ghost" size="sm" onClick={() => processarTroca(t, false)}>Ignorar</Button>
-                            <Button size="sm" onClick={() => processarTroca(t, true)}><Check className="size-4 mr-1" /> Aceitar Troca</Button>
-                          </>
-                        )}
+                <li key={t.id} className="p-6 flex flex-col gap-4 hover:bg-muted/10 transition-colors">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className={cn(
+                          isSol ? "bg-blue-50 text-blue-600" : "bg-orange-50 text-orange-600",
+                          "border-current/20"
+                        )}>
+                          {isSol ? "Sua solicitação" : "Solicitação de troca"}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="size-3" /> {new Date(t.created_at).toLocaleDateString('pt-BR')}
+                        </span>
                       </div>
-                    )}
+                      <div className="font-bold text-lg flex items-center gap-2">
+                        <User className="size-4 text-muted-foreground" />
+                        {isSol ? (isPublic ? "Aguardando interessado..." : "Troca em andamento") : "Existe um interessado na sua folga"}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Data da folga: <b className="text-foreground">{formatBR(parseYMD(t.data_destinatario))}</b>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <Badge className={cn(
+                        "border",
+                        t.status === 'pendente' ? "bg-pending/20 text-pending-foreground border-pending/40" :
+                        t.status === 'aprovada' ? "bg-available/20 text-available border-available/40" :
+                        "bg-muted text-muted-foreground border-border"
+                      )}>
+                        {t.status}
+                      </Badge>
+
+                      {t.status === 'pendente' && (
+                        <div className="flex gap-2">
+                          {isSol ? (
+                            <Button variant="outline" size="sm" onClick={() => cancelar(t.id)}>Cancelar</Button>
+                          ) : (
+                            <>
+                              <Button variant="ghost" size="sm" onClick={() => processarTroca(t, false)}>Ignorar</Button>
+                              <Button size="sm" onClick={() => processarTroca(t, true)}><Check className="size-4 mr-1" /> Aceitar Troca</Button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
+
+                  {t.mensagem && (
+                    <div className="bg-muted/30 p-3 rounded-xl border border-border/50 flex items-start gap-2">
+                      <MessageSquare className="size-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                      <div className="text-xs text-muted-foreground">
+                        <span className="font-bold uppercase text-[9px] block mb-0.5">Motivo informado:</span>
+                        "{t.mensagem}"
+                      </div>
+                    </div>
+                  )}
                 </li>
               );
             })}

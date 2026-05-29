@@ -20,7 +20,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Clock, AlertCircle, ArrowLeftRight, ShieldAlert, Info, RefreshCw } from "lucide-react";
+import { Calendar as CalIcon, Clock, AlertCircle, ArrowLeftRight, ShieldAlert, Info, RefreshCw, Send } from "lucide-react";
 
 interface Solic {
   id: string;
@@ -47,7 +47,7 @@ export default function CalendarioPage() {
   
   const [smartSwap, setSmartSwap] = useState<{ iso: string } | null>(null);
   const [changeFolgaDialog, setChangeFolgaDialog] = useState<{ newIso: string; oldFolga: any } | null>(null);
-  const [reqDialog, setReqDialog] = useState<{ iso: string; reason: string } | null>(null);
+  const [reqDialog, setReqDialog] = useState<{ iso: string; type: 'swap' | 'exception' } | null>(null);
   const [viewDialog, setViewDialog] = useState<Solic | null>(null);
   const [reqMotivo, setReqMotivo] = useState("");
   const [busy, setBusy] = useState(false);
@@ -187,32 +187,39 @@ export default function CalendarioPage() {
     }
   };
 
-  const requestPublicSwap = async () => {
-    if (!user || !smartSwap) return;
-    setBusy(true);
-    const { error } = await supabase.from("trocas_folga").insert({
-      solicitante_id: user.id,
-      destinatario_id: null, // Solicitação pública/anônima
-      data_destinatario: smartSwap.iso,
-      mensagem: `Solicitação de troca anônima para o dia ${formatBR(parseYMD(smartSwap.iso))}`,
-    });
-    setBusy(false);
-    if (error) return toast.error(error.message);
-    toast.success("Solicitação de troca enviada! Os colaboradores que folgam neste dia serão notificados.");
-    setSmartSwap(null);
-    load();
-  };
-
   const submitRequest = async () => {
     if (!user || !reqDialog) return;
-    if (reqMotivo.trim().length < 5) return toast.error("Descreva o motivo.");
-    const { error } = await supabase.from("solicitacoes_especiais").insert({
-      user_id: user.id, data: reqDialog.iso, motivo: reqMotivo.trim(),
-    });
-    if (error) return toast.error(error.message);
-    toast.success("Solicitação de exceção enviada!");
-    setReqDialog(null); setReqMotivo(""); setSmartSwap(null);
-    load();
+    setBusy(true);
+    
+    try {
+      if (reqDialog.type === 'swap') {
+        const { error } = await supabase.from("trocas_folga").insert({
+          solicitante_id: user.id,
+          destinatario_id: null,
+          data_destinatario: reqDialog.iso,
+          mensagem: reqMotivo.trim() || null,
+        });
+        if (error) throw error;
+        toast.success("Solicitação de troca enviada!");
+      } else {
+        const { error } = await supabase.from("solicitacoes_especiais").insert({
+          user_id: user.id, 
+          data: reqDialog.iso, 
+          motivo: reqMotivo.trim() || "Sem motivo informado",
+        });
+        if (error) throw error;
+        toast.success("Solicitação de exceção enviada!");
+      }
+      
+      setReqDialog(null); 
+      setReqMotivo(""); 
+      setSmartSwap(null);
+      load();
+    } catch (e) {
+      toast.error("Erro ao enviar solicitação", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -265,7 +272,7 @@ export default function CalendarioPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Diálogo de Troca Anônima */}
+      {/* Diálogo de Opções (Troca ou Exceção) */}
       <Dialog open={!!smartSwap} onOpenChange={(o) => !o && setSmartSwap(null)}>
         <DialogContent className="rounded-[2rem]">
           <DialogHeader>
@@ -280,10 +287,10 @@ export default function CalendarioPage() {
               <p>Você pode solicitar uma troca anônima com os colaboradores que folgam neste dia ou pedir uma exceção ao administrador.</p>
             </div>
             <div className="grid gap-3">
-              <Button className="w-full h-12 rounded-xl font-bold" onClick={requestPublicSwap} disabled={busy}>
+              <Button className="w-full h-12 rounded-xl font-bold" onClick={() => setReqDialog({ iso: smartSwap!.iso, type: 'swap' })}>
                 <ArrowLeftRight className="size-4 mr-2" /> Solicitar troca de folga
               </Button>
-              <Button variant="outline" className="w-full h-12 rounded-xl border-primary/20 text-primary hover:bg-primary/5" onClick={() => setReqDialog({ iso: smartSwap!.iso, reason: "" })}>
+              <Button variant="outline" className="w-full h-12 rounded-xl border-primary/20 text-primary hover:bg-primary/5" onClick={() => setReqDialog({ iso: smartSwap!.iso, type: 'exception' })}>
                 <ShieldAlert className="size-4 mr-2" /> Solicitar exceção administrativa
               </Button>
             </div>
@@ -291,17 +298,49 @@ export default function CalendarioPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Diálogo de Exceção */}
+      {/* Diálogo Unificado de Motivo */}
       <Dialog open={!!reqDialog} onOpenChange={(o) => !o && setReqDialog(null)}>
         <DialogContent className="rounded-[2rem]">
           <DialogHeader>
-            <DialogTitle>Solicitar exceção administrativa</DialogTitle>
-            <DialogDescription>Data: {reqDialog && formatBR(parseYMD(reqDialog.iso))}</DialogDescription>
+            <DialogTitle className="flex items-center gap-2">
+              {reqDialog?.type === 'swap' ? <ArrowLeftRight className="size-5 text-primary" /> : <ShieldAlert className="size-5 text-primary" />}
+              {reqDialog?.type === 'swap' ? "Solicitar troca de folga" : "Solicitar exceção administrativa"}
+            </DialogTitle>
+            <DialogDescription>
+              Data: <b>{reqDialog && formatBR(parseYMD(reqDialog.iso))}</b>
+            </DialogDescription>
           </DialogHeader>
-          <Textarea placeholder="Explique o motivo da sua solicitação..." value={reqMotivo} onChange={(e) => setReqMotivo(e.target.value)} rows={5} className="rounded-xl" />
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setReqDialog(null)}>Cancelar</Button>
-            <Button onClick={submitRequest}>Enviar Solicitação</Button>
+          
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="motivo" className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                Motivo da solicitação (opcional)
+              </Label>
+              <Textarea 
+                id="motivo"
+                placeholder="Ex: Consulta médica, evento familiar, viagem..." 
+                value={reqMotivo} 
+                onChange={(e) => setReqMotivo(e.target.value)} 
+                rows={4} 
+                className="rounded-xl resize-none" 
+              />
+            </div>
+            
+            <div className="p-3 bg-muted/50 rounded-xl text-[11px] text-muted-foreground flex items-start gap-2">
+              <Info className="size-3.5 shrink-0 mt-0.5" />
+              <p>
+                {reqDialog?.type === 'swap' 
+                  ? "Sua solicitação será enviada anonimamente para os colaboradores que folgam neste dia." 
+                  : "Sua solicitação será enviada diretamente para a administração."}
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setReqDialog(null)} disabled={busy}>Cancelar</Button>
+            <Button onClick={submitRequest} disabled={busy} className="px-6">
+              {busy ? "Enviando..." : <><Send className="size-4 mr-2" /> Enviar solicitação</>}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -314,11 +353,19 @@ export default function CalendarioPage() {
           </DialogHeader>
           <div className="p-4 bg-violet-50 border border-violet-100 rounded-2xl">
             <Label className="text-[10px] font-black uppercase text-violet-400">Seu Motivo</Label>
-            <p className="text-sm text-violet-900 italic mt-1">"{viewDialog?.motivo}"</p>
+            <p className="text-sm text-violet-900 italic mt-1">"{viewDialog?.motivo || "Sem motivo informado"}"</p>
           </div>
           <DialogFooter><Button variant="outline" className="w-full" onClick={() => setViewDialog(null)}>Fechar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function Info({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+    </svg>
   );
 }
