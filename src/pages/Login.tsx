@@ -7,12 +7,13 @@ import logo from "@/assets/pakere-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
-import { Mail, Lock } from "lucide-react";
+import { IdCard, Lock } from "lucide-react";
+import { formatCPF } from "@/lib/cpf";
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const { session, role, loading } = useAuth();
-  const [email, setEmail] = useState("");
+  const [cpf, setCpf] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -25,31 +26,37 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email.trim() || !email.includes("@")) {
-      toast.error("E-mail inválido", { description: "Por favor, insira um endereço de e-mail válido." });
+    const cleanCpf = cpf.replace(/\D/g, "");
+    if (cleanCpf.length !== 11) {
+      toast.error("CPF inválido", { description: "Digite um CPF com 11 dígitos." });
       return;
     }
     
+    if (!password) {
+      toast.error("Senha obrigatória", { description: "Informe sua senha." });
+      return;
+    }
+
     setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.toLowerCase().trim(),
-      password,
-    });
-    setBusy(false);
     
+    const { data, error } = await supabase.functions.invoke("login-with-cpf", {
+      body: { cpf: cleanCpf, senha: password },
+    });
+
+    setBusy(false);
+
     if (error) {
       console.error("[Login] Erro:", error);
-      
-      if (error.message === "Invalid login credentials") {
-        toast.error("Acesso negado", { 
-          description: "E-mail ou senha incorretos. Verifique seus dados." 
-        });
-      } else {
-        toast.error("Erro no servidor", { description: error.message });
-      }
+      toast.error("Acesso negado", { description: error.message });
       return;
     }
-    
+
+    if (data?.error) {
+      toast.error("Acesso negado", { description: data.error });
+      return;
+    }
+
+    // A sessão já foi estabelecida pela função
     toast.success("Login realizado com sucesso!");
   };
 
@@ -69,17 +76,17 @@ export default function LoginPage() {
           className="bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-4"
         >
           <div className="space-y-2">
-            <Label htmlFor="email" className="flex items-center gap-2">
-              <Mail className="size-4 text-muted-foreground" /> E-mail
+            <Label htmlFor="cpf" className="flex items-center gap-2">
+              <IdCard className="size-4 text-muted-foreground" /> CPF
             </Label>
             <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="seu.email@exemplo.com"
+              id="cpf"
+              value={cpf}
+              onChange={(e) => setCpf(formatCPF(e.target.value))}
+              placeholder="000.000.000-00"
+              maxLength={14}
               autoFocus
-              autoComplete="email"
+              autoComplete="username"
             />
           </div>
           <div className="space-y-2">
