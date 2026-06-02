@@ -4,6 +4,7 @@ import { AppShell } from "@/components/AppShell";
 
 // Pages
 import LoginPage from "@/pages/Login";
+import SetupAdminPage from "@/pages/SetupAdmin";
 import CalendarioPage from "@/pages/Calendario";
 import HistoricoPage from "@/pages/Historico";
 import TrocasPage from "@/pages/Trocas";
@@ -45,6 +46,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/setup-admin" element={<SetupAdminPage />} />
 
       {/* Colaborador */}
       <Route path="/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
