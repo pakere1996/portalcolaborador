@@ -2,14 +2,13 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Google, Apple } from "lucide-react";
+import { GoogleIcon, AppleIcon } from "@/components/SocialIcons";
 
 export function SocialLoginButtons() {
   const handleLogin = async (provider: "google" | "apple") => {
     try {
       await supabase.auth.signInWithOAuth({
         provider,
-        // opcional: redirecionar para a página desejada após login
         options: {
           redirectTo: `${window.location.origin}/login`,
         },
@@ -26,7 +25,7 @@ export function SocialLoginButtons() {
         className="w-full flex items-center justify-center gap-2"
         onClick={() => handleLogin("google")}
       >
-        <Google className="size-5" />
+        <GoogleIcon />
         Entrar com Google
       </Button>
 
@@ -35,7 +34,7 @@ export function SocialLoginButtons() {
         className="w-full flex items-center justify-center gap-2"
         onClick={() => handleLogin("apple")}
       >
-        <Apple className="size-5" />
+        <AppleIcon />
         Entrar com Apple
       </Button>
     </div>
