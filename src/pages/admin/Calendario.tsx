@@ -183,7 +183,6 @@ export default function AdminCalendar() {
   const unlockDay = async (iso: string) => {
     const block = manual.find(m => m.data === iso);
     if (!block) {
-      // Se for um bloqueio automático não materializado, criamos uma entrada liberada
       const { error } = await supabase.from("datas_bloqueadas").upsert({
         data: iso,
         motivo: "Liberado manualmente",
@@ -209,7 +208,6 @@ export default function AdminCalendar() {
     const m = manual.find(x => x.data === dlg.iso && !x.liberada);
     if (m) return { motivo: m.motivo, auto: m.auto, created_at: m.created_at, id: m.id };
     
-    // Se não achou no banco, verifica se é um bloqueio automático da regra
     const auto = autoBlockedDatesForMonth(year, month0).find(b => b.date === dlg.iso);
     if (auto) return { motivo: auto.reason, auto: true, created_at: null, id: null };
     
@@ -292,7 +290,6 @@ export default function AdminCalendar() {
 
           {dlg && (
             <div className="space-y-8 py-6">
-              {/* Informações de Bloqueio */}
               {currentBlock && (
                 <div className="bg-rose-50/80 p-6 rounded-[2rem] border border-rose-100 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-center justify-between">
@@ -324,7 +321,6 @@ export default function AdminCalendar() {
                 </div>
               )}
 
-              {/* Configuração de Limite (Apenas FDS) */}
               {isWeekend && (
                 <div className="bg-slate-50/80 p-6 rounded-[2rem] border border-slate-100 space-y-4">
                   <div className="flex items-center justify-between">
