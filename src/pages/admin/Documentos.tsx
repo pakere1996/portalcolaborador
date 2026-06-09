@@ -46,6 +46,10 @@ const routeTypeMap: Record<string, DocumentType> = {
   "/admin/documentos/ponto": "folha_ponto",
 };
 
+function getEmptyStats(): UploadStats {
+  return { auto: 0, manual: 0, pending: 0, total: 0 };
+}
+
 export default function AdminDocumentosPage() {
   const { user } = useAuth();
   const location = useLocation();
@@ -62,14 +66,19 @@ export default function AdminDocumentosPage() {
   const [pageResults, setPageResults] = useState<PageResult[]>([]);
   const [manualProfileByPage, setManualProfileByPage] = useState<Record<number, string>>({});
   const [identifiedNames, setIdentifiedNames] = useState<Record<number, string>>({});
-  const [stats, setStats] = useState<UploadStats>({ auto: 0, manual: 0, pending: 0, total: 0 });
+  const [stats, setStats] = useState<UploadStats>(getEmptyStats());
   const [showResults, setShowResults] = useState(false);
   const [duplicateDocs, setDuplicateDocs] = useState<Documento[]>([]);
   const [pendingSave, setPendingSave] = useState(false);
-  const [detectedReference, setDetectedReference] = useState<string>("");
+  const [detectedReference, setDetectedReference] = useState("");
 
   useEffect(() => {
     setTipo(routeType);
+    setShowResults(false);
+    setDuplicateDocs([]);
+    setPageResults([]);
+    setManualProfileByPage({});
+    setIdentifiedNames({});
   }, [routeType]);
 
   useEffect(() => {
@@ -94,12 +103,8 @@ export default function AdminDocumentosPage() {
   };
 
   const updateStats = (docsList: Documento[]) => {
-    const nextStats: UploadStats = {
-      auto: 0,
-      manual: 0,
-      pending: 0,
-      total: docsList.length,
-    };
+    const nextStats = getEmptyStats();
+    nextStats.total = docsList.length;
 
     docsList.forEach((doc) => {
       if (doc.status === "pendente") {
@@ -118,6 +123,17 @@ export default function AdminDocumentosPage() {
     navigate(value === "contracheque" ? "/admin/documentos" : "/admin/documentos/ponto");
   };
 
+  const resetUploadState = () => {
+    setFile(null);
+    setShowResults(false);
+    setPageResults([]);
+    setManualProfileByPage({});
+    setIdentifiedNames({});
+    setDuplicateDocs([]);
+    setPendingSave(false);
+    setDetectedReference("");
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile || selectedFile.type !== "application/pdf") {
@@ -127,7 +143,11 @@ export default function AdminDocumentosPage() {
 
     setFile(selectedFile);
     setShowResults(false);
+    setPageResults([]);
+    setManualProfileByPage({});
+    setIdentifiedNames({});
     setDuplicateDocs([]);
+    setPendingSave(false);
     setDetectedReference("");
 
     try {
@@ -189,6 +209,8 @@ export default function AdminDocumentosPage() {
 
       if (duplicates.length > 0) {
         toast.warning("Já existem documentos deste tipo para este mês/ano");
+      } else {
+        toast.success("PDF processado com sucesso");
       }
     } catch {
       toast.error("Erro ao processar PDF");
@@ -224,13 +246,21 @@ export default function AdminDocumentosPage() {
       ...prev,
       [pageNumber]: name,
     }));
+
+    setPageResults((prev) =>
+      prev.map((page) =>
+        page.pageNumber === pageNumber
+          ? { ...page, identifiedName: name }
+          : page,
+      ),
+    );
   };
 
   const persistDocuments = async () => {
     if (!file || !tipo || !mes || !ano) return;
 
     setProcessing(true);
-    const newStats: UploadStats = { auto: 0, manual: 0, pending: 0, total: 0 };
+    const newStats = getEmptyStats();
 
     try {
       const groups: Record<string, PageResult[]> = {};
@@ -250,12 +280,14 @@ export default function AdminDocumentosPage() {
       }
 
       if (duplicateDocs.length > 0) {
-        await supabase
+        const { error: deleteError } = await supabase
           .from("documentos")
           .delete()
           .eq("tipo", tipo)
           .eq("mes", Number(mes))
           .eq("ano", Number(ano));
+
+        if (deleteError) throw deleteError;
       }
 
       for (const [key, group] of Object.entries(groups)) {
@@ -292,7 +324,7 @@ export default function AdminDocumentosPage() {
         if (dbError) throw dbError;
 
         if (isProfileGroup) {
-          if (group[0].status === "manual") {
+          if (group.some((item) => item.status === "manual")) {
             newStats.manual += 1;
           } else {
             newStats.auto += 1;
@@ -300,17 +332,15 @@ export default function AdminDocumentosPage() {
         } else {
           newStats.pending += 1;
         }
+
         newStats.total += 1;
       }
 
       setStats(newStats);
-      setShowResults(false);
-      setFile(null);
-      setPendingSave(false);
-      setDuplicateDocs([]);
-      setDetectedReference("");
+      resetUploadState();
       toast.success("Documentos salvos com sucesso");
       await loadData();
+      await syncAdminMonthlyDocumentReminder();
     } catch {
       toast.error("Erro ao salvar documentos");
     } finally {
@@ -331,14 +361,25 @@ export default function AdminDocumentosPage() {
     if (!confirm("Tem certeza que deseja excluir este documento?")) return;
 
     try {
-      const { data: docData } = await supabase.from("documentos").select("storage_path").eq("id", docId).single();
+      const { data: docData, error: docError } = await supabase
+        .from("documentos")
+        .select("storage_path")
+        .eq("id", docId)
+        .single();
+
+      if (docError) throw docError;
+
       if (docData?.storage_path) {
-        await supabase.storage.from("documentos").remove([docData.storage_path]);
+        const { error: storageError } = await supabase.storage.from("documentos").remove([docData.storage_path]);
+        if (storageError) throw storageError;
       }
 
-      await supabase.from("documentos").delete().eq("id", docId);
+      const { error: deleteError } = await supabase.from("documentos").delete().eq("id", docId);
+      if (deleteError) throw deleteError;
+
       toast.success("Documento excluído");
       await loadData();
+      await syncAdminMonthlyDocumentReminder();
     } catch {
       toast.error("Erro ao excluir documento");
     }
@@ -556,7 +597,7 @@ export default function AdminDocumentosPage() {
                     <h3 className="font-semibold">Página {page.pageNumber}</h3>
                     <div className="flex items-center gap-2">
                       {isAuto && <Badge className="bg-green-100 text-green-700 border-green-200">Auto: {page.profileName}</Badge>}
-                      {isManual && <Badge className="bg-blue-100 text-blue-700 border-blue-200">Manual: {identifiedNames[page.pageNumber]}</Badge>}
+                      {isManual && <Badge className="bg-blue-100 text-blue-700 border-blue-200">Manual: {identifiedNames[page.pageNumber] || page.profileName}</Badge>}
                       {isPending && <Badge className="bg-orange-100 text-orange-700 border-orange-200">Pendente</Badge>}
                     </div>
                   </div>

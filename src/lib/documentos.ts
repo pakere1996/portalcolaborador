@@ -262,7 +262,7 @@ export async function findDuplicateDocuments(tipo: DocumentType, mes: number, an
   return (data ?? []) as Documento[];
 }
 
-function getPreviousMonthReference() {
+export function getPreviousMonthReference() {
   const now = new Date();
   const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   return {
@@ -324,7 +324,8 @@ export async function syncAdminMonthlyDocumentReminder() {
 
   if (!shouldShowReminder || completed) {
     if (existing.length > 0) {
-      await supabase.from("notificacoes").delete().in("id", existing.map((item) => item.id));
+      const { error } = await supabase.from("notificacoes").delete().in("id", existing.map((item) => item.id));
+      if (error) throw error;
     }
     return;
   }
