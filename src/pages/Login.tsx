@@ -39,12 +39,23 @@ export default function LoginPage() {
       // login‑with-cpf returns { success: true, session, user }
       if (data?.session) {
         await supabase.auth.setSession(data.session);
-        console.log('CARGO:', data.user?.user_metadata?.cargo);
         toast.success("Login realizado com sucesso!");
         
-        // Usa o cargo da resposta da Edge Function (raw_user_meta_data)
-        const cargo = data.user?.user_metadata?.cargo;
-        if (cargo === "Administrador") {
+        // Consulta a tabela user_roles para verificar o cargo do usuário
+        const { data: rolesData, error: rolesError } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", data.user?.id)
+          .maybeSingle();
+        
+        if (rolesError) {
+          console.error("Erro ao buscar roles:", rolesError);
+          toast.error("Erro ao verificar permissões");
+          return;
+        }
+        
+        const role = rolesData?.role;
+        if (role === "admin") {
           navigate("/admin/calendario", { replace: true });
         } else {
           navigate("/calendario", { replace: true });
