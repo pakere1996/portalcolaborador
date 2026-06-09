@@ -40,7 +40,14 @@ export default function LoginPage() {
       if (data?.session) {
         await supabase.auth.setSession(data.session);
         toast.success("Login realizado com sucesso!");
-        navigate("/calendario", { replace: true });
+        
+        // Usa o cargo da resposta da Edge Function (raw_user_meta_data)
+        const cargo = data.user?.user_metadata?.cargo;
+        if (cargo === "Administrador") {
+          navigate("/admin/calendario", { replace: true });
+        } else {
+          navigate("/calendario", { replace: true });
+        }
       } else {
         toast.error("Resposta inválida do servidor");
       }
