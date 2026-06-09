@@ -4,19 +4,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
-import { SocialLoginButtons } from "@/components/SocialLoginButtons";
+import { toast } from "sonnerie";
 import { IdCard, Lock } from "lucide-react";
 import { formatCPF } from "@/lib/cpf";
 import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { session } = useAuth(); // <-- detect existing session
+  const { session } = useAuth();
+  // detect existing session
   const [cpf, setCpf] = useState("");
   const [senha, setSenha] = useState("");
   const [busy, setBusy] = useState(false);
-
   // If the user is already authenticated, send them to the main app
   useEffect(() => {
     if (session) {
@@ -64,41 +63,21 @@ export default function LoginPage() {
             <Label htmlFor="cpf" className="flex items-center gap-2">
               <IdCard className="size-4 text-muted-foreground" /> CPF
             </Label>
-            <Input
-              id="cpf"
-              value={cpf}
-              onChange={(e) => setCpf(formatCPF(e.target.value))}
-              placeholder="000.000.000-00"
-              maxLength={14}
-              inputMode="numeric"
-            />
+            <Input id="cpf" value={cpf} onChange={(e) => setCpf(formatCPF(e.target.value))} placeholder="000.000.000-00" maxLength={14} inputMode="numeric" />
           </div>
-
           <div className="space-y-2">
             <Label htmlFor="senha" className="flex items-center gap-2">
               <Lock className="size-4 text-muted-foreground" /> Senha
             </Label>
-            <Input
-              id="senha"
-              type="password"
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              placeholder="••••••••"
-            />
+            <Input id="senha" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••••••" />
           </div>
-
           <Button type="submit" className="w-full h-12" disabled={busy}>
             {busy ? "Entrando..." : "Entrar"}
           </Button>
         </form>
-
         <div className="text-center pt-4">
-          <p className="text-xs text-muted-foreground">
-            Esqueceu sua senha? Entre em contato com o administrador.
-          </p>
+          <p className="text-xs text-muted-foreground"> Esqueceu sua senha? Entre em contato com o administrador. </p>
         </div>
-
-        <SocialLoginButtons />
       </div>
     </div>
   );
