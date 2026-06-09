@@ -21,6 +21,8 @@ import {
   Download,
   Trash2,
   CalendarClock,
+  UserPlus,
+  Ban,
 } from "lucide-react";
 import {
   Documento,
@@ -46,8 +48,22 @@ const routeTypeMap: Record<string, DocumentType> = {
   "/admin/documentos/ponto": "folha_ponto",
 };
 
+interface NewProfileFormState {
+  nome: string;
+  cpf: string;
+  cargo: string;
+}
+
 function getEmptyStats(): UploadStats {
   return { auto: 0, manual: 0, pending: 0, total: 0 };
+}
+
+function getEmptyNewProfileForm(name = ""): NewProfileFormState {
+  return {
+    nome: name,
+    cpf: "",
+    cargo: "",
+  };
 }
 
 export default function AdminDocumentosPage() {
@@ -71,6 +87,10 @@ export default function AdminDocumentosPage() {
   const [duplicateDocs, setDuplicateDocs] = useState<Documento[]>([]);
   const [pendingSave, setPendingSave] = useState(false);
   const [detectedReference, setDetectedReference] = useState("");
+  const [newProfileForms, setNewProfileForms] = useState<Record<number, NewProfileFormState>>({});
+  const [expandedNewProfilePage, setExpandedNewProfilePage] = useState<number | null>(null);
+  const [ignoredPages, setIgnoredPages] = useState<Record<number, boolean>>({});
+  const [pageToIgnore, setPageToIgnore] = useState<number | null>(null);
 
   useEffect(() => {
     setTipo(routeType);
@@ -79,6 +99,10 @@ export default function AdminDocumentosPage() {
     setPageResults([]);
     setManualProfileByPage({});
     setIdentifiedNames({});
+    setNewProfileForms({});
+    setExpandedNewProfilePage(null);
+    setIgnoredPages({});
+    setPageToIgnore(null);
   }, [routeType]);
 
   useEffect(() => {
@@ -132,6 +156,10 @@ export default function AdminDocumentosPage() {
     setDuplicateDocs([]);
     setPendingSave(false);
     setDetectedReference("");
+    setNewProfileForms({});
+    setExpandedNewProfilePage(null);
+    setIgnoredPages({});
+    setPageToIgnore(null);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -149,6 +177,10 @@ export default function AdminDocumentosPage() {
     setDuplicateDocs([]);
     setPendingSave(false);
     setDetectedReference("");
+    setNewProfileForms({});
+    setExpandedNewProfilePage(null);
+    setIgnoredPages({});
+    setPageToIgnore(null);
 
     try {
       const pages = await extractPdfText(selectedFile);
@@ -206,6 +238,16 @@ export default function AdminDocumentosPage() {
 
       setPageResults(results);
       setShowResults(true);
+      setNewProfileForms(
+        results.reduce<Record<number, NewProfileFormState>>((acc, page) => {
+          if (page.status === "pending") {
+            acc[page.pageNumber] = getEmptyNewProfileForm(page.identifiedName);
+          }
+          return acc;
+        }, {}),
+      );
+      setIgnoredPages({});
+      setExpandedNewProfilePage(null);
 
       if (duplicates.length > 0) {
         toast.warning("Já existem documentos deste tipo para este mês/ano");
@@ -220,6 +262,14 @@ export default function AdminDocumentosPage() {
   }, [file, tipo, mes, ano, profiles]);
 
   const handleManualAssign = (pageNumber: number, profileId: string) => {
+    setIgnoredPages((prev) => {
+      const next = { ...prev };
+      delete next[pageNumber];
+      return next;
+    });
+
+    setExpandedNewProfilePage((current) => (current === pageNumber ? null : current));
+
     setManualProfileByPage((prev) => ({
       ...prev,
       [pageNumber]: profileId,
@@ -254,6 +304,127 @@ export default function AdminDocumentosPage() {
           : page,
       ),
     );
+
+    setNewProfileForms((prev) => ({
+      ...prev,
+      [pageNumber]: {
+        ...(prev[pageNumber] ?? getEmptyNewProfileForm()),
+        nome: name,
+      },
+    }));
+  };
+
+  const handleNewProfileFieldChange = (pageNumber: number, field: keyof NewProfileFormState, value: string) => {
+    setNewProfileForms((prev) => ({
+      ...prev,
+      [pageNumber]: {
+        ...(prev[pageNumber] ?? getEmptyNewProfileForm()),
+        [field]: value,
+      },
+    }));
+  };
+
+  const toggleNewProfileForm = (pageNumber: number, suggestedName: string) => {
+    setIgnoredPages((prev) => {
+      const next = { ...prev };
+      delete next[pageNumber];
+      return next;
+    });
+
+    setNewProfileForms((prev) => ({
+      ...prev,
+      [pageNumber]: prev[pageNumber] ?? getEmptyNewProfileForm(suggestedName),
+    }));
+
+    setExpandedNewProfilePage((current) => (current === pageNumber ? null : pageNumber));
+  };
+
+  const handleCreateProfile = async (pageNumber: number) => {
+    const form = newProfileForms[pageNumber] ?? getEmptyNewProfileForm();
+    const nome = form.nome.trim();
+    const cpf = form.cpf.trim();
+    const cargo = form.cargo.trim();
+
+    if (!nome || !cpf || !cargo) {
+      toast.error("Preencha nome, CPF e cargo");
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .insert({
+        id: crypto.randomUUID(),
+        nome,
+        cpf,
+        cargo,
+        ativo: true,
+      })
+      .select("id, nome")
+      .single();
+
+    if (error) {
+      toast.error("Erro ao cadastrar colaborador");
+      return;
+    }
+
+    const createdProfile = data as Profile;
+
+    setProfiles((prev) => [...prev, createdProfile].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")));
+    setManualProfileByPage((prev) => ({
+      ...prev,
+      [pageNumber]: createdProfile.id,
+    }));
+    setIdentifiedNames((prev) => ({
+      ...prev,
+      [pageNumber]: createdProfile.nome,
+    }));
+    setIgnoredPages((prev) => {
+      const next = { ...prev };
+      delete next[pageNumber];
+      return next;
+    });
+    setExpandedNewProfilePage(null);
+    setPageResults((prev) =>
+      prev.map((page) =>
+        page.pageNumber === pageNumber
+          ? {
+              ...page,
+              status: "manual",
+              profileId: createdProfile.id,
+              profileName: createdProfile.nome,
+              identifiedName: createdProfile.nome,
+            }
+          : page,
+      ),
+    );
+
+    toast.success("Novo colaborador cadastrado e vinculado");
+  };
+
+  const confirmIgnorePage = () => {
+    if (pageToIgnore === null) return;
+
+    const pageNumber = pageToIgnore;
+
+    setIgnoredPages((prev) => ({
+      ...prev,
+      [pageNumber]: true,
+    }));
+    setManualProfileByPage((prev) => {
+      const next = { ...prev };
+      delete next[pageNumber];
+      return next;
+    });
+    setExpandedNewProfilePage((current) => (current === pageNumber ? null : current));
+    setPageResults((prev) =>
+      prev.map((page) =>
+        page.pageNumber === pageNumber
+          ? { ...page, status: "pending" }
+          : page,
+      ),
+    );
+    setPageToIgnore(null);
+    toast.success(`Página ${pageNumber} ignorada`);
   };
 
   const persistDocuments = async () => {
@@ -266,6 +437,10 @@ export default function AdminDocumentosPage() {
       const groups: Record<string, PageResult[]> = {};
 
       for (const page of pageResults) {
+        if (ignoredPages[page.pageNumber]) {
+          continue;
+        }
+
         let key: string;
 
         if (page.status === "auto" || (page.status === "manual" && manualProfileByPage[page.pageNumber])) {
@@ -277,6 +452,12 @@ export default function AdminDocumentosPage() {
 
         if (!groups[key]) groups[key] = [];
         groups[key].push(page);
+      }
+
+      if (Object.keys(groups).length === 0) {
+        toast.error("Nenhuma página válida para salvar");
+        setProcessing(false);
+        return;
       }
 
       if (duplicateDocs.length > 0) {
@@ -587,18 +768,21 @@ export default function AdminDocumentosPage() {
           </CardHeader>
           <CardContent className="space-y-6">
             {pageResults.map((page) => {
+              const isIgnored = !!ignoredPages[page.pageNumber];
               const isAuto = page.status === "auto";
               const isManual = page.status === "manual";
-              const isPending = page.status === "pending";
+              const isPending = page.status === "pending" && !isIgnored;
+              const showNewProfileForm = expandedNewProfilePage === page.pageNumber && isPending;
 
               return (
                 <div key={page.pageNumber} className="border rounded-lg p-4 space-y-4">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <h3 className="font-semibold">Página {page.pageNumber}</h3>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {isAuto && <Badge className="bg-green-100 text-green-700 border-green-200">Auto: {page.profileName}</Badge>}
                       {isManual && <Badge className="bg-blue-100 text-blue-700 border-blue-200">Manual: {identifiedNames[page.pageNumber] || page.profileName}</Badge>}
                       {isPending && <Badge className="bg-orange-100 text-orange-700 border-orange-200">Pendente</Badge>}
+                      {isIgnored && <Badge className="bg-slate-100 text-slate-700 border-slate-200">Ignorada</Badge>}
                     </div>
                   </div>
 
@@ -636,6 +820,73 @@ export default function AdminDocumentosPage() {
                           placeholder="Nome do colaborador"
                         />
                       </div>
+
+                      {page.status === "pending" && !isIgnored && (
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => toggleNewProfileForm(page.pageNumber, identifiedNames[page.pageNumber] || page.identifiedName)}
+                          >
+                            <UserPlus className="size-4 mr-2" /> Cadastrar novo colaborador
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setPageToIgnore(page.pageNumber)}
+                          >
+                            <Ban className="size-4 mr-2" /> Ignorar
+                          </Button>
+                        </div>
+                      )}
+
+                      {showNewProfileForm && (
+                        <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+                          <div className="font-medium">Novo colaborador</div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div className="space-y-2">
+                              <Label>Nome</Label>
+                              <Input
+                                value={newProfileForms[page.pageNumber]?.nome || ""}
+                                onChange={(e) => handleNewProfileFieldChange(page.pageNumber, "nome", e.target.value)}
+                                placeholder="Nome completo"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>CPF</Label>
+                              <Input
+                                value={newProfileForms[page.pageNumber]?.cpf || ""}
+                                onChange={(e) => handleNewProfileFieldChange(page.pageNumber, "cpf", e.target.value)}
+                                placeholder="CPF"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Cargo</Label>
+                              <Input
+                                value={newProfileForms[page.pageNumber]?.cargo || ""}
+                                onChange={(e) => handleNewProfileFieldChange(page.pageNumber, "cargo", e.target.value)}
+                                placeholder="Cargo"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              onClick={() => handleCreateProfile(page.pageNumber)}
+                              disabled={processing}
+                            >
+                              Vincular novo colaborador
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() => setExpandedNewProfilePage(null)}
+                            >
+                              Cancelar
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -723,6 +974,23 @@ export default function AdminDocumentosPage() {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={persistDocuments}>
               Confirmar substituição
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={pageToIgnore !== null} onOpenChange={(open) => !open && setPageToIgnore(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ignorar esta página?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A página selecionada será marcada como ignorada e não será salva nem processada neste envio.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmIgnorePage}>
+              Confirmar ignorar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
