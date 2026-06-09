@@ -13,7 +13,8 @@ import {
   X,
   ChevronDown,
   ChevronRight,
-  Settings
+  Settings,
+  FileText
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/calendario", label: "Calendário", icon: Calendar },
     { to: "/trocas", label: "Trocas", icon: ArrowLeftRight },
     { to: "/historico", label: "Histórico", icon: ClipboardList },
+    { to: "/documentos", label: "Documentos", icon: FileText },
   ];
 
   const adminFolgaNav: NavItem[] = [
@@ -47,6 +49,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/aprovacoes", label: "Aprovações", icon: UserCheck },
     { to: "/admin/trocas", label: "Trocas", icon: ArrowLeftRight },
     { to: "/admin/bloqueios", label: "Datas Bloqueadas", icon: Ban },
+    { to: "/admin/documentos", label: "Documentos", icon: FileText },
   ];
 
   const isAdmin = role === "admin";
@@ -54,6 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isFolgaActive = path.startsWith("/calendario") || 
                         path.startsWith("/trocas") || 
                         path.startsWith("/historico") || 
+                        path.startsWith("/documentos") ||
                         (path.startsWith("/admin") && path !== "/admin/funcionarios");
 
   const cadastroPath = isAdmin ? "/admin/funcionarios" : "/perfil";
