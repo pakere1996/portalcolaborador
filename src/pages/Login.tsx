@@ -36,7 +36,7 @@ export default function LoginPage() {
         body: { cpf: cleanCpf, senha },
       });
       if (error) throw error;
-      // login‑with‑cpf returns { success: true, session, user }
+      // login‑with-cpf returns { success: true, session, user }
       if (data?.session) {
         await supabase.auth.setSession(data.session);
         toast.success("Login realizado com sucesso!");
