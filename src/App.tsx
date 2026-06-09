@@ -2,7 +2,6 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import { AppShell } from "@/components/AppShell";
 
-// Pages
 import LoginPage from "@/pages/Login";
 import SetupAdminPage from "@/pages/SetupAdmin";
 import CalendarioPage from "@/pages/Calendario";
@@ -12,7 +11,6 @@ import PerfilPage from "@/pages/Perfil";
 import DocumentosPage from "@/pages/Documentos";
 import DocumentosAtestadosPage from "@/pages/DocumentosAtestados";
 
-// Admin Pages
 import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminCalendario from "@/pages/admin/Calendario";
 import AdminSolicitacoes from "@/pages/admin/Solicitacoes";
@@ -53,15 +51,14 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/setup-admin" element={<SetupAdminPage />} />
 
-      {/* Colaborador */}
       <Route path="/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
       <Route path="/historico" element={<ProtectedRoute><HistoricoPage /></ProtectedRoute>} />
       <Route path="/trocas" element={<ProtectedRoute><TrocasPage /></ProtectedRoute>} />
       <Route path="/perfil" element={<ProtectedRoute><PerfilPage /></ProtectedRoute>} />
       <Route path="/documentos" element={<ProtectedRoute><DocumentosPage /></ProtectedRoute>} />
+      <Route path="/documentos/ponto" element={<ProtectedRoute><DocumentosPage /></ProtectedRoute>} />
       <Route path="/documentos/atestados" element={<ProtectedRoute><DocumentosAtestadosPage /></ProtectedRoute>} />
 
-      {/* Admin */}
       <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
       <Route path="/admin/calendario" element={<ProtectedRoute adminOnly><AdminCalendario /></ProtectedRoute>} />
       <Route path="/admin/solicitacoes" element={<ProtectedRoute adminOnly><AdminSolicitacoes /></ProtectedRoute>} />
@@ -70,6 +67,7 @@ export default function App() {
       <Route path="/admin/bloqueios" element={<ProtectedRoute adminOnly><AdminBloqueios /></ProtectedRoute>} />
       <Route path="/admin/funcionarios" element={<ProtectedRoute adminOnly><AdminFuncionarios /></ProtectedRoute>} />
       <Route path="/admin/documentos" element={<ProtectedRoute adminOnly><AdminDocumentos /></ProtectedRoute>} />
+      <Route path="/admin/documentos/ponto" element={<ProtectedRoute adminOnly><AdminDocumentos /></ProtectedRoute>} />
       <Route path="/admin/documentos/atestados" element={<ProtectedRoute adminOnly><AdminDocumentosAtestados /></ProtectedRoute>} />
       <Route path="/admin/documentos/disciplinar" element={<ProtectedRoute adminOnly><AdminDocumentosDisciplinar /></ProtectedRoute>} />
 

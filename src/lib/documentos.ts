@@ -1,8 +1,8 @@
 import * as pdfjsLib from "pdfjs-dist";
 import { GlobalWorkerOptions } from "pdfjs-dist";
 import { PDFDocument } from "pdf-lib";
+import { supabase } from "@/integrations/supabase/client";
 
-// Configuração do worker do PDF.js
 GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.mjs", import.meta.url).toString();
 
 export type DocumentType = "contracheque" | "folha_ponto";
@@ -42,19 +42,50 @@ export interface UploadStats {
   total: number;
 }
 
-// Funções utilitárias
+export interface ReferencePeriod {
+  mes: number;
+  ano: number;
+  sourceText: string;
+}
+
+export interface MonthlyHistoryItem {
+  mes: number;
+  ano: number;
+  total: number;
+  status: "ok" | "faltando" | "duplicado";
+}
+
+const MONTH_NAMES = [
+  "janeiro",
+  "fevereiro",
+  "marco",
+  "abril",
+  "maio",
+  "junho",
+  "julho",
+  "agosto",
+  "setembro",
+  "outubro",
+  "novembro",
+  "dezembro",
+];
+
 export function normalizeText(value: string): string {
   return (value ?? "")
     .toLocaleLowerCase("pt-BR")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/[^a-z0-9/]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 export function formatDocMonth(mes: number, ano: number): string {
   return `${ano}-${String(mes).padStart(2, "0")}`;
+}
+
+export function getDocumentTypeLabel(type: DocumentType): string {
+  return type === "contracheque" ? "Contracheque" : "Folha de Ponto";
 }
 
 export function getDocumentStoragePath(colaboradorId: string, tipo: DocumentType, ano: number, mes: number): string {
@@ -66,118 +97,262 @@ export function getPendingDocumentStoragePath(tipo: DocumentType, ano: number, m
   return `documentos/pendentes/${tipo}/${ano}-${String(mes).padStart(2, "0")}/${pageNumbers.join("-")}-${slug}.pdf`;
 }
 
-// Similaridade de texto
 function levenshteinDistance(a: string, b: string): number {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
-  
+
   const matrix = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null));
-  
+
   for (let i = 0; i <= a.length; i++) matrix[0][i] = i;
   for (let j = 0; j <= b.length; j++) matrix[j][0] = j;
-  
+
   for (let j = 1; j <= b.length; j++) {
     for (let i = 1; i <= a.length; i++) {
       const indicator = a[i - 1] === b[j - 1] ? 0 : 1;
       matrix[j][i] = Math.min(
         matrix[j][i - 1] + 1,
         matrix[j - 1][i] + 1,
-        matrix[j - 1][i - 1] + indicator
+        matrix[j - 1][i - 1] + indicator,
       );
     }
   }
-  
+
   return matrix[b.length][a.length];
 }
 
 export function similarity(a: string, b: string): number {
   if (!a || !b) return 0;
-  
-  // Se um é substring do outro, retorna 1
   if (a.includes(b) || b.includes(a)) return 1;
-  
+
   const max = Math.max(a.length, b.length);
   const distance = levenshteinDistance(a, b);
   return 1 - distance / max;
 }
 
-// Extração de texto do PDF
 export async function extractPdfText(file: File): Promise<{ pageNumber: number; text: string }[]> {
   const arrayBuffer = await file.arrayBuffer();
   const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
   const pdf = await loadingTask.promise;
-  
+
   const pages: { pageNumber: number; text: string }[] = [];
-  
+
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const textContent = await page.getTextContent();
-    const text = textContent.items.map((item: any) => "str" in item ? item.str : "").join(" ");
+    const text = textContent.items.map((item: any) => ("str" in item ? item.str : "")).join(" ");
     pages.push({ pageNumber: i, text });
   }
-  
+
   return pages;
 }
 
-// Cria PDF de uma única página
-export async function createSinglePagePdf(file: File, pageNumber: number): Promise<Blob> {
-  const originalPdf = await PDFDocument.load(await file.arrayBuffer());
-  const newPdf = await PDFDocument.create();
-  
-  const [page] = await newPdf.copyPages(originalPdf, [pageNumber - 1]);
-  newPdf.addPage(page);
-  
-  const bytes = await newPdf.save();
-  return new Blob([bytes], { type: "application/pdf" });
-}
-
-// Cria PDF mesclado de múltiplas páginas
 export async function createMergedPdf(file: File, pageNumbers: number[]): Promise<Blob> {
   const originalPdf = await PDFDocument.load(await file.arrayBuffer());
   const newPdf = await PDFDocument.create();
-  
+
   for (const pageNum of pageNumbers) {
     const [page] = await newPdf.copyPages(originalPdf, [pageNum - 1]);
     newPdf.addPage(page);
   }
-  
+
   const bytes = await newPdf.save();
   return new Blob([bytes], { type: "application/pdf" });
 }
 
-// Encontra melhor correspondência de perfil
 export function findBestProfileMatch(pageText: string, profiles: Profile[]): { profile: Profile; score: number; matchedText: string } | null {
   const page = normalizeText(pageText);
   let bestMatch: { profile: Profile; score: number; matchedText: string } | null = null;
-  
+
   for (const profile of profiles) {
     if (!profile.nome) continue;
-    
+
     const profileName = normalizeText(profile.nome);
     let score = similarity(page, profileName);
-    
-    // Verifica se todos os tokens significativos do nome estão no texto
-    const tokens = profileName.split(" ").filter(t => t.length > 2);
-    if (tokens.length >= 2 && tokens.every(t => page.includes(t))) {
+
+    const tokens = profileName.split(" ").filter((t) => t.length > 2);
+    if (tokens.length >= 2 && tokens.every((t) => page.includes(t))) {
       score = Math.max(score, 0.92);
     }
-    
-    // Se o nome completo está no texto, dá score máximo
+
     if (page.includes(profileName)) {
       score = 1;
     }
-    
+
     if (score > 0.82 && (!bestMatch || score > bestMatch.score)) {
       bestMatch = { profile, score, matchedText: profile.nome };
     }
   }
-  
+
   return bestMatch;
 }
 
-// Gera nome identificado a partir do texto
 export function guessNameFromText(text: string): string {
   const lines = text.split(/\n+/).map((line: string) => line.trim()).filter(Boolean);
   const firstLine = lines[0]?.slice(0, 80) || "";
   return firstLine || "Colaborador não identificado";
+}
+
+export function detectReferencePeriod(text: string): ReferencePeriod | null {
+  const normalized = normalizeText(text);
+
+  const monthRegex = new RegExp(`\\b(${MONTH_NAMES.join("|")})\\s+de\\s+(20\\d{2})\\b`, "i");
+  const monthMatch = normalized.match(monthRegex);
+  if (monthMatch) {
+    const mes = MONTH_NAMES.indexOf(monthMatch[1]) + 1;
+    const ano = Number(monthMatch[2]);
+    if (mes > 0) {
+      return { mes, ano, sourceText: monthMatch[0] };
+    }
+  }
+
+  const refRegex = /(?:periodo de referencia|referencia|competencia)\s*:?\s*(\d{2})\/(\d{2})\/(20\d{2})/i;
+  const refMatch = normalized.match(refRegex);
+  if (refMatch) {
+    return {
+      mes: Number(refMatch[2]),
+      ano: Number(refMatch[3]),
+      sourceText: refMatch[0],
+    };
+  }
+
+  const genericDateRegex = /\b(\d{2})\/(\d{2})\/(20\d{2})\b/;
+  const genericDateMatch = normalized.match(genericDateRegex);
+  if (genericDateMatch) {
+    return {
+      mes: Number(genericDateMatch[2]),
+      ano: Number(genericDateMatch[3]),
+      sourceText: genericDateMatch[0],
+    };
+  }
+
+  return null;
+}
+
+export function buildMonthlyHistory(docs: Documento[], tipo: DocumentType, monthsBack = 12): MonthlyHistoryItem[] {
+  const now = new Date();
+  const items: MonthlyHistoryItem[] = [];
+
+  for (let offset = monthsBack - 1; offset >= 0; offset--) {
+    const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const mes = date.getMonth() + 1;
+    const ano = date.getFullYear();
+    const total = docs.filter((doc) => doc.tipo === tipo && doc.mes === mes && doc.ano === ano).length;
+
+    items.push({
+      mes,
+      ano,
+      total,
+      status: total === 0 ? "faltando" : total > 1 ? "duplicado" : "ok",
+    });
+  }
+
+  return items;
+}
+
+export async function findDuplicateDocuments(tipo: DocumentType, mes: number, ano: number) {
+  const { data, error } = await supabase
+    .from("documentos")
+    .select("*")
+    .eq("tipo", tipo)
+    .eq("mes", mes)
+    .eq("ano", ano)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as Documento[];
+}
+
+function getPreviousMonthReference() {
+  const now = new Date();
+  const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return {
+    mes: previous.getMonth() + 1,
+    ano: previous.getFullYear(),
+  };
+}
+
+function isBusinessDay(date: Date) {
+  const day = date.getDay();
+  return day !== 0 && day !== 6;
+}
+
+function getFifthBusinessDay(year: number, monthIndex: number) {
+  let count = 0;
+  const date = new Date(year, monthIndex, 1);
+
+  while (count < 5) {
+    if (isBusinessDay(date)) {
+      count += 1;
+      if (count === 5) {
+        return new Date(date);
+      }
+    }
+    date.setDate(date.getDate() + 1);
+  }
+
+  return new Date(year, monthIndex, 7);
+}
+
+export async function syncAdminMonthlyDocumentReminder() {
+  const today = new Date();
+  const fifthBusinessDay = getFifthBusinessDay(today.getFullYear(), today.getMonth());
+  const shouldShowReminder = today >= fifthBusinessDay;
+  const { mes, ano } = getPreviousMonthReference();
+
+  const [adminsRes, docsRes, existingRes] = await Promise.all([
+    supabase.from("user_roles").select("user_id").eq("role", "admin"),
+    supabase.from("documentos").select("id, tipo").eq("mes", mes).eq("ano", ano),
+    supabase
+      .from("notificacoes")
+      .select("id, user_id")
+      .eq("tipo", "documentos_mensais_pendentes")
+      .eq("payload->>mes", String(mes))
+      .eq("payload->>ano", String(ano)),
+  ]);
+
+  if (adminsRes.error) throw adminsRes.error;
+  if (docsRes.error) throw docsRes.error;
+  if (existingRes.error) throw existingRes.error;
+
+  const docs = (docsRes.data ?? []) as Pick<Documento, "id" | "tipo">[];
+  const hasContracheque = docs.some((doc) => doc.tipo === "contracheque");
+  const hasFolha = docs.some((doc) => doc.tipo === "folha_ponto");
+  const completed = hasContracheque && hasFolha;
+
+  const existing = existingRes.data ?? [];
+  const adminIds = [...new Set((adminsRes.data ?? []).map((item) => item.user_id))];
+
+  if (!shouldShowReminder || completed) {
+    if (existing.length > 0) {
+      await supabase.from("notificacoes").delete().in("id", existing.map((item) => item.id));
+    }
+    return;
+  }
+
+  const existingByUser = new Set(existing.map((item) => item.user_id));
+  const missingUsers = adminIds.filter((id) => !existingByUser.has(id));
+
+  if (missingUsers.length === 0) return;
+
+  const payload = {
+    mes,
+    ano,
+    tiposPendentes: [
+      !hasContracheque ? "contracheque" : null,
+      !hasFolha ? "folha_ponto" : null,
+    ].filter(Boolean),
+  };
+
+  const inserts = missingUsers.map((userId) => ({
+    user_id: userId,
+    titulo: "Lembrete de documentos mensais",
+    mensagem: "Envie os documentos do mês anterior para remover este aviso.",
+    link: "/admin/documentos",
+    lida: false,
+    tipo: "documentos_mensais_pendentes",
+    payload,
+  }));
+
+  const { error } = await supabase.from("notificacoes").insert(inserts);
+  if (error) throw error;
 }

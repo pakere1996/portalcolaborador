@@ -15,7 +15,7 @@ import {
   ChevronRight,
   Settings,
   FileText,
-  FileWarning
+  FileWarning,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setOpen(false);
   }, [path]);
 
+  useEffect(() => {
+    if (path.startsWith("/documentos") || path.startsWith("/admin/documentos")) {
+      setDocsOpen(true);
+    }
+  }, [path]);
+
   const employeeFolgaNav: NavItem[] = [
     { to: "/calendario", label: "Calendário", icon: Calendar },
     { to: "/trocas", label: "Trocas", icon: ArrowLeftRight },
@@ -53,12 +59,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   ];
 
   const employeeDocsNav: NavItem[] = [
-    { to: "/documentos", label: "Contracheques e Ponto", icon: FileText },
+    { to: "/documentos", label: "Contracheques", icon: FileText },
+    { to: "/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
     { to: "/documentos/atestados", label: "Atestados", icon: FileWarning },
   ];
 
   const adminDocsNav: NavItem[] = [
-    { to: "/admin/documentos", label: "Contracheques e Ponto", icon: FileText },
+    { to: "/admin/documentos", label: "Contracheques", icon: FileText },
+    { to: "/admin/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
     { to: "/admin/documentos/atestados", label: "Atestados", icon: FileWarning },
     { to: "/admin/documentos/disciplinar", label: "Registros Disciplinares", icon: Shield },
   ];
@@ -67,9 +75,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const folgaNav = isAdmin ? adminFolgaNav : employeeFolgaNav;
   const docsNav = isAdmin ? adminDocsNav : employeeDocsNav;
   const isFolgaActive = path.startsWith("/calendario") ||
-                        path.startsWith("/trocas") ||
-                        path.startsWith("/historico") ||
-                        (path.startsWith("/admin") && path !== "/admin/funcionarios" && !path.startsWith("/admin/documentos"));
+    path.startsWith("/trocas") ||
+    path.startsWith("/historico") ||
+    (path.startsWith("/admin") && path !== "/admin/funcionarios" && !path.startsWith("/admin/documentos"));
   const isDocsActive = path.startsWith("/documentos") || path.startsWith("/admin/documentos");
 
   const cadastroPath = isAdmin ? "/admin/funcionarios" : "/perfil";
@@ -77,7 +85,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
-      {/* Header Mobile */}
       <header className="md:hidden flex items-center justify-between border-b border-border bg-card/50 backdrop-blur px-4 py-3 sticky top-0 z-50">
         <div className="flex items-center gap-2">
           <img src={logo} alt="Pakerê" className="size-7 rounded-md object-cover" />
@@ -91,10 +98,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      {/* Sidebar */}
       <aside className={cn(
         "fixed inset-y-0 left-0 z-40 w-64 bg-card/40 backdrop-blur border-r border-border transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0",
-        open ? "translate-x-0" : "-translate-x-full"
+        open ? "translate-x-0" : "-translate-x-full",
       )}>
         <div className="hidden md:flex items-center gap-3 px-6 py-5 border-b border-border">
           <img src={logo} alt="Pakerê" className="size-10 rounded-lg object-cover" />
@@ -105,27 +111,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-180px)]">
-          {/* Cadastro / Gestão */}
           <Link
             to={cadastroPath}
             className={cn(
               "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors mb-2",
               path === cadastroPath
                 ? "bg-primary/15 text-primary font-bold"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent",
             )}
           >
             {isAdmin ? <Users className="size-4" /> : <Settings className="size-4" />}
             <span>{cadastroLabel}</span>
           </Link>
 
-          {/* Grupo Folgas */}
           <div className="space-y-1">
             <button
               onClick={() => setFolgasOpen(!folgasOpen)}
               className={cn(
                 "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                isFolgaActive ? "text-primary bg-primary/5" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                isFolgaActive ? "text-primary bg-primary/5" : "text-muted-foreground hover:bg-accent hover:text-foreground",
               )}
             >
               <div className="flex items-center gap-3">
@@ -148,7 +152,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
                         active
                           ? "bg-primary/15 text-primary font-medium"
-                          : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent",
                       )}
                     >
                       <Icon className="size-4" />
@@ -160,13 +164,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             )}
           </div>
 
-          {/* Grupo Documentos */}
           <div className="space-y-1">
             <button
               onClick={() => setDocsOpen(!docsOpen)}
               className={cn(
                 "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                isDocsActive ? "text-primary bg-primary/5" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                isDocsActive ? "text-primary bg-primary/5" : "text-muted-foreground hover:bg-accent hover:text-foreground",
               )}
             >
               <div className="flex items-center gap-3">
@@ -179,7 +182,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {docsOpen && (
               <div className="pl-4 space-y-1 mt-1 border-l border-border ml-5">
                 {docsNav.map((item) => {
-                  const active = path === item.to || (item.to !== "/documentos" && item.to !== "/admin/documentos" && path.startsWith(item.to));
+                  const active = path === item.to || path.startsWith(`${item.to}/`);
                   const Icon = item.icon;
                   return (
                     <Link
@@ -189,7 +192,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
                         active
                           ? "bg-primary/15 text-primary font-medium"
-                          : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent",
                       )}
                     >
                       <Icon className="size-4" />
@@ -202,7 +205,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </nav>
 
-        {/* Rodapé da Sidebar */}
         <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-border bg-card/80 backdrop-blur">
           <div className="px-3 py-2 mb-2">
             <div className="text-sm font-medium truncate">{profile?.nome ?? "—"}</div>
@@ -216,7 +218,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Overlay para mobile */}
       {open && (
         <div
           className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 md:hidden"
@@ -224,7 +225,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* Conteúdo Principal */}
       <main className="flex-1 min-w-0 p-4 md:p-8">
         <div className="hidden md:flex justify-end mb-6">
           <NotificationBell />

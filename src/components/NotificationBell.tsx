@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { syncAdminMonthlyDocumentReminder } from "@/lib/documentos";
 
 interface Notif {
   id: string;
@@ -19,19 +20,29 @@ interface Notif {
 }
 
 export function NotificationBell() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const navigate = useNavigate();
   const [items, setItems] = useState<Notif[]>([]);
   const [open, setOpen] = useState(false);
 
   const load = async () => {
     if (!user) return;
+
+    if (role === "admin") {
+      try {
+        await syncAdminMonthlyDocumentReminder();
+      } catch {
+        // mantém silencioso para não atrapalhar o sino
+      }
+    }
+
     const { data } = await supabase
       .from("notificacoes")
       .select("id, titulo, mensagem, link, lida, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(20);
+
     setItems((data ?? []) as Notif[]);
   };
 
@@ -47,7 +58,7 @@ export function NotificationBell() {
       () => load(),
     ).subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [user?.id]);
+  }, [user?.id, role]);
 
   const unread = items.filter((i) => !i.lida).length;
 
