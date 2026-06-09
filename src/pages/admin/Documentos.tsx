@@ -76,6 +76,9 @@ export default function AdminDocumentosPage() {
   const [tipo, setTipo] = useState<DocumentType>(routeType);
   const [mes, setMes] = useState("");
   const [ano, setAno] = useState("");
+  const [draftMes, setDraftMes] = useState("");
+  const [draftAno, setDraftAno] = useState("");
+  const [isEditingReference, setIsEditingReference] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [docs, setDocs] = useState<Documento[]>([]);
   const [processing, setProcessing] = useState(false);
@@ -103,6 +106,7 @@ export default function AdminDocumentosPage() {
     setExpandedNewProfilePage(null);
     setIgnoredPages({});
     setPageToIgnore(null);
+    setIsEditingReference(false);
   }, [routeType]);
 
   useEffect(() => {
@@ -160,6 +164,30 @@ export default function AdminDocumentosPage() {
     setExpandedNewProfilePage(null);
     setIgnoredPages({});
     setPageToIgnore(null);
+    setMes("");
+    setAno("");
+    setDraftMes("");
+    setDraftAno("");
+    setIsEditingReference(false);
+  };
+
+  const handleStartReferenceEdit = () => {
+    setDraftMes(mes);
+    setDraftAno(ano);
+    setIsEditingReference(true);
+  };
+
+  const handleConfirmReferenceEdit = () => {
+    if (!draftMes || !draftAno) {
+      toast.error("Preencha mês e ano");
+      return;
+    }
+
+    setMes(draftMes);
+    setAno(draftAno);
+    setDetectedReference(`Corrigido manualmente para ${String(draftMes).padStart(2, "0")}/${draftAno}`);
+    setIsEditingReference(false);
+    toast.success("Período corrigido");
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -181,6 +209,11 @@ export default function AdminDocumentosPage() {
     setExpandedNewProfilePage(null);
     setIgnoredPages({});
     setPageToIgnore(null);
+    setIsEditingReference(false);
+    setMes("");
+    setAno("");
+    setDraftMes("");
+    setDraftAno("");
 
     try {
       const pages = await extractPdfText(selectedFile);
@@ -188,12 +221,20 @@ export default function AdminDocumentosPage() {
       const detected = detectReferencePeriod(combinedText);
 
       if (detected) {
-        setMes(String(detected.mes));
-        setAno(String(detected.ano));
+        const nextMes = String(detected.mes);
+        const nextAno = String(detected.ano);
+        setMes(nextMes);
+        setAno(nextAno);
+        setDraftMes(nextMes);
+        setDraftAno(nextAno);
         setDetectedReference(detected.sourceText);
         toast.success("Mês e ano preenchidos automaticamente");
+      } else {
+        setIsEditingReference(true);
+        toast.warning("Não foi possível identificar o mês e ano automaticamente");
       }
     } catch {
+      setIsEditingReference(true);
       toast.warning("Não foi possível identificar o mês e ano automaticamente");
     }
   };
@@ -681,32 +722,75 @@ export default function AdminDocumentosPage() {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label>Mês</Label>
-                <Select value={mes} onValueChange={setMes}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o mês" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 12 }, (_, i) => (
-                      <SelectItem key={i + 1} value={String(i + 1)}>
-                        {new Date(2024, i).toLocaleDateString("pt-BR", { month: "long" })}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Período identificado</Label>
+                {!isEditingReference ? (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <Input
+                      value={mes && ano ? `${String(mes).padStart(2, "0")}/${ano}` : ""}
+                      readOnly
+                      placeholder="Aguardando identificação do PDF"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleStartReferenceEdit}
+                      disabled={!file}
+                      className="sm:w-auto"
+                    >
+                      Corrigir
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Mês</Label>
+                        <Select value={draftMes} onValueChange={setDraftMes}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o mês" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 12 }, (_, i) => (
+                              <SelectItem key={i + 1} value={String(i + 1)}>
+                                {new Date(2024, i).toLocaleDateString("pt-BR", { month: "long" })}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-              <div className="space-y-2">
-                <Label>Ano</Label>
-                <Input
-                  type="number"
-                  value={ano}
-                  onChange={(e) => setAno(e.target.value)}
-                  placeholder="2026"
-                  min="2020"
-                  max="2035"
-                />
+                      <div className="space-y-2">
+                        <Label>Ano</Label>
+                        <Input
+                          type="number"
+                          value={draftAno}
+                          onChange={(e) => setDraftAno(e.target.value)}
+                          placeholder="2026"
+                          min="2020"
+                          max="2035"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" onClick={handleConfirmReferenceEdit}>
+                        Confirmar
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setDraftMes(mes);
+                          setDraftAno(ano);
+                          setIsEditingReference(false);
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -716,7 +800,7 @@ export default function AdminDocumentosPage() {
               </div>
             )}
 
-            <Button onClick={processPdf} disabled={!file || !mes || !ano || processing} className="w-full">
+            <Button onClick={processPdf} disabled={!file || !mes || !ano || processing || isEditingReference} className="w-full">
               {processing ? (
                 <>
                   <Loader2 className="size-4 mr-2 animate-spin" /> Processando...
