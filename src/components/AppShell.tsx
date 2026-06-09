@@ -1,20 +1,21 @@
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
-import { 
-  ArrowLeftRight, 
-  Ban, 
-  Calendar, 
-  ClipboardList, 
-  LogOut, 
-  Menu, 
-  Shield, 
-  UserCheck, 
-  Users, 
+import {
+  ArrowLeftRight,
+  Ban,
+  Calendar,
+  ClipboardList,
+  LogOut,
+  Menu,
+  Shield,
+  UserCheck,
+  Users,
   X,
   ChevronDown,
   ChevronRight,
   Settings,
-  FileText
+  FileText,
+  FileWarning
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const path = location.pathname;
   const [open, setOpen] = useState(false);
   const [folgasOpen, setFolgasOpen] = useState(true);
+  const [docsOpen, setDocsOpen] = useState(false);
 
   useEffect(() => {
     setOpen(false);
@@ -39,7 +41,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/calendario", label: "Calendário", icon: Calendar },
     { to: "/trocas", label: "Trocas", icon: ArrowLeftRight },
     { to: "/historico", label: "Histórico", icon: ClipboardList },
-    { to: "/documentos", label: "Documentos", icon: FileText },
   ];
 
   const adminFolgaNav: NavItem[] = [
@@ -49,16 +50,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/aprovacoes", label: "Aprovações", icon: UserCheck },
     { to: "/admin/trocas", label: "Trocas", icon: ArrowLeftRight },
     { to: "/admin/bloqueios", label: "Datas Bloqueadas", icon: Ban },
-    { to: "/admin/documentos", label: "Documentos", icon: FileText },
+  ];
+
+  const employeeDocsNav: NavItem[] = [
+    { to: "/documentos", label: "Contracheques e Ponto", icon: FileText },
+    { to: "/documentos/atestados", label: "Atestados", icon: FileWarning },
+  ];
+
+  const adminDocsNav: NavItem[] = [
+    { to: "/admin/documentos", label: "Contracheques e Ponto", icon: FileText },
+    { to: "/admin/documentos/atestados", label: "Atestados", icon: FileWarning },
+    { to: "/admin/documentos/disciplinar", label: "Registros Disciplinares", icon: Shield },
   ];
 
   const isAdmin = role === "admin";
   const folgaNav = isAdmin ? adminFolgaNav : employeeFolgaNav;
-  const isFolgaActive = path.startsWith("/calendario") || 
-                        path.startsWith("/trocas") || 
-                        path.startsWith("/historico") || 
-                        path.startsWith("/documentos") ||
-                        (path.startsWith("/admin") && path !== "/admin/funcionarios");
+  const docsNav = isAdmin ? adminDocsNav : employeeDocsNav;
+  const isFolgaActive = path.startsWith("/calendario") ||
+                        path.startsWith("/trocas") ||
+                        path.startsWith("/historico") ||
+                        (path.startsWith("/admin") && path !== "/admin/funcionarios" && !path.startsWith("/admin/documentos"));
+  const isDocsActive = path.startsWith("/documentos") || path.startsWith("/admin/documentos");
 
   const cadastroPath = isAdmin ? "/admin/funcionarios" : "/perfil";
   const cadastroLabel = isAdmin ? "Gestão de Equipe" : "Meu Cadastro";
@@ -147,6 +159,47 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             )}
           </div>
+
+          {/* Grupo Documentos */}
+          <div className="space-y-1">
+            <button
+              onClick={() => setDocsOpen(!docsOpen)}
+              className={cn(
+                "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
+                isDocsActive ? "text-primary bg-primary/5" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <FileText className="size-4" />
+                <span>Documentos</span>
+              </div>
+              {docsOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+            </button>
+
+            {docsOpen && (
+              <div className="pl-4 space-y-1 mt-1 border-l border-border ml-5">
+                {docsNav.map((item) => {
+                  const active = path === item.to || (item.to !== "/documentos" && item.to !== "/admin/documentos" && path.startsWith(item.to));
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+                        active
+                          ? "bg-primary/15 text-primary font-medium"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                      )}
+                    >
+                      <Icon className="size-4" />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </nav>
 
         {/* Rodapé da Sidebar */}
@@ -165,8 +218,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Overlay para mobile */}
       {open && (
-        <div 
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 md:hidden" 
+        <div
+          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 md:hidden"
           onClick={() => setOpen(false)}
         />
       )}

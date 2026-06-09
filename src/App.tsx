@@ -10,6 +10,7 @@ import HistoricoPage from "@/pages/Historico";
 import TrocasPage from "@/pages/Trocas";
 import PerfilPage from "@/pages/Perfil";
 import DocumentosPage from "@/pages/Documentos";
+import DocumentosAtestadosPage from "@/pages/DocumentosAtestados";
 
 // Admin Pages
 import AdminDashboard from "@/pages/admin/Dashboard";
@@ -20,6 +21,8 @@ import AdminTrocas from "@/pages/admin/Trocas";
 import AdminBloqueios from "@/pages/admin/Bloqueios";
 import AdminFuncionarios from "@/pages/admin/Funcionarios";
 import AdminDocumentos from "@/pages/admin/Documentos";
+import AdminDocumentosAtestados from "@/pages/admin/DocumentosAtestadosAdmin";
+import AdminDocumentosDisciplinar from "@/pages/admin/DocumentosDisciplinar";
 
 function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
   const { session, role, loading } = useAuth();
@@ -56,6 +59,7 @@ export default function App() {
       <Route path="/trocas" element={<ProtectedRoute><TrocasPage /></ProtectedRoute>} />
       <Route path="/perfil" element={<ProtectedRoute><PerfilPage /></ProtectedRoute>} />
       <Route path="/documentos" element={<ProtectedRoute><DocumentosPage /></ProtectedRoute>} />
+      <Route path="/documentos/atestados" element={<ProtectedRoute><DocumentosAtestadosPage /></ProtectedRoute>} />
 
       {/* Admin */}
       <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
@@ -66,6 +70,8 @@ export default function App() {
       <Route path="/admin/bloqueios" element={<ProtectedRoute adminOnly><AdminBloqueios /></ProtectedRoute>} />
       <Route path="/admin/funcionarios" element={<ProtectedRoute adminOnly><AdminFuncionarios /></ProtectedRoute>} />
       <Route path="/admin/documentos" element={<ProtectedRoute adminOnly><AdminDocumentos /></ProtectedRoute>} />
+      <Route path="/admin/documentos/atestados" element={<ProtectedRoute adminOnly><AdminDocumentosAtestados /></ProtectedRoute>} />
+      <Route path="/admin/documentos/disciplinar" element={<ProtectedRoute adminOnly><AdminDocumentosDisciplinar /></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
