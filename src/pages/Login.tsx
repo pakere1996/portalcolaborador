@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,12 +8,21 @@ import { toast } from "sonner";
 import { SocialLoginButtons } from "@/components/SocialLoginButtons";
 import { IdCard, Lock } from "lucide-react";
 import { formatCPF } from "@/lib/cpf";
+import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { session } = useAuth(); // <-- detect existing session
   const [cpf, setCpf] = useState("");
   const [senha, setSenha] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // If the user is already authenticated, send them to the main app
+  useEffect(() => {
+    if (session) {
+      navigate("/calendario", { replace: true });
+    }
+  }, [session, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,11 +37,8 @@ export default function LoginPage() {
         body: { cpf: cleanCpf, senha },
       });
       if (error) throw error;
-      // login-with-cpf returns { success: true, session, user }
+      // login‑with‑cpf returns { success: true, session, user }
       if (data?.session) {
-        // Supabase auth already set session via the edge function? 
-        // The edge function returns session; we can set it via supabase.auth.setSession?
-        // Actually the edge function returns the session object; we can use supabase.auth.setSession
         await supabase.auth.setSession(data.session);
         toast.success("Login realizado com sucesso!");
         navigate("/calendario", { replace: true });
