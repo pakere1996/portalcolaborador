@@ -120,7 +120,7 @@ importers:
         specifier: ^0.575.0
         version: 0.575.0(react@19.2.6)
       pdf-lib:
-        specifier: ^1.17.1
+        specifier: ^6.0.227
         version: 1.17.1
       pdfjs-dist:
         specifier: ^6.0.227
@@ -172,7 +172,7 @@ importers:
         specifier: latest
         version: 22.19.19
       '@types/react':
-        specifier: ^19.2.0
+        specifier: ^1.17.1
         version: 19.2.15
       '@types/react-dom':
         specifier: ^19.2.0
