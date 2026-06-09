@@ -39,6 +39,7 @@ export default function LoginPage() {
       // login‑with-cpf returns { success: true, session, user }
       if (data?.session) {
         await supabase.auth.setSession(data.session);
+        console.log('CARGO:', data.user?.user_metadata?.cargo);
         toast.success("Login realizado com sucesso!");
         
         // Usa o cargo da resposta da Edge Function (raw_user_meta_data)
