@@ -27,6 +27,7 @@ import {
   Ban,
   UserCheck,
   UserX,
+  Building2,
 } from "lucide-react";
 import {
   Documento,
@@ -45,11 +46,11 @@ import {
   findDuplicateDocuments,
   getDocumentTypeLabel,
   syncAdminMonthlyDocumentReminder,
-  extractStructuredData, // Nova função
-  ExtractedData, // Nova interface
+  extractStructuredData,
+  ExtractedData,
 } from "@/lib/documentos";
 import { Tables } from "@/integrations/supabase/types";
-import { ColaboradorFormDialog, InitialData } from "@/components/ColaboradorFormDialog"; // Importação atualizada
+import { ColaboradorFormDialog, InitialData } from "@/components/ColaboradorFormDialog";
 
 const routeTypeMap: Record<string, DocumentType> = {
   "/admin/documentos": "contracheque",
@@ -81,6 +82,12 @@ export default function AdminDocumentosPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [cargos, setCargos] = useState<Cargo[]>([]);
+
+  // Novo estado para seleção de unidade
+  const [selectedUnidadeId, setSelectedUnidadeId] = useState<string | null>(null);
+  const [processingUnidadeId, setProcessingUnidadeId] = useState<string | null>(null); // Unidade usada no processamento atual
+  const [showUnitConfirmationDialog, setShowUnitConfirmationDialog] = useState(false);
+  const [unitConfirmationData, setUnitConfirmationData] = useState<{ unidadeNome: string; results: PageResult[] } | null>(null);
 
   const [docs, setDocs] = useState<Documento[]>([]);
   const [processing, setProcessing] = useState(false);
@@ -120,16 +127,22 @@ export default function AdminDocumentosPage() {
   const loadData = async () => {
     try {
       const [profilesRes, docsRes, suggestedRes, unidadesRes, cargosRes] = await Promise.all([
-        supabase.from("profiles").select("id, nome, cpf, matricula").eq("ativo", true).order("nome"),
+        supabase.from("profiles").select("id, nome, cpf, matricula, unidade_id").eq("ativo", true).order("nome"),
         supabase.from("documentos").select("*").eq("tipo", tipo).order("created_at", { ascending: false }),
         supabase.from("suggested_profiles").select("*").eq("status", "pending").order("created_at", { ascending: false }),
-        supabase.from("unidades").select("*").order("nome"),
+        supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
         supabase.from("cargos").select("*").order("nome"),
       ]);
 
+      const loadedUnidades = (unidadesRes.data ?? []) as Unidade[];
       setProfiles((profilesRes.data ?? []) as Profile[]);
-      setUnidades((unidadesRes.data ?? []) as Unidade[]);
+      setUnidades(loadedUnidades);
       setCargos((cargosRes.data ?? []) as Cargo[]);
+
+      // Selecionar a primeira unidade ativa como padrão
+      if (!selectedUnidadeId && loadedUnidades.length > 0) {
+        setSelectedUnidadeId(loadedUnidades[0].id);
+      }
 
       const docsList = (docsRes.data ?? []) as Documento[];
       setDocs(docsList);
@@ -172,6 +185,9 @@ export default function AdminDocumentosPage() {
     setPendingSave(false);
     setIgnoredPages({});
     setPageToIgnore(null);
+    setProcessingUnidadeId(null);
+    setUnitConfirmationData(null);
+    setShowUnitConfirmationDialog(false);
   };
 
   const resetUploadState = () => {
@@ -212,7 +228,7 @@ export default function AdminDocumentosPage() {
     }
 
     setFile(selectedFile);
-    resetResultsState(); // Resetar apenas os resultados, mantendo o período se já estiver setado
+    resetResultsState();
 
     // Resetar o período de referência para forçar a re-detecção ou entrada manual
     setMes("");
@@ -246,50 +262,80 @@ export default function AdminDocumentosPage() {
     }
   };
 
-  const processPdf = useCallback(async () => {
-    if (!file || !tipo || !mes || !ano) {
-      toast.error("Preencha todos os campos");
+  const processPdfLogic = useCallback(async (file: File, unidadeId: string) => {
+    if (!tipo || !mes || !ano) {
+      throw new Error("Dados de processamento incompletos.");
+    }
+
+    const duplicates = await findDuplicateDocuments(tipo, Number(mes), Number(ano));
+    setDuplicateDocs(duplicates);
+
+    const pages = await extractPdfText(file);
+    const results: PageResult[] = [];
+    let collaboratorsFound = false;
+
+    for (const page of pages) {
+      // Passa a unidadeId para o filtro de perfis
+      const match = findBestProfileMatch(page.text, profiles, unidadeId);
+      const extractedData = extractStructuredData(page.text);
+
+      if (match) {
+        collaboratorsFound = true;
+        results.push({
+          pageNumber: page.pageNumber,
+          text: page.text,
+          status: "auto",
+          profileId: match.profile.id,
+          profileName: match.profile.nome,
+          score: match.score,
+          identifiedName: match.profile.nome,
+          extractedData: extractedData,
+        });
+      } else {
+        // Colaborador não encontrado, sugerir pré-cadastro
+        results.push({
+          pageNumber: page.pageNumber,
+          text: page.text,
+          status: "suggested",
+          identifiedName: extractedData.nome || guessNameFromText(page.text, tipo),
+          extractedData: extractedData,
+        });
+      }
+    }
+
+    return { results, collaboratorsFound, duplicates };
+  }, [tipo, mes, ano, profiles]);
+
+  const handleProcessDocument = async () => {
+    if (!file || !selectedUnidadeId || !mes || !ano) {
+      toast.error("Selecione a unidade, o arquivo e o período de referência.");
       return;
     }
 
     setProcessing(true);
+    setProcessingUnidadeId(selectedUnidadeId);
+    resetResultsState(); // Limpa resultados anteriores
+
     try {
-      const duplicates = await findDuplicateDocuments(tipo, Number(mes), Number(ano));
-      setDuplicateDocs(duplicates);
+      const { results, collaboratorsFound, duplicates } = await processPdfLogic(file, selectedUnidadeId);
+      
+      const selectedUnidade = unidades.find(u => u.id === selectedUnidadeId);
 
-      const pages = await extractPdfText(file);
-      const results: PageResult[] = [];
-
-      for (const page of pages) {
-        const match = findBestProfileMatch(page.text, profiles);
-        const extractedData = extractStructuredData(page.text);
-
-        if (match) {
-          results.push({
-            pageNumber: page.pageNumber,
-            text: page.text,
-            status: "auto",
-            profileId: match.profile.id,
-            profileName: match.profile.nome,
-            score: match.score,
-            identifiedName: match.profile.nome,
-            extractedData: extractedData,
-          });
-        } else {
-          // Colaborador não encontrado, sugerir pré-cadastro
-          results.push({
-            pageNumber: page.pageNumber,
-            text: page.text,
-            status: "suggested", // Novo status para pré-cadastro
-            identifiedName: extractedData.nome || guessNameFromText(page.text, tipo),
-            extractedData: extractedData,
-          });
-        }
+      if (!collaboratorsFound && selectedUnidade) {
+        // Ninguém da unidade selecionada foi encontrado. Abre o diálogo de confirmação.
+        setUnitConfirmationData({
+          unidadeNome: selectedUnidade.nome,
+          results: results,
+        });
+        setShowUnitConfirmationDialog(true);
+        setProcessing(false);
+        return;
       }
 
+      // Se encontrou colaboradores OU se a unidade foi confirmada (caso de reprocessamento)
       setPageResults(results);
+      setDuplicateDocs(duplicates);
       setShowResults(true);
-      setIgnoredPages({});
 
       if (duplicates.length > 0) {
         toast.warning("Já existem documentos deste tipo para este mês/ano");
@@ -302,7 +348,27 @@ export default function AdminDocumentosPage() {
     } finally {
       setProcessing(false);
     }
-  }, [file, tipo, mes, ano, profiles]);
+  };
+
+  const handleConfirmUnit = () => {
+    if (!unitConfirmationData || !processingUnidadeId) return;
+
+    // Confirma a unidade, mesmo sem matches. Exibe os resultados.
+    setPageResults(unitConfirmationData.results);
+    setShowResults(true);
+    setShowUnitConfirmationDialog(false);
+    setUnitConfirmationData(null);
+    toast.success("Unidade confirmada. Revise as sugestões de pré-cadastro.");
+  };
+
+  const handleChooseAnotherUnit = () => {
+    // Permite ao usuário selecionar outra unidade.
+    setShowUnitConfirmationDialog(false);
+    setUnitConfirmationData(null);
+    setProcessingUnidadeId(null); // Limpa a unidade de processamento
+    // O usuário deve selecionar uma nova unidade e clicar em Processar novamente.
+    toast.info("Selecione a unidade correta e clique em 'Processar PDF' novamente.");
+  };
 
   const handleManualAssign = (pageNumber: number, profileId: string) => {
     setIgnoredPages((prev) => {
@@ -372,7 +438,7 @@ export default function AdminDocumentosPage() {
   };
 
   const persistDocuments = async () => {
-    if (!file || !tipo || !mes || !ano) return;
+    if (!file || !tipo || !mes || !ano || !processingUnidadeId) return;
 
     setProcessing(true);
     const newStats = getEmptyStats();
@@ -455,6 +521,7 @@ export default function AdminDocumentosPage() {
           storage_path: storagePath,
           status: isProfileGroup ? "vinculado" : "pendente",
           nome_pdf: group[0].identifiedName,
+          unidade_id: processingUnidadeId, // SALVANDO A UNIDADE
         };
 
         const { data: docData, error: dbError } = await supabase.from("documentos").insert(docPayload).select("id").single();
@@ -529,7 +596,7 @@ export default function AdminDocumentosPage() {
   const handlePreCadastroSuccess = (newProfileId?: string, pageNumber?: number) => {
     // Se o cadastro foi feito a partir de um PageResult (cadastro imediato)
     if (newProfileId && pageNumber) {
-      const newProfile = profiles.find(p => p.id === newProfileId) || { id: newProfileId, nome: "Novo Colaborador", cpf: "" };
+      const newProfile = profiles.find(p => p.id === newProfileId) || { id: newProfileId, nome: "Novo Colaborador", cpf: "", matricula: "", unidade_id: processingUnidadeId };
       
       setPageResults(prev => prev.map(page => {
         if (page.pageNumber === pageNumber) {
@@ -620,6 +687,9 @@ export default function AdminDocumentosPage() {
     }
   };
 
+  const currentUnidade = useMemo(() => unidades.find(u => u.id === selectedUnidadeId), [unidades, selectedUnidadeId]);
+  const processingUnidade = useMemo(() => unidades.find(u => u.id === processingUnidadeId), [unidades, processingUnidadeId]);
+
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       <div>
@@ -705,7 +775,7 @@ export default function AdminDocumentosPage() {
           <CardHeader>
             <CardTitle>Upload de Documentos</CardTitle>
             <CardDescription>
-              O mês e ano serão sugeridos automaticamente pelo texto do PDF, mas continuam editáveis.
+              Selecione a unidade e o período de referência antes de processar o PDF.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -723,9 +793,36 @@ export default function AdminDocumentosPage() {
                 </Select>
               </div>
 
+              {/* SELEÇÃO DE UNIDADE OBRIGATÓRIA */}
+              <div className="space-y-2 md:col-span-2">
+                <Label className="flex items-center gap-1">
+                  <Building2 className="size-4" /> Unidade (Obrigatório)
+                </Label>
+                <Select 
+                  value={selectedUnidadeId || ""} 
+                  onValueChange={setSelectedUnidadeId}
+                  disabled={processing}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a Unidade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unidades.map((unidade) => (
+                      <SelectItem key={unidade.id} value={unidade.id}>
+                        {unidade.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {unidades.length === 0 && (
+                  <p className="text-sm text-red-500">Nenhuma unidade ativa encontrada. Cadastre uma unidade primeiro.</p>
+                )}
+              </div>
+              {/* FIM SELEÇÃO DE UNIDADE */}
+
               <div className="space-y-2 md:col-span-2">
                 <Label>Arquivo PDF</Label>
-                <Input type="file" accept=".pdf" onChange={handleFileChange} disabled={processing} />
+                <Input type="file" accept=".pdf" onChange={handleFileChange} disabled={processing || !selectedUnidadeId} />
                 {detectedReference && (
                   <p className="text-xs text-muted-foreground">
                     Referência detectada automaticamente: <span className="font-medium">{detectedReference}</span>
@@ -811,7 +908,7 @@ export default function AdminDocumentosPage() {
               </div>
             )}
 
-            <Button onClick={processPdf} disabled={!file || !mes || !ano || processing || isEditingReference} className="w-full">
+            <Button onClick={handleProcessDocument} disabled={!file || !mes || !ano || processing || isEditingReference || !selectedUnidadeId} className="w-full">
               {processing ? (
                 <>
                   <Loader2 className="size-4 mr-2 animate-spin" /> Processando...
@@ -858,7 +955,7 @@ export default function AdminDocumentosPage() {
           <CardHeader>
             <CardTitle>Resultados do Processamento</CardTitle>
             <CardDescription>
-              Revise e confirme o vínculo de cada página antes de salvar.
+              Unidade de Processamento: <span className="font-semibold">{processingUnidade?.nome || 'N/A'}</span>. Revise e confirme o vínculo de cada página antes de salvar.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -907,13 +1004,18 @@ export default function AdminDocumentosPage() {
                             <SelectValue placeholder="Selecione um colaborador existente" />
                           </SelectTrigger>
                           <SelectContent>
-                            {profiles.map((profile) => (
+                            {profiles
+                              .filter(p => p.unidade_id === processingUnidadeId) // Filtra perfis pela unidade de processamento
+                              .map((profile) => (
                               <SelectItem key={profile.id} value={profile.id}>
                                 {profile.nome} (CPF: {profile.cpf})
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
+                        {profiles.filter(p => p.unidade_id === processingUnidadeId).length === 0 && (
+                          <p className="text-sm text-muted-foreground">Nenhum colaborador ativo nesta unidade.</p>
+                        )}
                       </div>
 
                       {isSuggested && (
@@ -940,7 +1042,7 @@ export default function AdminDocumentosPage() {
             })}
 
             <div className="flex gap-4 flex-wrap">
-              <Button variant="outline" onClick={() => setShowResults(false)}>
+              <Button variant="outline" onClick={resetResultsState}>
                 Cancelar
               </Button>
               <Button onClick={saveDecisions} disabled={processing}>
@@ -986,6 +1088,11 @@ export default function AdminDocumentosPage() {
                           Colaborador: {profiles.find((p) => p.id === doc.colaborador_id)?.nome || "Desconhecido"}
                         </div>
                       )}
+                      {doc.unidade_id && (
+                        <div className="text-xs text-muted-foreground">
+                          Unidade: {unidades.find(u => u.id === doc.unidade_id)?.nome || "N/A"}
+                        </div>
+                      )}
                     </div>
                     {getStatusBadge(doc.status)}
                   </div>
@@ -1007,6 +1114,28 @@ export default function AdminDocumentosPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Diálogo de Confirmação de Unidade Incorreta */}
+      <AlertDialog open={showUnitConfirmationDialog} onOpenChange={setShowUnitConfirmationDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Validação de Unidade</AlertDialogTitle>
+            <AlertDialogDescription>
+              Nenhum colaborador da unidade selecionada (<span className="font-semibold">{unitConfirmationData?.unidadeNome}</span>) foi identificado neste documento.
+              <br /><br />
+              Deseja confirmar que este documento pertence à unidade <span className="font-semibold">{unitConfirmationData?.unidadeNome}</span>, ou deseja escolher outra unidade para reprocessar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleChooseAnotherUnit}>
+              Escolher Outra Unidade
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmUnit}>
+              Confirmar Unidade
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={pendingSave} onOpenChange={setPendingSave}>
         <AlertDialogContent>
@@ -1054,11 +1183,13 @@ export default function AdminDocumentosPage() {
             ? {
                 extractedData: selectedSuggestion.extracted_data as ExtractedData,
                 suggestionId: selectedSuggestion.id,
+                defaultUnidadeId: processingUnidadeId || undefined, // Passa a unidade de processamento
               }
             : selectedPageResult
             ? {
                 extractedData: selectedPageResult.extractedData as ExtractedData,
                 pageNumber: selectedPageResult.pageNumber,
+                defaultUnidadeId: processingUnidadeId || undefined, // Passa a unidade de processamento
               }
             : null
         }

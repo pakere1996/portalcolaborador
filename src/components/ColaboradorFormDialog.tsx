@@ -40,6 +40,7 @@ export type InitialData = {
   extractedData: ExtractedData;
   suggestionId?: string; // Presente se vier do painel de sugestões
   pageNumber?: number; // Presente se vier do Documentos.tsx (cadastro imediato)
+  defaultUnidadeId?: string; // Novo campo para pré-selecionar a unidade
 };
 
 interface ColaboradorFormDialogProps {
@@ -106,13 +107,16 @@ export const ColaboradorFormDialog: React.FC<ColaboradorFormDialogProps> = ({
       // Ponto 8: Integração com Tabela de Cargos
       const matchedCargo = cargos.find(c => c.nome.toLowerCase() === data.cargo?.toLowerCase());
 
+      // Define a unidade padrão: 1. defaultUnidadeId (se vier do Documentos.tsx), 2. matchedUnidade, 3. "null"
+      const defaultUnidade = initialData.defaultUnidadeId || (matchedUnidade ? matchedUnidade.id : "null");
+
       setForm({
         ...blankForm,
         nome: data.nome || "",
         cpf: data.cpf ? onlyDigits(data.cpf) : "",
         matricula: data.matricula || "", // Pré-preenchendo Matrícula
         cargo: matchedCargo ? matchedCargo.nome : (data.cargo || ""),
-        unidade_id: matchedUnidade ? matchedUnidade.id : "null",
+        unidade_id: defaultUnidade, // Usando a unidade padrão
         data_nascimento: data.data_nascimento || "",
         data_admissao: data.data_admissao || "",
         // Outros campos (email, whatsapp, folga_fixa_semana) ficam vazios se não extraídos
