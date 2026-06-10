@@ -23,7 +23,6 @@ interface Profile {
   id: string;
   nome: string;
   cpf: string;
-  email: string;
   cargo: string;
   ativo: boolean;
   aprovacao_status: string;
@@ -38,7 +37,6 @@ interface Profile {
 const blankForm = {
   nome: "",
   cpf: "",
-  email: "",
   cargo: "Pizzaiolo",
   senha: "",
   dataAdmissao: "",
@@ -54,7 +52,7 @@ export default function Funcionarios() {
 
   const [editing, setEditing] = useState<Profile | null>(null);
   const [editForm, setEditForm] = useState({
-    nome: "", email: "", cargo: "", dataAdmissao: "", dataDemissao: "", dataNascimento: "", folgaFixa: "",
+    nome: "", cargo: "", dataAdmissao: "", dataDemissao: "", dataNascimento: "", folgaFixa: "",
   });
 
   const [resetting, setResetting] = useState<Profile | null>(null);
@@ -66,7 +64,7 @@ export default function Funcionarios() {
     const [{ data: profs, error }, { data: roles }] = await Promise.all([
       supabase
         .from("profiles")
-        .select("id, nome, cpf, email, cargo, ativo, aprovacao_status, data_admissao, data_demissao, data_nascimento, folga_fixa_semana, created_at")
+        .select("id, nome, cpf, cargo, ativo, aprovacao_status, data_admissao, data_demissao, data_nascimento, folga_fixa_semana, created_at")
         .order("nome"),
       supabase.from("user_roles").select("user_id, role")
     ]);
@@ -87,7 +85,7 @@ export default function Funcionarios() {
 
   const create = async () => {
     if (!form.nome.trim()) return toast.error("Informe o nome");
-    if (!form.email.trim() || !form.email.includes("@")) return toast.error("Informe um e-mail válido");
+    // if (!form.email.trim() || !form.email.includes("@")) return toast.error("Informe um e-mail válido"); // Removido email
     if (!isValidCPFLength(form.cpf)) return toast.error("CPF inválido");
     if (form.senha.length < 6) return toast.error("Senha deve ter pelo menos 6 caracteres");
     setBusy(true);
@@ -95,7 +93,7 @@ export default function Funcionarios() {
       await adminApi.createUser({
         nome: form.nome.trim(),
         cpf: onlyDigits(form.cpf),
-        email: form.email.trim().toLowerCase(),
+        // email: form.email.trim().toLowerCase(), // Removido email
         cargo: form.cargo.trim() || "Funcionário",
         senha: form.senha,
         dataAdmissao: form.dataAdmissao || null,
@@ -122,7 +120,7 @@ export default function Funcionarios() {
       await adminApi.createUser({
         nome: p.nome,
         cpf: onlyDigits(p.cpf),
-        email: p.email,
+        // email: p.email, // Removido email
         cargo: p.cargo,
         senha: tempPassword,
         dataAdmissao: p.data_admissao,
@@ -146,7 +144,7 @@ export default function Funcionarios() {
     setEditing(p);
     setEditForm({
       nome: p.nome,
-      email: p.email,
+      // email: p.email, // Removido email
       cargo: p.cargo,
       dataAdmissao: p.data_admissao ?? "",
       dataDemissao: p.data_demissao ?? "",
@@ -161,7 +159,7 @@ export default function Funcionarios() {
       .from("profiles")
       .update({
         nome: editForm.nome.trim(),
-        email: editForm.email.trim().toLowerCase(),
+        // email: editForm.email.trim().toLowerCase(), // Removido email
         cargo: editForm.cargo.trim() || "Funcionário",
         data_admissao: editForm.dataAdmissao || null,
         data_demissao: editForm.dataDemissao || null,
@@ -226,10 +224,7 @@ export default function Funcionarios() {
                 <Label>Nome Completo</Label>
                 <Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Ex: João Silva" />
               </div>
-              <div className="space-y-2">
-                <Label>E-mail de Acesso</Label>
-                <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="joao.silva@exemplo.com" />
-              </div>
+              {/* Removido campo E-mail de Acesso */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>CPF</Label>
@@ -303,9 +298,7 @@ export default function Funcionarios() {
                       <div className="font-bold text-foreground">{p.nome}</div>
                       {p.role === "admin" && <Shield className="size-3 text-primary" title="Administrador" />}
                     </div>
-                    <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-                      <Mail className="size-3" /> {p.email}
-                    </div>
+                    {/* Removido p.email */}
                     <div className="text-[10px] text-muted-foreground font-mono">{formatCPF(p.cpf)}</div>
                     {p.aprovacao_status === "pendente" && (
                       <Badge variant="outline" className="mt-1 bg-orange-50 text-orange-600 border-orange-200 text-[9px]">Pendente</Badge>
@@ -363,7 +356,7 @@ export default function Funcionarios() {
           <DialogHeader><DialogTitle>Editar funcionário</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2"><Label>Nome</Label><Input value={editForm.nome} onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })} /></div>
-            <div className="space-y-2"><Label>E-mail</Label><Input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} /></div>
+          {/* Removido campo E-mail */}
             <div className="space-y-2"><Label>Cargo</Label><Input value={editForm.cargo} onChange={(e) => setEditForm({ ...editForm, cargo: e.target.value })} /></div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -400,7 +393,7 @@ export default function Funcionarios() {
 
       <Dialog open={!!resetting} onOpenChange={(o) => !o && (setResetting(null), setNewPwd(""))}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Redefinir senha — {resetting?.nome}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Redefinir senha — {resetting?.nome}</Dialogução></DialogHeader>
           <div className="space-y-2 py-4">
             <Label>Nova Senha</Label>
             <Input type="password" value={newPwd} onChange={(e) => setNewPwd(e.target.value)} placeholder="Mínimo 6 caracteres" />
