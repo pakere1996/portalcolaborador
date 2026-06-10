@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -27,9 +29,24 @@ import { onlyDigits } from "@/lib/cpf";
 // Tipagem assumida para o perfil com a unidade join
 type Profile = Tables<'profiles'> & {
   unidade: Tables<'unidades'> | null;
+  role: string; // Adicionado para facilitar a tipagem após o loadData
 };
 type Unidade = Tables<'unidades'>;
 type Cargo = Tables<'cargos'>;
+
+type EditForm = {
+  nome: string;
+  email: string;
+  cpf: string;
+  whatsapp: string;
+  cargo: string;
+  unidade_id: string;
+  folga_fixa_semana: string;
+  data_nascimento: string;
+  data_admissao: string;
+  perfil_acesso: string; // Novo campo
+  ativo: boolean;
+};
 
 const blankEditForm: EditForm = {
   nome: "",
@@ -62,6 +79,9 @@ const dayOfWeekMap: Record<number, string> = {
   6: "Sábado",
 };
 
+type SortColumn = 'nome' | 'unidade' | 'cargo' | 'folga_fixa_semana' | 'aprovacao_status' | 'data_admissao' | 'data_nascimento';
+type SortOrder = 'asc' | 'desc' | 'none';
+
 export default function Colaboradores() {
   const [list, setList] = useState<Profile[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
@@ -72,35 +92,38 @@ export default function Colaboradores() {
   // Edit/Delete State
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
-  const [openNewDialog, setOpenNewDialog] = useState(false); // Estado para abrir o diálogo de novo colaborador
-  
-  // O formulário de edição será gerenciado pelo ColaboradorFormDialog
+  const [openNewDialog, setOpenNewDialog] = useState(false);
   const [profileToEditWithRole, setProfileToEditWithRole] = useState<Profile & { role: string } | null>(null);
 
-  // Filter States
+  // Filter & Sort States
   const [filterName, setFilterName] = useState("");
   const [filterUnidade, setFilterUnidade] = useState("all");
   const [filterFolga, setFilterFolga] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc" | "none">("none");
+  
+  const [sortColumn, setSortColumn] = useState<SortColumn>('nome');
+  const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    console.log("[Colaboradores] Iniciando consulta de dados...");
     
     // 1. Fetch Profiles (Colaboradores)
     const { data: profilesData, error: profilesError } = await supabase
       .from("profiles")
-      .select("*, unidade:unidade_id(id, nome)")
+      .select("*, unidade:unidade_id(id, nome), user_roles(role)")
       .order("nome");
 
     if (profilesError) {
       console.error("[Colaboradores] Erro na consulta de perfis:", profilesError);
       toast.error("Erro ao carregar colaboradores.", { description: profilesError.message });
     } else {
-      console.log(`[Colaboradores] Consulta de perfis bem-sucedida. Registros retornados: ${profilesData.length}`);
-      console.log("[Colaboradores] Resultado da consulta:", profilesData);
-      setList(profilesData as Profile[]);
+      // Mapear o role para o objeto Profile
+      const profilesWithRole = profilesData.map(p => ({
+        ...p,
+        role: (p.user_roles as { role: string }[])?.[0]?.role || 'colaborador',
+      })) as Profile[];
+      
+      setList(profilesWithRole);
     }
 
     // 2. Fetch Unidades
@@ -115,19 +138,16 @@ export default function Colaboradores() {
       setUnidades(unidadesData);
     }
 
-    // 3. Fetch Cargos: Buscando cargos da tabela cargos
+    // 3. Fetch Cargos
     const { data: cargosData, error: cargosError } = await supabase
       .from("cargos")
-      .select("nome") // Seleciona apenas o nome, que é o campo usado no profiles
+      .select("nome")
       .order("nome");
     
     if (cargosError) {
       console.error("[Colaboradores] Erro na consulta de cargos:", cargosError);
     } else {
-      // O resultado é um array de objetos { nome: string }
       setCargos(cargosData as Cargo[]);
-      console.log(`[Colaboradores] Cargos carregados: ${cargosData.length}`);
-      console.log("[Colaboradores] Opções de Cargos:", cargosData.map(c => c.nome));
     }
 
     setLoading(false);
@@ -136,6 +156,25 @@ export default function Colaboradores() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortOrder(prev => {
+        if (prev === 'asc') return 'desc';
+        if (prev === 'desc') return 'none';
+        return 'asc';
+      });
+    } else {
+      setSortColumn(column);
+      setSortOrder('asc');
+    }
+  };
+
+  const getSortIcon = (column: SortColumn) => {
+    if (sortColumn !== column || sortOrder === 'none') return <ArrowUpDown className="ml-2 size-3 opacity-50" />;
+    if (sortOrder === 'asc') return <ArrowUpDown className="ml-2 size-3 rotate-180" />;
+    return <ArrowUpDown className="ml-2 size-3" />;
+  };
 
   const filteredAndSortedList = useMemo(() => {
     let filtered = list;
@@ -166,29 +205,77 @@ export default function Colaboradores() {
     // 2. Ordenação
     let sorted = [...filtered];
     
-    if (sortOrder === "asc") {
-      sorted = sorted.sort((a, b) => a.nome.localeCompare(b.nome));
-    } else if (sortOrder === "desc") {
-      sorted = sorted.sort((a, b) => b.nome.localeCompare(a.nome));
+    if (sortOrder !== "none") {
+      sorted.sort((a, b) => {
+        let valA: any, valB: any;
+
+        switch (sortColumn) {
+          case 'nome':
+            valA = a.nome;
+            valB = b.nome;
+            break;
+          case 'unidade':
+            valA = a.unidade?.nome || '';
+            valB = b.unidade?.nome || '';
+            break;
+          case 'cargo':
+            valA = a.cargo || '';
+            valB = b.cargo || '';
+            break;
+          case 'folga_fixa_semana':
+            valA = a.folga_fixa_semana ?? -1;
+            valB = b.folga_fixa_semana ?? -1;
+            break;
+          case 'aprovacao_status':
+            valA = a.aprovacao_status;
+            valB = b.aprovacao_status;
+            break;
+          case 'data_admissao':
+            valA = a.data_admissao || '0000-01-01';
+            valB = b.data_admissao || '0000-01-01';
+            break;
+          case 'data_nascimento':
+            valA = a.data_nascimento || '0000-01-01';
+            valB = b.data_nascimento || '0000-01-01';
+            break;
+          default:
+            return 0;
+        }
+
+        if (typeof valA === 'string' && typeof valB === 'string') {
+          const comparison = valA.localeCompare(valB);
+          return sortOrder === 'asc' ? comparison : -comparison;
+        }
+        
+        if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+        if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+        return 0;
+      });
     }
     
-    console.log(`[Colaboradores] Registros após filtros: ${sorted.length}`);
     return sorted;
-  }, [list, filterName, filterUnidade, filterFolga, filterStatus, sortOrder]);
+  }, [list, filterName, filterUnidade, filterFolga, filterStatus, sortColumn, sortOrder]);
 
   // --- Handlers ---
 
   const openEdit = async (profile: Profile) => {
-    // Buscar o role do usuário (necessário para o campo Perfil de Acesso)
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', profile.id)
-      .single();
+    // O role já está carregado no loadData, mas precisamos garantir que o tipo esteja correto para o diálogo
+    setProfileToEditWithRole(profile as Profile & { role: string });
+  };
 
-    const role = (roleData?.role || 'colaborador') as string;
-
-    setProfileToEditWithRole({ ...profile, role });
+  const handleResetPassword = async (profile: Profile) => {
+    if (!confirm(`Tem certeza que deseja resetar a senha de ${profile.nome}? Uma nova senha será enviada para o e-mail de cadastro.`)) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await adminApi.resetPassword(profile.id, "NovaSenhaTemporaria123");
+      toast.success("Solicitação de reset de senha enviada.", { description: `Uma instrução de recuperação de senha foi enviada para o e-mail do usuário.` });
+    } catch (e) {
+      toast.error("Erro ao resetar senha", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleToggleActive = async (profile: Profile) => {
@@ -211,27 +298,10 @@ export default function Colaboradores() {
     }
   };
 
-  const handleResetPassword = async (profile: Profile) => {
-    if (!confirm(`Tem certeza que deseja resetar a senha de ${profile.nome}? Uma nova senha será enviada para o e-mail de cadastro.`)) {
-      return;
-    }
-    setBusy(true);
-    try {
-      // Nota: O admin-api.ts usa uma Edge Function para resetar a senha
-      await adminApi.resetPassword(profile.id, "NovaSenhaTemporaria123"); // A Edge Function deve gerar e enviar a senha
-      toast.success("Solicitação de reset de senha enviada.", { description: `Uma instrução de recuperação de senha foi enviada para o e-mail do usuário.` });
-    } catch (e) {
-      toast.error("Erro ao resetar senha", { description: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const doDelete = async () => {
     if (!confirmDelete) return;
     setBusy(true);
     try {
-      // Nota: O admin-api.ts usa uma Edge Function para deletar o usuário (auth + profile)
       await adminApi.deleteUser(confirmDelete.id);
       
       toast.success("Colaborador excluído permanentemente.");
@@ -331,16 +401,36 @@ export default function Colaboradores() {
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-muted-foreground border-b border-border">
               <tr>
-                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] w-1/3">
-                  <Button variant="ghost" className="p-0 h-auto" onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] w-1/4">
+                  <Button variant="ghost" className="p-0 h-auto" onClick={() => handleSort('nome')}>
                     Nome
-                    <ArrowUpDown className="ml-2 size-3" />
+                    {getSortIcon('nome')}
                   </Button>
                 </th>
-                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">Cargo</th>
-                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">Unidade</th>
-                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden sm:table-cell">Folga Fixa</th>
-                <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">
+                  <Button variant="ghost" className="p-0 h-auto" onClick={() => handleSort('cargo')}>
+                    Cargo
+                    {getSortIcon('cargo')}
+                  </Button>
+                </th>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">
+                  <Button variant="ghost" className="p-0 h-auto" onClick={() => handleSort('unidade')}>
+                    Unidade
+                    {getSortIcon('unidade')}
+                  </Button>
+                </th>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden sm:table-cell">
+                  <Button variant="ghost" className="p-0 h-auto" onClick={() => handleSort('folga_fixa_semana')}>
+                    Folga Fixa
+                    {getSortIcon('folga_fixa_semana')}
+                  </Button>
+                </th>
+                <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">
+                  <Button variant="ghost" className="p-0 h-auto" onClick={() => handleSort('aprovacao_status')}>
+                    Status
+                    {getSortIcon('aprovacao_status')}
+                  </Button>
+                </th>
                 <th className="text-right p-4 font-bold uppercase tracking-wider text-[10px]">Ações</th>
               </tr>
             </thead>

@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+"use client";
+
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { ensureDocumentosSchema } from "@/lib/ensure-documentos-schema";
@@ -34,10 +36,12 @@ import {
 import { toast } from "sonner";
 import { AlertTriangle, FileText, Loader2, ShieldAlert, Trash2, Upload } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
+import { Tables } from "@/integrations/supabase/types";
 
 interface Profile {
   id: string;
   nome: string;
+  unidade_id: string | null;
 }
 
 interface Registro {
@@ -59,34 +63,49 @@ interface PendingUpload {
   data: string;
   observacao: string;
   file: File;
+  unidadeId: string;
 }
+
+type Unidade = Tables<'unidades'>;
 
 export default function AdminDocumentosDisciplinarPage() {
   const { user } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [registros, setRegistros] = useState<Registro[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  
+  // Formulário
+  const [unidadeId, setUnidadeId] = useState("");
   const [colaboradorId, setColaboradorId] = useState("");
   const [tipo, setTipo] = useState("advertencia");
   const [data, setData] = useState("");
   const [observacao, setObservacao] = useState("");
+  
   const [duplicate, setDuplicate] = useState<Registro | null>(null);
   const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
 
   const load = async () => {
     setLoading(true);
-    const [{ data: profs, error: profError }, { data: items, error: regError }] = await Promise.all([
-      supabase.from("profiles").select("id, nome").eq("ativo", true).order("nome"),
+    const [
+      { data: profs, error: profError }, 
+      { data: items, error: regError },
+      { data: units, error: unitError }
+    ] = await Promise.all([
+      supabase.from("profiles").select("id, nome, unidade_id").eq("ativo", true).order("nome"),
       supabase.from("registros_disciplinares" as any).select("*").order("created_at", { ascending: false }),
+      supabase.from("unidades").select("*").order("nome"),
     ]);
 
     if (profError) toast.error("Erro ao carregar colaboradores", { description: profError.message });
     if (regError) toast.error("Erro ao carregar registros", { description: regError.message });
+    if (unitError) toast.error("Erro ao carregar unidades", { description: unitError.message });
 
     setProfiles((profs ?? []) as Profile[]);
     setRegistros((items ?? []) as Registro[]);
+    setUnidades((units ?? []) as Unidade[]);
     setLoading(false);
   };
 
@@ -133,6 +152,11 @@ export default function AdminDocumentosDisciplinarPage() {
     setFile(selected);
   };
 
+  const filteredProfiles = useMemo(() => {
+    if (!unidadeId) return [];
+    return profiles.filter(p => p.unidade_id === unidadeId);
+  }, [profiles, unidadeId]);
+
   const uploadRegistro = async (payload: PendingUpload) => {
     if (!user) return;
 
@@ -168,6 +192,7 @@ export default function AdminDocumentosDisciplinarPage() {
 
       toast.success("Registro disciplinar cadastrado");
       setFile(null);
+      setUnidadeId("");
       setColaboradorId("");
       setTipo("advertencia");
       setData("");
@@ -183,9 +208,9 @@ export default function AdminDocumentosDisciplinarPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!colaboradorId || !data || !file) return toast.error("Preencha todos os campos obrigatórios");
+    if (!unidadeId || !colaboradorId || !data || !file) return toast.error("Preencha todos os campos obrigatórios");
 
-    const payload = { colaboradorId, tipo, data, observacao, file };
+    const payload: PendingUpload = { colaboradorId, tipo, data, observacao, file, unidadeId };
     if (duplicate) {
       setPendingUpload(payload);
       return;
@@ -222,13 +247,29 @@ export default function AdminDocumentosDisciplinarPage() {
           </div>
 
           <div className="space-y-2">
-            <Label>Colaborador</Label>
-            <Select value={colaboradorId} onValueChange={setColaboradorId}>
-              <SelectTrigger><SelectValue placeholder="Escolha o colaborador" /></SelectTrigger>
+            <Label>Unidade</Label>
+            <Select value={unidadeId} onValueChange={(value) => { setUnidadeId(value); setColaboradorId(""); }}>
+              <SelectTrigger><SelectValue placeholder="Escolha a unidade" /></SelectTrigger>
               <SelectContent>
-                {profiles.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                {unidades.map((u) => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Colaborador</Label>
+            <Select 
+              value={colaboradorId} 
+              onValueChange={setColaboradorId}
+              disabled={!unidadeId || filteredProfiles.length === 0}
+            >
+              <SelectTrigger><SelectValue placeholder="Escolha o colaborador" /></SelectTrigger>
+              <SelectContent>
+                {filteredProfiles.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {!unidadeId && <p className="text-xs text-red-500">Selecione uma unidade primeiro.</p>}
+            {unidadeId && filteredProfiles.length === 0 && <p className="text-xs text-red-500">Nenhum colaborador ativo nesta unidade.</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

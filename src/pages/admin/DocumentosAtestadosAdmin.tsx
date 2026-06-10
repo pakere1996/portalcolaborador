@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+"use client";
+
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { ensureDocumentosSchema } from "@/lib/ensure-documentos-schema";
@@ -35,10 +37,12 @@ import {
 import { toast } from "sonner";
 import { AlertTriangle, FileText, Loader2, Upload, UserCheck, X } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
+import { Tables } from "@/integrations/supabase/types";
 
 interface Profile {
   id: string;
   nome: string;
+  unidade_id: string | null;
 }
 
 interface Atestado {
@@ -64,37 +68,54 @@ interface PendingUpload {
   dias: string;
   observacao: string;
   file: File;
+  unidadeId: string;
 }
+
+type Unidade = Tables<'unidades'>;
 
 export default function AdminDocumentosAtestadosPage() {
   const { user } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [atestados, setAtestados] = useState<Atestado[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  
+  // Formulário
+  const [unidadeId, setUnidadeId] = useState("");
   const [colaboradorId, setColaboradorId] = useState("");
   const [data, setData] = useState("");
   const [dias, setDias] = useState("");
   const [observacao, setObservacao] = useState("");
+  
+  // Filtros
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [filtroUser, setFiltroUser] = useState("todos");
+  
   const [duplicate, setDuplicate] = useState<Atestado | null>(null);
   const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
   const [adminObs, setAdminObs] = useState<Record<string, string>>({});
 
   const load = async () => {
     setLoading(true);
-    const [{ data: profs, error: profError }, { data: items, error: atestError }] = await Promise.all([
-      supabase.from("profiles").select("id, nome").eq("ativo", true).order("nome"),
+    const [
+      { data: profs, error: profError }, 
+      { data: items, error: atestError },
+      { data: units, error: unitError }
+    ] = await Promise.all([
+      supabase.from("profiles").select("id, nome, unidade_id").eq("ativo", true).order("nome"),
       supabase.from("atestados" as any).select("*").order("created_at", { ascending: false }),
+      supabase.from("unidades").select("*").order("nome"),
     ]);
 
     if (profError) toast.error("Erro ao carregar colaboradores", { description: profError.message });
     if (atestError) toast.error("Erro ao carregar atestados", { description: atestError.message });
+    if (unitError) toast.error("Erro ao carregar unidades", { description: unitError.message });
 
     setProfiles((profs ?? []) as Profile[]);
     setAtestados((items ?? []) as Atestado[]);
+    setUnidades((units ?? []) as Unidade[]);
     setLoading(false);
   };
 
@@ -140,6 +161,11 @@ export default function AdminDocumentosAtestadosPage() {
     setFile(selected);
   };
 
+  const filteredProfiles = useMemo(() => {
+    if (!unidadeId) return [];
+    return profiles.filter(p => p.unidade_id === unidadeId);
+  }, [profiles, unidadeId]);
+
   const uploadAtestado = async (payload: PendingUpload) => {
     if (!user) return;
 
@@ -171,12 +197,14 @@ export default function AdminDocumentosAtestadosPage() {
         storage_path: storagePath,
         storage_type: kind,
         criado_por: user.id,
+        // Não há campo unidade_id na tabela atestados, mas o colaborador já está vinculado à unidade
       });
 
       if (insertError) throw insertError;
 
       toast.success("Atestado cadastrado como pendente");
       setFile(null);
+      setUnidadeId("");
       setColaboradorId("");
       setData("");
       setDias("");
@@ -192,9 +220,9 @@ export default function AdminDocumentosAtestadosPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!colaboradorId || !data || !dias || !file) return toast.error("Preencha todos os campos obrigatórios");
+    if (!unidadeId || !colaboradorId || !data || !dias || !file) return toast.error("Preencha todos os campos obrigatórios");
 
-    const payload = { colaboradorId, data, dias, observacao, file };
+    const payload: PendingUpload = { colaboradorId, data, dias, observacao, file, unidadeId };
     if (duplicate) {
       setPendingUpload(payload);
       return;
@@ -231,7 +259,7 @@ export default function AdminDocumentosAtestadosPage() {
     }
   };
 
-  const filtered = atestados.filter((a) => {
+  const filteredAtestados = atestados.filter((a) => {
     if (filtroStatus !== "todos" && a.status !== filtroStatus) return false;
     if (filtroUser !== "todos" && a.colaborador_id !== filtroUser) return false;
     return true;
@@ -258,13 +286,29 @@ export default function AdminDocumentosAtestadosPage() {
           </div>
 
           <div className="space-y-2">
-            <Label>Colaborador</Label>
-            <Select value={colaboradorId} onValueChange={setColaboradorId}>
-              <SelectTrigger><SelectValue placeholder="Escolha o colaborador" /></SelectTrigger>
+            <Label>Unidade</Label>
+            <Select value={unidadeId} onValueChange={(value) => { setUnidadeId(value); setColaboradorId(""); }}>
+              <SelectTrigger><SelectValue placeholder="Escolha a unidade" /></SelectTrigger>
               <SelectContent>
-                {profiles.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                {unidades.map((u) => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Colaborador</Label>
+            <Select 
+              value={colaboradorId} 
+              onValueChange={setColaboradorId} 
+              disabled={!unidadeId || filteredProfiles.length === 0}
+            >
+              <SelectTrigger><SelectValue placeholder="Escolha o colaborador" /></SelectTrigger>
+              <SelectContent>
+                {filteredProfiles.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {!unidadeId && <p className="text-xs text-red-500">Selecione uma unidade primeiro.</p>}
+            {unidadeId && filteredProfiles.length === 0 && <p className="text-xs text-red-500">Nenhum colaborador ativo nesta unidade.</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -325,13 +369,13 @@ export default function AdminDocumentosAtestadosPage() {
             <div className="flex items-center justify-center rounded-2xl border p-12 text-muted-foreground">
               <Loader2 className="size-6 animate-spin mr-2" /> Carregando...
             </div>
-          ) : filtered.length === 0 ? (
+          ) : filteredAtestados.length === 0 ? (
             <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
               Nenhum atestado encontrado.
             </div>
           ) : (
             <div className="grid gap-4">
-              {filtered.map((a) => (
+              {filteredAtestados.map((a) => (
                 <div key={a.id} className="rounded-2xl border bg-card p-4 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>

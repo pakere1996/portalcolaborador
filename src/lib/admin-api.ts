@@ -26,4 +26,7 @@ export const adminApi = {
   runSorteio: (ano?: number, mes?: number) => callAdminFunction("sorteio-folgas", { ano, mes }),
   // Nova função para processar trocas anonimamente
   acceptSwap: (swapId: string) => callAdminFunction("trocas-handler", { action: "accept", swapId }),
+  
+  // Ponto 6: Geração de PDF Disciplinar
+  generateDisciplinaryPdf: (ocorrenciaId: string) => callAdminFunction("generate-disciplinary-pdf", { id: ocorrenciaId }),
 };

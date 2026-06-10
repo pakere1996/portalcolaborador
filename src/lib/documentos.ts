@@ -31,17 +31,19 @@ export interface ExtractedData {
   nome: string;
   cpf: string | null;
   matricula: string | null;
+  cracha: string | null;
   cargo: string | null;
   unidade: string | null; // Nome da unidade
+  departamento: string | null;
+  centro_custo: string | null;
   data_nascimento: string | null; // Formato YYYY-MM-DD
   data_admissao: string | null; // Formato YYYY-MM-DD
-  // Adicione outros campos conforme necessário (e-mail, telefone, etc.)
 }
 
 export interface PageResult {
   pageNumber: number;
   text: string;
-  status: "auto" | "manual" | "pending" | "suggested" | "linked"; // Adicionando 'linked'
+  status: "auto" | "manual" | "pending" | "suggested" | "linked";
   profileId?: string;
   profileName?: string;
   score?: number;
@@ -187,42 +189,68 @@ export function extractStructuredData(text: string): ExtractedData {
     nome: guessNameFromText(rawText) || "Nome não encontrado",
     cpf: null,
     matricula: null,
+    cracha: null,
     cargo: null,
     unidade: null,
+    departamento: null,
+    centro_custo: null,
     data_nascimento: null,
     data_admissao: null,
   };
 
-  // 1. Extrair CPF (11 dígitos)
-  const cpfMatch = normalized.match(/(\d{3}\s*\d{3}\s*\d{3}\s*\d{2})/);
+  // --- 1. Extrair CPF (11 dígitos) ---
+  // Procura por 11 dígitos, com ou sem separadores comuns (., -)
+  const cpfMatch = rawText.match(/(\d{3}[\.\s]?\d{3}[\.\s]?\d{3}[-\s]?\d{2})/);
   if (cpfMatch) {
-    data.cpf = cpfMatch[1].replace(/\s/g, '');
+    data.cpf = cpfMatch[1].replace(/[\s\.\-]/g, '');
   }
 
-  // 2. Extrair Matrícula (assumindo 4 a 10 dígitos próximos a 'matricula' ou 'registro')
-  const matriculaMatch = rawText.match(/(?:Matr[íi]cula|Registro|C[óo]digo)\s*:?\s*(\d{4,10})/i);
-  if (matriculaMatch) {
-    data.matricula = matriculaMatch[1];
+  // --- 2. Extrair Matrícula/Crachá ---
+  // Procura por palavras-chave seguidas por 4 a 10 dígitos
+  const idMatch = rawText.match(/(?:Crach[áa]|Matr[íi]cula|Registro|C[óo]digo|ID)\s*:?\s*(\d{4,10})/i);
+  if (idMatch) {
+    data.matricula = idMatch[1];
+    data.cracha = idMatch[1];
   }
 
-  // 3. Extrair Cargo (muito dependente do formato, usando regex genérica)
-  const cargoMatch = rawText.match(/(?:Cargo|Fun[çc][ãa]o)\s*:?\s*([A-Z][A-Za-z\s]{3,40})/);
+  // --- 3. Extrair Cargo ---
+  // Procura por palavras-chave seguidas por texto (3 a 50 caracteres)
+  const cargoMatch = rawText.match(/(?:Cargo|Fun[çc][ãa]o|Ocupa[çc][ãa]o)\s*:?\s*([A-Z][A-Za-z\s]{3,50})/i);
   if (cargoMatch) {
     data.cargo = cargoMatch[1].trim();
   }
 
-  // 4. Extrair Unidade (muito difícil sem contexto, usando regex genérica)
-  const unidadeMatch = rawText.match(/(?:Unidade|Filial)\s*:?\s*([A-Z][A-Za-z\s]{3,40})/);
+  // --- 4. Extrair Unidade ---
+  const unidadeMatch = rawText.match(/(?:Unidade|Filial|Local)\s*:?\s*([A-Z][A-Za-z\s]{3,50})/i);
   if (unidadeMatch) {
     data.unidade = unidadeMatch[1].trim();
   }
 
-  // 5. Extrair Datas (Admissão/Nascimento)
-  const dateMatch = rawText.match(/(?:Admiss[ãa]o|Nascimento)\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i);
-  if (dateMatch) {
-    // Simplificação: apenas pega a primeira data encontrada
-    const [day, month, year] = dateMatch[1].split('/');
-    data.data_admissao = `${year}-${month}-${day}`; // Convertendo para YYYY-MM-DD
+  // --- 5. Extrair Departamento ---
+  const deptoMatch = rawText.match(/(?:Departamento|Setor)\s*:?\s*([A-Z][A-Za-z\s]{3,50})/i);
+  if (deptoMatch) {
+    data.departamento = deptoMatch[1].trim();
+  }
+
+  // --- 6. Extrair Centro de Custo ---
+  const ccMatch = rawText.match(/(?:Centro de Custo|CC)\s*:?\s*([A-Za-z0-9\s]{3,50})/i);
+  if (ccMatch) {
+    data.centro_custo = ccMatch[1].trim();
+  }
+
+  // --- 7. Extrair Datas (Admissão/Nascimento) ---
+  // Admissão
+  const admissaoMatch = rawText.match(/(?:Data de Admiss[ãa]o|Admiss[ãa]o)\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i);
+  if (admissaoMatch) {
+    const [day, month, year] = admissaoMatch[1].split('/');
+    data.data_admissao = `${year}-${month}-${day}`;
+  }
+  
+  // Nascimento
+  const nascimentoMatch = rawText.match(/(?:Data de Nascimento|Nascimento)\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i);
+  if (nascimentoMatch) {
+    const [day, month, year] = nascimentoMatch[1].split('/');
+    data.data_nascimento = `${year}-${month}-${day}`;
   }
 
   return data;
@@ -241,7 +269,7 @@ export function findBestProfileMatch(pageText: string, profiles: Profile[]): { p
     }
   }
 
-  // 2. Prioridade: Matrícula (se implementado no Profile)
+  // 2. Prioridade: Matrícula/Crachá (se implementado no Profile)
   if (extracted.matricula) {
     // Assumindo que a matrícula está armazenada em profiles.matricula
     const match = profiles.find(p => p.matricula === extracted.matricula);
@@ -276,13 +304,16 @@ export function findBestProfileMatch(pageText: string, profiles: Profile[]): { p
 
 function extractFolhaPontoName(text: string): string | null {
   const upperText = (text ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const match = upperText.match(/\b([A-Z]{2,}(?:\s+[A-Z]{2,}){1,})\s+(\d{10})\b/);
+  // Procura por uma sequência de palavras em caixa alta (o nome) que não seja seguida imediatamente por um número curto (evitando crachá/matrícula no meio da linha)
+  // Tentativa de capturar o nome completo antes de qualquer identificador numérico
+  const match = upperText.match(/\b([A-Z]{2,}(?:\s+[A-Z]{2,}){1,})\b/);
 
-  if (!match) return null;
-
-  return match[1]
-    .replace(/\s+/g, " ")
-    .trim();
+  if (match && match[1].length > 5) {
+    return match[1]
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  return null;
 }
 
 export function guessNameFromText(text: string, tipo?: DocumentType): string {
@@ -294,7 +325,7 @@ export function guessNameFromText(text: string, tipo?: DocumentType): string {
   }
 
   // Tenta extrair o nome de forma mais robusta
-  const nameMatch = text.match(/(?:Nome|Colaborador)\s*:?\s*([A-Za-z\s]{5,50})/i);
+  const nameMatch = text.match(/(?:Nome|Colaborador|Funcion[áa]rio)\s*:?\s*([A-Za-z\s]{5,50})/i);
   if (nameMatch) {
     return nameMatch[1].trim();
   }
