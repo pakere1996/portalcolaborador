@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,13 +24,20 @@ export function NotificationBell() {
   const navigate = useNavigate();
   const [items, setItems] = useState<Notif[]>([]);
   const [open, setOpen] = useState(false);
+  
+  // Use refs to track stable values and prevent unnecessary re-renders
+  const userIdRef = useRef<string | null>(null);
+  const roleRef = useRef<string | null>(null);
+  const hasFetchedAdminReminderRef = useRef(false);
 
   const load = async () => {
     if (!user) return;
 
-    if (role === "admin") {
+    // Only call admin reminder once per session
+    if (role === "admin" && !hasFetchedAdminReminderRef.current) {
       try {
         await syncAdminMonthlyDocumentReminder();
+        hasFetchedAdminReminderRef.current = true;
       } catch {
         // mantém silencioso para não atrapalhar o sino
       }
@@ -47,18 +54,29 @@ export function NotificationBell() {
   };
 
   useEffect(() => {
-    if (!user) return;
-    load();
-    const ch = supabase.channel(`notif:${user.id}:${Math.random().toString(36).slice(2)}`, {
+    // Only run if user or role actually changed
+    if (user?.id !== userIdRef.current || role !== roleRef.current) {
+      userIdRef.current = user?.id ?? null;
+      roleRef.current = role;
+      
+      // Reset admin reminder flag when user changes
+      if (user?.id !== userIdRef.current) {
+        hasFetchedAdminReminderRef.current = false;
+      }
+      
+      load();
+    }
+
+    const ch = supabase.channel(`notif:${user?.id}:${Math.random().toString(36).slice(2)}`, {
       config: { private: true },
     });
     ch.on(
       "postgres_changes",
-      { event: "*", schema: "public", table: "notificacoes", filter: `user_id=eq.${user.id}` },
+      { event: "*", schema: "public", table: "notificacoes", filter: `user_id=eq.${user?.id}` },
       () => load(),
     ).subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [user?.id, role]);
+  }, [user?.id, role]); // Stable dependencies - only re-run when user ID or role actually changes
 
   const unread = items.filter((i) => !i.lida).length;
 
