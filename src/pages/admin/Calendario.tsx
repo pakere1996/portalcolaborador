@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,10 +15,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Filter, User, Trash2, Plus, Settings2, Save, Lock, Info, Unlock, AlertTriangle, ChevronRight } from "lucide-react";
+import { Calendar as CalIcon, Filter, User, Trash2, Plus, Settings2, Save, Lock, Info, Unlock, AlertTriangle, ChevronRight, Building } from "lucide-react";
 import { dayType, formatBR, monthKey, parseYMD, ymd, autoBlockedDatesForMonth } from "@/lib/folga-rules";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Tables } from "@/integrations/supabase/types";
+
+type Unidade = Tables<'unidades'>;
+type Profile = Tables<'profiles'>;
 
 export default function AdminCalendar() {
   const { user } = useAuth();
@@ -27,10 +33,12 @@ export default function AdminCalendar() {
   
   const [folgas, setFolgas] = useState<any[]>([]);
   const [manual, setManual] = useState<any[]>([]);
-  const [profiles, setProfiles] = useState<any[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [limites, setLimites] = useState<any[]>([]);
   const [pendentes, setPendentes] = useState<any[]>([]);
   
+  const [filterUnidade, setFilterUnidade] = useState("all"); // Novo filtro de unidade
   const [filterUser, setFilterUser] = useState("all");
   const [filterType, setFilterType] = useState("all");
 
@@ -44,12 +52,13 @@ export default function AdminCalendar() {
     const endDate = new Date(year, month0 + 1, 0);
     const end = ymd(endDate);
 
-    const [fRes, bRes, pRes, limRes, pendRes] = await Promise.all([
+    const [fRes, bRes, pRes, limRes, pendRes, uRes] = await Promise.all([
       supabase.from("folgas").select("*").gte("data", start).lte("data", end),
       supabase.from("datas_bloqueadas").select("*").gte("data", start).lte("data", end),
       supabase.from("profiles").select("*").eq("ativo", true).order("nome"),
       supabase.from("dia_config").select("*").gte("data", start).lte("data", end),
       supabase.from("solicitacoes_especiais").select("*").eq("status", "pendente").gte("data", start).lte("data", end),
+      supabase.from("unidades").select("*").order("nome"),
     ]);
 
     setProfiles(pRes.data ?? []);
@@ -57,6 +66,7 @@ export default function AdminCalendar() {
     setManual(bRes.data ?? []);
     setLimites(limRes.data ?? []);
     setPendentes(pendRes.data ?? []);
+    setUnidades(uRes.data ?? []);
   };
 
   useEffect(() => { load(); }, [year, month0]);
@@ -71,15 +81,23 @@ export default function AdminCalendar() {
     return () => { supabase.removeChannel(ch); };
   }, []);
 
+  const filteredProfiles = useMemo(() => {
+    if (filterUnidade === "all") return profiles;
+    return profiles.filter(p => p.unidade_id === filterUnidade);
+  }, [profiles, filterUnidade]);
+
   const occupantsByDate = useMemo(() => {
     const m = new Map<string, DayOccupant[]>();
-    const nm = new Map(profiles.map(p => [p.id, p.nome]));
+    const nm = new Map(filteredProfiles.map(p => [p.id, p.nome]));
+    const validUserIds = new Set(filteredProfiles.map(p => p.id));
 
     const days = getMonthDays(year, month0);
     for (const d of days) {
       const iso = ymd(d);
       const wd = d.getDay();
-      const fixedOnes = profiles.filter(p => p.folga_fixa_semana === wd);
+      
+      // 1. Folgas Fixas (Semanal)
+      const fixedOnes = filteredProfiles.filter(p => p.folga_fixa_semana === wd);
       
       fixedOnes.forEach(p => {
         if (filterUser !== "all" && p.id !== filterUser) return;
@@ -91,7 +109,9 @@ export default function AdminCalendar() {
       });
     }
 
+    // 2. Folgas Mensais (FDS)
     folgas.forEach(f => {
+      if (!validUserIds.has(f.user_id)) return; // Filtra por unidade
       if (filterUser !== "all" && f.user_id !== filterUser) return;
       if (filterType !== "all" && filterType !== "monthly") return;
       
@@ -106,7 +126,9 @@ export default function AdminCalendar() {
       m.set(iso, arr);
     });
 
+    // 3. Solicitações Pendentes
     pendentes.forEach(p => {
+      if (!validUserIds.has(p.user_id)) return; // Filtra por unidade
       if (filterUser !== "all" && p.user_id !== filterUser) return;
       if (filterType !== "all" && filterType !== "pending") return;
       
@@ -123,7 +145,7 @@ export default function AdminCalendar() {
     });
 
     return m;
-  }, [profiles, folgas, pendentes, year, month0, filterUser, filterType]);
+  }, [filteredProfiles, folgas, pendentes, year, month0, filterUser, filterType]);
 
   const manualMap = useMemo(() => {
     const m = new Map<string, { reason: string; liberada: boolean }>();
@@ -231,15 +253,29 @@ export default function AdminCalendar() {
       <div className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-wrap gap-8 items-end shadow-sm">
         <div className="space-y-2.5">
           <Label className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400 flex items-center gap-2">
+            <Building className="size-3.5" /> Unidade
+          </Label>
+          <Select value={filterUnidade} onValueChange={(value) => { setFilterUnidade(value); setFilterUser("all"); }}>
+            <SelectTrigger className="w-[260px] bg-slate-50/50 border-slate-200 rounded-2xl h-12 font-semibold">
+              <SelectValue placeholder="Todas as Unidades" />
+            </SelectTrigger>
+            <SelectContent className="rounded-2xl">
+              <SelectItem value="all">Todas as Unidades</SelectItem>
+              {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2.5">
+          <Label className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400 flex items-center gap-2">
             <User className="size-3.5" /> Colaborador
           </Label>
-          <Select value={filterUser} onValueChange={setFilterUser}>
+          <Select value={filterUser} onValueChange={setFilterUser} disabled={filteredProfiles.length === 0 && filterUnidade !== 'all'}>
             <SelectTrigger className="w-[260px] bg-slate-50/50 border-slate-200 rounded-2xl h-12 font-semibold">
               <SelectValue placeholder="Todos" />
             </SelectTrigger>
             <SelectContent className="rounded-2xl">
               <SelectItem value="all">Todos os colaboradores</SelectItem>
-              {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+              {filteredProfiles.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -259,7 +295,7 @@ export default function AdminCalendar() {
             </SelectContent>
           </Select>
         </div>
-        <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-900 font-bold uppercase tracking-widest text-[10px] h-12 px-6" onClick={() => { setFilterUser("all"); setFilterType("all"); }}>
+        <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-900 font-bold uppercase tracking-widest text-[10px] h-12 px-6" onClick={() => { setFilterUser("all"); setFilterType("all"); setFilterUnidade("all"); }}>
           Limpar Filtros
         </Button>
       </div>
@@ -270,7 +306,7 @@ export default function AdminCalendar() {
         dayLimits={dayLimits}
         myUserId={user?.id ?? null}
         allFolgas={folgas}
-        allProfiles={profiles}
+        allProfiles={filteredProfiles} // Passa apenas os perfis filtrados
         pendingRequests={pendentes}
         isAdmin={true}
         onPrev={goPrev} onNext={goNext}
@@ -431,7 +467,7 @@ export default function AdminCalendar() {
                       <SelectValue placeholder="Escolher colaborador..." />
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl">
-                      {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                      {filteredProfiles.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
                     </SelectContent>
                   </Select>
                   <Button className="h-14 px-8 rounded-2xl shadow-xl shadow-primary/20 font-black uppercase tracking-widest text-xs" onClick={() => assignFolga(dlg.iso)}>

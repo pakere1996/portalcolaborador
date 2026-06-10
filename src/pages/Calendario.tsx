@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,7 +34,7 @@ interface Solic {
 }
 
 export default function CalendarioPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth(); // Adicionando profile
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month0, setMonth0] = useState(today.getMonth());
@@ -53,20 +55,36 @@ export default function CalendarioPage() {
   const [busy, setBusy] = useState(false);
 
   const load = async () => {
-    if (!user) return;
+    if (!user || !profile?.unidade_id) return; // Verifica se a unidade está definida
+    
+    const unidadeId = profile.unidade_id;
     const start = `${year}-${String(month0 + 1).padStart(2, "0")}-01`;
     const endDate = new Date(year, month0 + 1, 0);
     const end = ymd(endDate);
 
-    const [allFolgasRes, blockRes, limRes, prioRes, pendingRes, profilesRes, canceledRes] = await Promise.all([
-      supabase.from("folgas").select("*").gte("data", start).lte("data", end),
+    // 1. Buscar todos os perfis da unidade
+    const { data: profilesData, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id, nome, folga_fixa_semana, data_nascimento, unidade_id")
+      .eq("ativo", true)
+      .eq("unidade_id", unidadeId);
+      
+    if (profilesError) {
+      toast.error("Erro ao carregar perfis da unidade", { description: profilesError.message });
+      return;
+    }
+    
+    const profileIds = profilesData.map(p => p.id);
+    setAllProfiles(profilesData);
+
+    // 2. Buscar dados filtrados pela unidade (ou por IDs de perfil)
+    const [allFolgasRes, blockRes, limRes, prioRes, pendingRes, canceledRes] = await Promise.all([
+      supabase.from("folgas").select("*").in("user_id", profileIds).gte("data", start).lte("data", end),
       supabase.from("datas_bloqueadas").select("*").gte("data", start).lte("data", end),
       supabase.from("dia_config").select("*").gte("data", start).lte("data", end),
-      supabase.from("prioridade_aniversario").select("*").eq("status", "ativa").gte("data", start).lte("data", end),
-      supabase.from("solicitacoes_especiais").select("*").eq("status", "pendente").gte("data", start).lte("data", end),
-      // Usamos a view 'colaboradores' que não contém o CPF para proteger dados sensíveis
-      supabase.from("colaboradores" as any).select("*").eq("ativo", true),
-      supabase.from("folgas_canceladas").select("*").gte("data", start).lte("data", end),
+      supabase.from("prioridade_aniversario").select("*").in("user_id", profileIds).eq("status", "ativa").gte("data", start).lte("data", end),
+      supabase.from("solicitacoes_especiais").select("*").in("user_id", profileIds).eq("status", "pendente").gte("data", start).lte("data", end),
+      supabase.from("folgas_canceladas").select("*").in("user_id", profileIds).gte("data", start).lte("data", end),
     ]);
 
     setFolgas(allFolgasRes.data ?? []);
@@ -74,11 +92,10 @@ export default function CalendarioPage() {
     setLimites(limRes.data ?? []);
     setPrios(prioRes.data ?? []);
     setPendingSolics(pendingRes.data ?? []);
-    setAllProfiles(profilesRes.data ?? []);
     setCanceledFolgas(canceledRes.data ?? []);
   };
 
-  useEffect(() => { load(); }, [year, month0, user]);
+  useEffect(() => { load(); }, [year, month0, user, profile?.unidade_id]); // Dependência adicionada
 
   useEffect(() => {
     const ch = supabase.channel("calendario-realtime")
@@ -88,7 +105,7 @@ export default function CalendarioPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "folgas_canceladas" }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [year, month0, user?.id]);
+  }, [year, month0, user?.id, profile?.unidade_id]); // Dependência adicionada
 
   const manualMap = useMemo(() => {
     const m = new Map<string, { reason: string; liberada: boolean }>();
