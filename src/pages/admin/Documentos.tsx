@@ -36,14 +36,16 @@
 
                   {(!isAuto && !isLinked && !isIgnored) && (
                     <div className="space-y-3">
-                      <h4 className="font-medium">Ações</h4>
-                      <div className="flex flex-wrap gap-2">
-                        <Button variant="outline" size="sm" onClick={() => handleEditPage(page.pageNumber)}>
-                          Editar
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => handleDeletePage(page.pageNumber)}>
-                          Excluir
-                        </Button>
+                      <div className="space-y-2">
+                        <Label>Vincular manualmente a</Label>
+                        <div className="flex flex-wrap gap-2">
+                          <Button variant="outline" size="sm" onClick={() => handleEditPage(page.pageNumber)}>
+                            Editar
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => handleDeletePage(page.pageNumber)}>
+                            Excluir
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   )}
