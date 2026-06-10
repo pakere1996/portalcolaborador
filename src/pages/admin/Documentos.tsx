@@ -96,6 +96,7 @@ export default function AdminDocumentosPage() {
   // State para o novo fluxo de pré-cadastro
   const [suggestedProfiles, setSuggestedProfiles] = useState<SuggestedProfile[]>([]);
   const [selectedSuggestion, setSelectedSuggestion] = useState<SuggestedProfile | null>(null);
+  const [selectedPageResult, setSelectedPageResult] = useState<PageResult | null>(null); // Novo estado para cadastro imediato
   const [openPreCadastroDialog, setOpenPreCadastroDialog] = useState(false);
 
   useEffect(() => {
@@ -385,14 +386,19 @@ export default function AdminDocumentosPage() {
 
         let key: string;
         let profileId: string | null = null;
+        let status: "auto" | "manual" | "suggested" | "linked" = page.status as any;
 
-        if (page.status === "auto" || (page.status === "manual" && manualProfileByPage[page.pageNumber])) {
-          profileId = page.status === "auto" ? page.profileId! : manualProfileByPage[page.pageNumber];
+        if (status === "auto" || (status === "manual" && manualProfileByPage[page.pageNumber])) {
+          profileId = status === "auto" ? page.profileId! : manualProfileByPage[page.pageNumber];
           key = `profile:${profileId}`;
-        } else if (page.status === "suggested") {
+        } else if (status === "linked") {
+          // Colaborador cadastrado imediatamente, já temos o ID
+          profileId = page.profileId!;
+          key = `profile:${profileId}`;
+        } else if (status === "suggested") {
           key = `suggested:${page.pageNumber}`;
         } else {
-          continue; // Ignora páginas que não são auto, manual ou suggested
+          continue; // Ignora páginas que não são auto, manual, linked ou suggested
         }
 
         if (!groups[key]) groups[key] = [];
@@ -466,6 +472,8 @@ export default function AdminDocumentosPage() {
         if (isProfileGroup) {
           if (group.some((item) => item.status === "manual")) {
             newStats.manual += 1;
+          } else if (group.some((item) => item.status === "linked")) {
+            newStats.manual += 1; // Contabiliza como manual/vinculado
           } else {
             newStats.auto += 1;
           }
@@ -506,7 +514,40 @@ export default function AdminDocumentosPage() {
 
   const handleOpenPreCadastro = (suggestion: SuggestedProfile) => {
     setSelectedSuggestion(suggestion);
+    setSelectedPageResult(null);
     setOpenPreCadastroDialog(true);
+  };
+
+  const handleOpenPreCadastroImmediate = (page: PageResult) => {
+    setSelectedPageResult(page);
+    setSelectedSuggestion(null);
+    setOpenPreCadastroDialog(true);
+  };
+
+  const handlePreCadastroSuccess = (newProfileId?: string, pageNumber?: number) => {
+    // Se o cadastro foi feito a partir de um PageResult (cadastro imediato)
+    if (newProfileId && pageNumber) {
+      const newProfile = profiles.find(p => p.id === newProfileId) || { id: newProfileId, nome: "Novo Colaborador", cpf: "" };
+      
+      setPageResults(prev => prev.map(page => {
+        if (page.pageNumber === pageNumber) {
+          return {
+            ...page,
+            status: "linked", // Novo status: vinculado imediatamente
+            profileId: newProfileId,
+            profileName: newProfile.nome,
+            identifiedName: newProfile.nome,
+          };
+        }
+        return page;
+      }));
+      
+      // Adiciona o novo perfil à lista de perfis para que ele possa ser usado em outras páginas
+      setProfiles(prev => [...prev, newProfile as Profile]);
+    }
+    
+    // Recarrega os dados (principalmente para atualizar o painel de sugestões do DB)
+    loadData();
   };
 
   const getStatusBadge = (status: string) => {
@@ -824,10 +865,12 @@ export default function AdminDocumentosPage() {
               const isAuto = page.status === "auto";
               const isManual = page.status === "manual";
               const isSuggested = page.status === "suggested";
-              
+              const isLinked = page.status === "linked"; // Novo status
+
               let statusBadge;
               if (isAuto) statusBadge = <Badge className="bg-green-100 text-green-700 border-green-200">Vinculado: {page.profileName}</Badge>;
               else if (isManual) statusBadge = <Badge className="bg-blue-100 text-blue-700 border-blue-200">Manual: {identifiedNames[page.pageNumber] || page.profileName}</Badge>;
+              else if (isLinked) statusBadge = <Badge className="bg-green-100 text-green-700 border-green-200">Vinculado (Novo): {page.profileName}</Badge>;
               else if (isSuggested) statusBadge = <Badge className="bg-orange-100 text-orange-700 border-orange-200">Pré-Cadastro Sugerido</Badge>;
               else if (isIgnored) statusBadge = <Badge className="bg-slate-100 text-slate-700 border-slate-200">Ignorada</Badge>;
 
@@ -845,7 +888,7 @@ export default function AdminDocumentosPage() {
                     <p className="italic">Nome: {page.extractedData?.nome || 'N/A'} | CPF: {page.extractedData?.cpf || 'N/A'} | Cargo: {page.extractedData?.cargo || 'N/A'}</p>
                   </div>
 
-                  {(!isAuto && !isIgnored) && (
+                  {(!isAuto && !isLinked && !isIgnored) && (
                     <div className="space-y-3">
                       <div className="space-y-2">
                         <Label>Vincular manualmente a</Label>
@@ -868,6 +911,12 @@ export default function AdminDocumentosPage() {
 
                       {isSuggested && (
                         <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            onClick={() => handleOpenPreCadastroImmediate(page)}
+                          >
+                            <UserPlus className="size-4 mr-2" /> Cadastrar Colaborador
+                          </Button>
                           <Button
                             type="button"
                             variant="outline"
@@ -990,9 +1039,10 @@ export default function AdminDocumentosPage() {
         open={openPreCadastroDialog}
         onOpenChange={setOpenPreCadastroDialog}
         suggestion={selectedSuggestion}
+        pageResult={selectedPageResult} // Passando o PageResult
         unidades={unidades}
         cargos={cargos}
-        onSuccess={loadData}
+        onSuccess={handlePreCadastroSuccess} // Usando o novo handler
       />
     </div>
   );

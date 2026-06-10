@@ -9,7 +9,7 @@ import { adminApi } from "@/lib/admin-api";
 import { Tables } from "@/integrations/supabase/types";
 import { onlyDigits } from "@/lib/cpf";
 import { ColaboradorForm } from "./ColaboradorForm";
-import { ExtractedData } from "@/lib/documentos";
+import { ExtractedData, PageResult } from "@/lib/documentos";
 
 type Unidade = Tables<'unidades'>;
 type Cargo = Tables<'cargos'>;
@@ -19,9 +19,10 @@ interface PreCadastroDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   suggestion: SuggestedProfile | null;
+  pageResult: PageResult | null; // Novo prop para cadastro imediato
   unidades: Unidade[];
   cargos: Cargo[];
-  onSuccess: () => void;
+  onSuccess: (newProfileId?: string, pageNumber?: number) => void; // Adicionando newProfileId e pageNumber
 }
 
 // Estado inicial completo do formulário (deve ser compatível com o ColaboradorForm)
@@ -38,13 +39,15 @@ const blankForm = {
   perfil_acesso: "user",
 };
 
-export function PreCadastroDialog({ open, onOpenChange, suggestion, unidades, cargos, onSuccess }: PreCadastroDialogProps) {
+export function PreCadastroDialog({ open, onOpenChange, suggestion, pageResult, unidades, cargos, onSuccess }: PreCadastroDialogProps) {
   const [form, setForm] = useState(blankForm);
   const [busy, setBusy] = useState(false);
 
+  const source = suggestion || pageResult;
+
   useEffect(() => {
-    if (suggestion && suggestion.extracted_data) {
-      const data = suggestion.extracted_data as ExtractedData;
+    if (source) {
+      const data = (suggestion ? suggestion.extracted_data : pageResult?.extractedData) as ExtractedData;
       
       // Tenta encontrar a Unidade e Cargo correspondentes
       const matchedUnidade = unidades.find(u => u.nome.toLowerCase() === data.unidade?.toLowerCase());
@@ -63,7 +66,7 @@ export function PreCadastroDialog({ open, onOpenChange, suggestion, unidades, ca
     } else if (!open) {
       setForm(blankForm);
     }
-  }, [suggestion, open, unidades, cargos]);
+  }, [suggestion, pageResult, open, unidades, cargos]);
 
   const validateForm = () => {
     const requiredFields = ['nome', 'email', 'cpf', 'cargo', 'unidade_id', 'folga_fixa_semana', 'data_nascimento', 'data_admissao', 'perfil_acesso'];
@@ -88,7 +91,7 @@ export function PreCadastroDialog({ open, onOpenChange, suggestion, unidades, ca
   };
 
   const handleSubmit = async () => {
-    if (!suggestion || !validateForm()) return;
+    if (!source || !validateForm()) return;
 
     setBusy(true);
 
@@ -103,18 +106,24 @@ export function PreCadastroDialog({ open, onOpenChange, suggestion, unidades, ca
       data_nascimento: form.data_nascimento,
       data_admissao: form.data_admissao,
       role: form.perfil_acesso,
-      suggestion_id: suggestion.id, // Passa o ID da sugestão para a Edge Function
+      suggestion_id: suggestion?.id, // Passa o ID da sugestão SE estiver vindo do painel de conferência
     };
 
     try {
       // A Edge Function 'admin-users' com action 'create' deve ser atualizada para lidar com suggestion_id
-      await adminApi.createUser(payload);
+      const newProfile = await adminApi.createUser(payload);
 
       toast.success("Colaborador cadastrado com sucesso.", {
         description: "O usuário foi criado e a sugestão foi marcada como concluída.",
       });
       onOpenChange(false);
-      onSuccess();
+      
+      // Se for um cadastro imediato (vindo de pageResult), retorna o ID do novo perfil e o número da página
+      if (pageResult) {
+        onSuccess(newProfile.id, pageResult.pageNumber);
+      } else {
+        onSuccess(); // Se for do painel de sugestões, apenas recarrega os dados
+      }
     } catch (e) {
       toast.error("Erro ao cadastrar colaborador", { description: (e as Error).message });
     } finally {

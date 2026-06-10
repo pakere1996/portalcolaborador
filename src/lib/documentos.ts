@@ -41,7 +41,7 @@ export interface ExtractedData {
 export interface PageResult {
   pageNumber: number;
   text: string;
-  status: "auto" | "manual" | "pending" | "suggested"; // 'suggested' para novo fluxo
+  status: "auto" | "manual" | "pending" | "suggested" | "linked"; // Adicionando 'linked'
   profileId?: string;
   profileName?: string;
   score?: number;
