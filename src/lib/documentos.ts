@@ -141,6 +141,20 @@ export function extractStructuredData(text: string): ExtractedData {
 // ... existing code ...
 
 /**
+ * Retorna o rótulo amigável para o tipo de documento.
+ */
+export function getDocumentTypeLabel(type: DocumentType): string {
+  switch (type) {
+    case "contracheque":
+      return "Contracheque";
+    case "folha_ponto":
+      return "Folha de Ponto";
+    default:
+      return "Documento";
+  }
+}
+
+/**
  * Sincroniza o lembrete de documentos mensais para administradores.
  * Esta função deve ser chamada após qualquer alteração nos documentos.
  */
