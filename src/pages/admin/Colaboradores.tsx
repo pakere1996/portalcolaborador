@@ -2,12 +2,24 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Tables } from "@/integrations/supabase/types";
-import { User, Search, ArrowUpDown, Loader2, Plus, Pencil } from "lucide-react";
+import { User, Search, ArrowUpDown, Loader2, Plus, Pencil, Trash2, KeyRound, UserX, UserCheck, Check, X, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
+import { adminApi } from "@/lib/admin-api";
 
 // Tipagem assumida para o perfil com a unidade join
 type Profile = Tables<'profiles'> & {
@@ -15,6 +27,22 @@ type Profile = Tables<'profiles'> & {
 };
 type Unidade = Tables<'unidades'>;
 type Cargo = Tables<'cargos'>;
+
+type EditForm = {
+  nome: string;
+  cargo: string;
+  folga_fixa_semana: string; // Use string for select input
+  unidade_id: string; // Use string for select input
+  ativo: boolean;
+};
+
+const blankEditForm: EditForm = {
+  nome: "",
+  cargo: "",
+  folga_fixa_semana: "null",
+  unidade_id: "null",
+  ativo: true,
+};
 
 const statusMap: Record<string, string> = {
   pendente: "Pendente",
@@ -38,6 +66,12 @@ export default function Colaboradores() {
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [cargos, setCargos] = useState<Cargo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  // Edit/Delete State
+  const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>(blankEditForm);
 
   // Filter States
   const [filterName, setFilterName] = useState("");
@@ -51,18 +85,15 @@ export default function Colaboradores() {
     console.log("[Colaboradores] Iniciando consulta de dados...");
     
     // 1. Fetch Profiles (Colaboradores)
-    // Tabela consultada: profiles
     const { data: profilesData, error: profilesError } = await supabase
       .from("profiles")
       .select("*, unidade:unidade_id(id, nome)")
       .order("nome");
 
     if (profilesError) {
-      // Erros do Supabase
       console.error("[Colaboradores] Erro na consulta de perfis:", profilesError);
       toast.error("Erro ao carregar colaboradores.", { description: profilesError.message });
     } else {
-      // Quantidade de colaboradores retornados e resultado da consulta
       console.log(`[Colaboradores] Consulta de perfis bem-sucedida. Registros retornados: ${profilesData.length}`);
       console.log("[Colaboradores] Resultado da consulta:", profilesData);
       setList(profilesData as Profile[]);
@@ -83,7 +114,7 @@ export default function Colaboradores() {
     // 3. Fetch Cargos
     const { data: cargosData, error: cargosError } = await supabase
       .from("cargos")
-      .select("*")
+      .select("nome")
       .order("nome");
     
     if (cargosError) {
@@ -104,7 +135,6 @@ export default function Colaboradores() {
 
     // 1. Filtragem
     if (filterName) {
-      // Adicionando busca por CPF também
       filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterName.toLowerCase()) || p.cpf.includes(filterName));
     }
     if (filterUnidade !== "all") {
@@ -135,10 +165,114 @@ export default function Colaboradores() {
       sorted = sorted.sort((a, b) => b.nome.localeCompare(a.nome));
     }
     
-    // Quantidade exibida após aplicação dos filtros
     console.log(`[Colaboradores] Registros após filtros: ${sorted.length}`);
     return sorted;
   }, [list, filterName, filterUnidade, filterFolga, filterStatus, sortOrder]);
+
+  // --- Handlers ---
+
+  const openEdit = (profile: Profile) => {
+    setEditingProfile(profile);
+    setEditForm({
+      nome: profile.nome,
+      cargo: profile.cargo,
+      folga_fixa_semana: profile.folga_fixa_semana !== null ? String(profile.folga_fixa_semana) : "null",
+      unidade_id: profile.unidade_id || "null",
+      ativo: profile.ativo,
+    });
+  };
+
+  const handleFormChange = (id: keyof EditForm, value: string | boolean) => {
+    setEditForm(prev => ({ ...prev, [id]: value }));
+  };
+
+  const saveEdit = async () => {
+    if (!editingProfile) return;
+    if (!editForm.nome.trim() || !editForm.cargo.trim()) {
+      return toast.error("Nome e Cargo são obrigatórios.");
+    }
+    setBusy(true);
+
+    const updateData: Tables<'profiles'>['Update'] = {
+      nome: editForm.nome.trim(),
+      cargo: editForm.cargo.trim(),
+      folga_fixa_semana: editForm.folga_fixa_semana === "null" ? null : Number(editForm.folga_fixa_semana),
+      unidade_id: editForm.unidade_id === "null" ? null : editForm.unidade_id,
+      ativo: editForm.ativo,
+      updated_at: new Date().toISOString(),
+    };
+
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update(updateData)
+        .eq("id", editingProfile.id);
+
+      if (error) throw error;
+
+      toast.success("Perfil atualizado com sucesso.");
+      setEditingProfile(null);
+      setEditForm(blankEditForm);
+      loadData();
+    } catch (e) {
+      toast.error("Erro ao atualizar perfil", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleToggleActive = async (profile: Profile) => {
+    setBusy(true);
+    const newStatus = !profile.ativo;
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ ativo: newStatus, aprovacao_status: newStatus ? 'aprovado' : 'inativo' })
+        .eq("id", profile.id);
+
+      if (error) throw error;
+
+      toast.success(`Colaborador ${newStatus ? 'ativado' : 'inativado'} com sucesso.`);
+      loadData();
+    } catch (e) {
+      toast.error("Erro ao alterar status", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleResetPassword = async (profile: Profile) => {
+    if (!confirm(`Tem certeza que deseja resetar a senha de ${profile.nome}? Uma nova senha será enviada para o e-mail de cadastro.`)) {
+      return;
+    }
+    setBusy(true);
+    try {
+      // Nota: O admin-api.ts usa uma Edge Function para resetar a senha
+      await adminApi.resetPassword(profile.id, "NovaSenhaTemporaria123"); // A Edge Function deve gerar e enviar a senha
+      toast.success("Solicitação de reset de senha enviada.", { description: `Uma instrução de recuperação de senha foi enviada para o e-mail do usuário.` });
+    } catch (e) {
+      toast.error("Erro ao resetar senha", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doDelete = async () => {
+    if (!confirmDelete) return;
+    setBusy(true);
+    try {
+      // Nota: O admin-api.ts usa uma Edge Function para deletar o usuário (auth + profile)
+      await adminApi.deleteUser(confirmDelete.id);
+      
+      toast.success("Colaborador excluído permanentemente.");
+      setConfirmDelete(null);
+      loadData();
+    } catch (e) {
+      toast.error("Erro ao excluir colaborador", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -149,6 +283,7 @@ export default function Colaboradores() {
           </h1>
           <p className="text-muted-foreground mt-1">Gerencie os perfis e acessos dos colaboradores.</p>
         </div>
+        {/* Novo Colaborador button placeholder - assumes a dialog/form component is needed here */}
         <Button className="rounded-full px-6">
             <Plus className="size-4 mr-2" /> Novo Colaborador
         </Button>
@@ -282,10 +417,47 @@ export default function Colaboradores() {
                       </span>
                     </td>
                     <td className="p-4 text-right whitespace-nowrap">
-                      {/* Placeholder for actions */}
-                      <Button variant="ghost" size="icon" className="size-8" title="Editar">
-                        <Pencil className="size-4" />
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="size-8">
+                            <MoreVertical className="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Ações para {profile.nome}</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          
+                          <DropdownMenuItem onClick={() => openEdit(profile)} disabled={busy}>
+                            <Pencil className="mr-2 size-4" /> Editar Perfil
+                          </DropdownMenuItem>
+                          
+                          <DropdownMenuItem onClick={() => handleResetPassword(profile)} disabled={busy}>
+                            <KeyRound className="mr-2 size-4" /> Resetar Senha
+                          </DropdownMenuItem>
+
+                          <DropdownMenuSeparator />
+
+                          {profile.ativo ? (
+                            <DropdownMenuItem onClick={() => handleToggleActive(profile)} disabled={busy}>
+                              <UserX className="mr-2 size-4 text-red-600" /> Inativar Colaborador
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem onClick={() => handleToggleActive(profile)} disabled={busy}>
+                              <UserCheck className="mr-2 size-4 text-green-600" /> Ativar Colaborador
+                            </DropdownMenuItem>
+                          )}
+
+                          <DropdownMenuSeparator />
+
+                          <DropdownMenuItem 
+                            onClick={() => setConfirmDelete(profile)} 
+                            className="text-red-600 focus:text-red-600"
+                            disabled={busy}
+                          >
+                            <Trash2 className="mr-2 size-4" /> Excluir Permanentemente
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                   </tr>
                 ))
@@ -294,6 +466,117 @@ export default function Colaboradores() {
           </table>
         </div>
       </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingProfile} onOpenChange={(o) => { if (!o) { setEditingProfile(null); setEditForm(blankEditForm); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Editar Colaborador: {editingProfile?.nome}</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="nome">Nome Completo</Label>
+              <Input 
+                id="nome" 
+                value={editForm.nome} 
+                onChange={(e) => handleFormChange('nome', e.target.value)} 
+                disabled={busy}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* Cargo */}
+              <div className="space-y-2">
+                <Label htmlFor="cargo">Cargo</Label>
+                <Select 
+                  value={editForm.cargo} 
+                  onValueChange={(value) => handleFormChange('cargo', value)}
+                  disabled={busy}
+                >
+                  <SelectTrigger id="cargo">
+                    <SelectValue placeholder="Selecione o Cargo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cargos.map(c => (
+                      <SelectItem key={c.nome} value={c.nome}>{c.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Unidade */}
+              <div className="space-y-2">
+                <Label htmlFor="unidade_id">Unidade</Label>
+                <Select 
+                  value={editForm.unidade_id} 
+                  onValueChange={(value) => handleFormChange('unidade_id', value)}
+                  disabled={busy}
+                >
+                  <SelectTrigger id="unidade_id">
+                    <SelectValue placeholder="Selecione a Unidade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="null">Sem Unidade</SelectItem>
+                    {unidades.map(u => (
+                      <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Folga Fixa */}
+            <div className="space-y-2">
+              <Label htmlFor="folga_fixa_semana">Folga Fixa Semanal</Label>
+              <Select 
+                value={editForm.folga_fixa_semana} 
+                onValueChange={(value) => handleFormChange('folga_fixa_semana', value)}
+                disabled={busy}
+              >
+                <SelectTrigger id="folga_fixa_semana">
+                  <SelectValue placeholder="Nenhuma Folga Fixa" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="null">Nenhuma Folga Fixa</SelectItem>
+                  {Object.entries(dayOfWeekMap).map(([key, value]) => (
+                    <SelectItem key={key} value={key}>{value}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center space-x-2 pt-2">
+              <Switch 
+                id="ativo" 
+                checked={editForm.ativo} 
+                onCheckedChange={(checked) => handleFormChange('ativo', checked)} 
+                disabled={busy}
+              />
+              <Label htmlFor="ativo">Colaborador Ativo</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setEditingProfile(null); setEditForm(blankEditForm); }} disabled={busy}>Cancelar</Button>
+            <Button onClick={saveEdit} disabled={busy}>{busy ? "Salvando..." : "Salvar Alterações"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Colaborador: {confirmDelete?.nome}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir permanentemente o colaborador "{confirmDelete?.nome}"? Esta ação é irreversível e removerá o perfil e o acesso do usuário.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={doDelete} className="bg-red-600 text-white hover:bg-red-700" disabled={busy}>
+              {busy ? "Excluindo..." : "Excluir Permanentemente"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
