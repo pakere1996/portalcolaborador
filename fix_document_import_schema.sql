@@ -3,6 +3,7 @@ ALTER TABLE public.profiles
 ADD COLUMN IF NOT EXISTS matricula TEXT NULL;
 
 -- Cria um índice para buscas rápidas por matrícula (usado na importação de documentos)
+-- Usamos IF NOT EXISTS para ser defensivo.
 CREATE UNIQUE INDEX IF NOT EXISTS profiles_matricula_idx ON public.profiles (matricula)
 WHERE matricula IS NOT NULL;
 
@@ -11,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.suggested_profiles (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     document_id uuid NOT NULL,
     extracted_data jsonb NOT NULL,
+    -- O tipo ENUM public.suggestion_status deve existir previamente
     status public.suggestion_status DEFAULT 'pending'::public.suggestion_status NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT suggested_profiles_pkey PRIMARY KEY (id),
@@ -25,6 +27,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.suggested_profiles TO servi
 GRANT SELECT, UPDATE ON TABLE public.suggested_profiles TO authenticated;
 
 -- Policies (Apenas administradores podem ver/manipular)
--- Assumindo que a função is_admin() existe e funciona corretamente.
+-- Usamos a função is_admin() que existe no contexto do banco.
 CREATE POLICY "Admin Full Access on suggested_profiles" ON public.suggested_profiles
 FOR ALL TO authenticated USING (is_admin()) WITH CHECK (is_admin());
