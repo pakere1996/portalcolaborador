@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,15 +15,26 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Users, Pencil, Trash2, KeyRound, Cake, CalendarDays, RefreshCw, Shield } from "lucide-react";
+import { Plus, Users, Pencil, Trash2, KeyRound, Cake, CalendarDays, RefreshCw, Shield, Search, ArrowUpDown } from "lucide-react";
 import { formatCPF, onlyDigits, isValidCPFLength } from "@/lib/cpf";
 import { adminApi } from "@/lib/admin-api";
 import { Badge } from "@/components/ui/badge";
 import { Tables } from "@/integrations/supabase/types";
+import { cn } from "@/lib/utils";
 
 const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+const WEEKDAY_OPTIONS = [
+  { value: "0", label: "Domingo" },
+  { value: "1", label: "Segunda" },
+  { value: "2", label: "Terça" },
+  { value: "3", label: "Quarta" },
+  { value: "4", label: "Quinta" },
+  { value: "5", label: "Sexta" },
+  { value: "6", label: "Sábado" },
+];
 
 type Cargo = Tables<'cargos'>;
+type Unidade = Tables<'unidades'>;
 
 interface Profile {
   id: string;
@@ -36,6 +47,8 @@ interface Profile {
   data_demissao: string | null;
   data_nascimento: string | null;
   folga_fixa_semana: number | null;
+  unidade_id: string | null;
+  unidade_nome?: string; // Para exibição
   role?: string;
   created_at: string;
 }
@@ -43,7 +56,8 @@ interface Profile {
 const blankForm = {
   nome: "",
   cpf: "",
-  cargo: "", // Deve ser vazio para forçar a seleção
+  cargo: "",
+  unidadeId: "", // Novo campo
   senha: "",
   dataAdmissao: "",
   dataNascimento: "",
@@ -53,55 +67,68 @@ const blankForm = {
 export default function Colaboradores() {
   const [list, setList] = useState<Profile[]>([]);
   const [cargos, setCargos] = useState<Cargo[]>([]);
+  const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(blankForm);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Profile | null>(null);
   const [editForm, setEditForm] = useState({
-    nome: "", cargo: "", dataAdmissao: "", dataDemissao: "", dataNascimento: "", folgaFixa: "",
+    nome: "", cargo: "", unidadeId: "", dataAdmissao: "", dataDemissao: "", dataNascimento: "", folgaFixa: "",
   });
   const [resetting, setResetting] = useState<Profile | null>(null);
   const [newPwd, setNewPwd] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
 
-  const loadCargos = async () => {
-    const { data, error } = await supabase.from("cargos").select("nome").order("nome");
-    if (error) {
-      console.error("Erro ao carregar cargos:", error);
-      toast.error("Erro ao carregar cargos.");
-      return;
-    }
-    setCargos(data as Cargo[]);
-    if (data && data.length > 0 && form.cargo === "") {
-      setForm(prev => ({ ...prev, cargo: data[0].nome }));
-    }
-  };
+  // Estados de Filtro
+  const [filterName, setFilterName] = useState("");
+  const [filterCargo, setFilterCargo] = useState("all");
+  const [filterUnidade, setFilterUnidade] = useState("all");
+  const [filterFolga, setFilterFolga] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
 
-  const load = async () => {
-    const [profResult, rolesResult] = await Promise.all([
+  // Estados de Ordenação
+  const [sortBy, setSortBy] = useState<keyof Profile | 'unidade_nome'>("nome");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const loadData = async () => {
+    const [profResult, rolesResult, cargosResult, unidadesResult] = await Promise.all([
       supabase
         .from("profiles")
-        .select("id, nome, cpf, cargo, ativo, aprovacao_status, data_admissao, data_demissao, data_nascimento, folga_fixa_semana, created_at")
+        .select("id, nome, cpf, cargo, ativo, aprovacao_status, data_admissao, data_demissao, data_nascimento, folga_fixa_semana, unidade_id, created_at")
         .order("nome"),
-      supabase.from("user_roles").select("user_id, role")
+      supabase.from("user_roles").select("user_id, role"),
+      supabase.from("cargos").select("nome").order("nome"),
+      supabase.from("unidades").select("id, nome").eq("ativo", true).order("nome"),
     ]);
 
     const roleMap = new Map((rolesResult.data ?? []).map(r => [r.user_id, r.role]));
+    const unidadeMap = new Map((unidadesResult.data ?? []).map(u => [u.id, u.nome]));
+    
+    setUnidades(unidadesResult.data as Unidade[]);
+    setCargos(cargosResult.data as Cargo[]);
+
     const combined = (profResult.data ?? []).map(p => ({
       ...p,
+      unidade_nome: p.unidade_id ? unidadeMap.get(p.unidade_id) : "Não Atribuída",
       role: roleMap.get(p.id) || "funcionario"
     }));
     setList(combined as Profile[]);
+
+    // Define valores iniciais para o formulário se houver dados
+    if (cargosResult.data && cargosResult.data.length > 0 && form.cargo === "") {
+      setForm(prev => ({ ...prev, cargo: cargosResult.data[0].nome }));
+    }
+    if (unidadesResult.data && unidadesResult.data.length > 0 && form.unidadeId === "") {
+      setForm(prev => ({ ...prev, unidadeId: unidadesResult.data[0].id }));
+    }
   };
 
-  useEffect(() => { 
-    loadCargos();
-    load(); 
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const create = async () => {
     if (!form.nome.trim()) return toast.error("Informe o nome");
     if (!form.cargo.trim()) return toast.error("Selecione o cargo");
+    if (!form.unidadeId.trim()) return toast.error("Selecione a unidade de trabalho");
     if (!isValidCPFLength(form.cpf)) return toast.error("CPF inválido");
     if (form.senha.length < 6) return toast.error("Senha deve ter pelo menos 6 caracteres");
     setBusy(true);
@@ -110,6 +137,7 @@ export default function Colaboradores() {
         nome: form.nome.trim(),
         cpf: onlyDigits(form.cpf),
         cargo: form.cargo.trim(),
+        unidadeId: form.unidadeId, // Novo campo
         senha: form.senha,
         dataAdmissao: form.dataAdmissao || null,
         dataNascimento: form.dataNascimento || null,
@@ -119,7 +147,7 @@ export default function Colaboradores() {
       toast.success("Colaborador cadastrado");
       setOpen(false);
       setForm(blankForm);
-      load();
+      loadData();
     } catch (e) {
       toast.error("Erro ao cadastrar", { description: (e as Error).message });
     } finally {
@@ -135,6 +163,7 @@ export default function Colaboradores() {
         nome: p.nome,
         cpf: onlyDigits(p.cpf),
         cargo: p.cargo,
+        unidadeId: p.unidade_id, // Incluindo unidade no sync
         senha: tempPassword,
         dataAdmissao: p.data_admissao,
         dataNascimento: p.data_nascimento,
@@ -146,7 +175,7 @@ export default function Colaboradores() {
         duration: 10000,
         description: `Nova senha temporária: ${tempPassword}. Informe ao colaborador.`
       });
-      load();
+      loadData();
     } catch (e) {
       toast.error("Erro na sincronização", { id: toastId, description: (e as Error).message });
     }
@@ -157,6 +186,7 @@ export default function Colaboradores() {
     setEditForm({
       nome: p.nome,
       cargo: p.cargo,
+      unidadeId: p.unidade_id ?? "", // Novo campo
       dataAdmissao: p.data_admissao ?? "",
       dataDemissao: p.data_demissao ?? "",
       dataNascimento: p.data_nascimento ?? "",
@@ -167,12 +197,14 @@ export default function Colaboradores() {
   const saveEdit = async () => {
     if (!editing) return;
     if (!editForm.cargo.trim()) return toast.error("Selecione o cargo");
+    if (!editForm.unidadeId.trim()) return toast.error("Selecione a unidade de trabalho");
 
     const { error } = await supabase
       .from("profiles")
       .update({
         nome: editForm.nome.trim(),
         cargo: editForm.cargo.trim(),
+        unidade_id: editForm.unidadeId || null, // Novo campo
         data_admissao: editForm.dataAdmissao || null,
         data_demissao: editForm.dataDemissao || null,
         data_nascimento: editForm.dataNascimento || null,
@@ -182,13 +214,13 @@ export default function Colaboradores() {
     if (error) return toast.error(error.message);
     toast.success("Dados atualizados");
     setEditing(null);
-    load();
+    loadData();
   };
 
   const toggleAtivo = async (p: Profile) => {
     const { error } = await supabase.from("profiles").update({ ativo: !p.ativo }).eq("id", p.id);
     if (error) return toast.error(error.message);
-    load();
+    loadData();
   };
 
   const doReset = async () => {
@@ -210,14 +242,71 @@ export default function Colaboradores() {
       await adminApi.deleteUser(confirmDelete.id);
       toast.success("Colaborador excluído");
       setConfirmDelete(null);
-      load();
+      loadData();
     } catch (e) {
       toast.error((e as Error).message);
     }
   };
 
+  const handleSort = (key: keyof Profile | 'unidade_nome') => {
+    if (sortBy === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(key);
+      setSortDir("asc");
+    }
+  };
+
+  const filteredAndSortedList = useMemo(() => {
+    let filtered = list;
+
+    // 1. Filtragem
+    if (filterName) {
+      filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterName.toLowerCase()));
+    }
+    if (filterCargo !== "all") {
+      filtered = filtered.filter(p => p.cargo === filterCargo);
+    }
+    if (filterUnidade !== "all") {
+      filtered = filtered.filter(p => p.unidade_id === filterUnidade);
+    }
+    if (filterFolga !== "all") {
+      const folgaNum = Number(filterFolga);
+      filtered = filtered.filter(p => p.folga_fixa_semana === folgaNum);
+    }
+    if (filterStatus !== "all") {
+      const statusBool = filterStatus === "ativo";
+      filtered = filtered.filter(p => p.ativo === statusBool);
+    }
+
+    // 2. Ordenação
+    return filtered.sort((a, b) => {
+      const aValue = a[sortBy as keyof Profile] ?? (sortBy === 'unidade_nome' ? a.unidade_nome : '');
+      const bValue = b[sortBy as keyof Profile] ?? (sortBy === 'unidade_nome' ? b.unidade_nome : '');
+
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return sortDir === "asc" ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+      }
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return sortDir === "asc" ? aValue - bValue : bValue - aValue;
+      }
+      // Fallback para outros tipos ou nulos
+      return 0;
+    });
+  }, [list, filterName, filterCargo, filterUnidade, filterFolga, filterStatus, sortBy, sortDir]);
+
+  const SortButton = ({ columnKey, label }: { columnKey: keyof Profile | 'unidade_nome', label: string }) => (
+    <button
+      className="flex items-center gap-1 hover:text-foreground transition-colors"
+      onClick={() => handleSort(columnKey)}
+    >
+      {label}
+      <ArrowUpDown className={cn("size-3 transition-transform", sortBy === columnKey ? "text-primary" : "text-muted-foreground/50")} />
+    </button>
+  );
+
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
@@ -257,6 +346,21 @@ export default function Colaboradores() {
                   </Select>
                 </div>
               </div>
+              <div className="space-y-2">
+                <Label>Unidade de Trabalho</Label>
+                <Select value={form.unidadeId} onValueChange={(value) => setForm({ ...form, unidadeId: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a unidade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unidades.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Data de Nascimento</Label>
@@ -287,24 +391,86 @@ export default function Colaboradores() {
         </Dialog>
       </div>
 
+      {/* Barra de Filtros */}
+      <div className="bg-card border border-border rounded-2xl p-4 shadow-sm space-y-4">
+        <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+          <Search className="size-4" /> Filtros
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          {/* Filtro Nome */}
+          <Input 
+            placeholder="Filtrar por nome..." 
+            value={filterName} 
+            onChange={(e) => setFilterName(e.target.value)} 
+            className="col-span-2 md:col-span-1"
+          />
+          
+          {/* Filtro Cargo */}
+          <Select value={filterCargo} onValueChange={setFilterCargo}>
+            <SelectTrigger><SelectValue placeholder="Cargo" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os Cargos</SelectItem>
+              {cargos.map((c) => <SelectItem key={c.nome} value={c.nome}>{c.nome}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          {/* Filtro Unidade */}
+          <Select value={filterUnidade} onValueChange={setFilterUnidade}>
+            <SelectTrigger><SelectValue placeholder="Unidade" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as Unidades</SelectItem>
+              {unidades.map((u) => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+              <SelectItem value="null">Não Atribuída</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Filtro Folga Semanal */}
+          <Select value={filterFolga} onValueChange={setFilterFolga}>
+            <SelectTrigger><SelectValue placeholder="Folga Semanal" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as Folgas</SelectItem>
+              {WEEKDAY_OPTIONS.map((d) => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          {/* Filtro Status */}
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os Status</SelectItem>
+              <SelectItem value="ativo">Ativo</SelectItem>
+              <SelectItem value="inativo">Inativo</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-muted-foreground border-b border-border">
               <tr>
-                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Colaborador</th>
-                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">Cargo</th>
-                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">Nascimento</th>
-                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Folga Semanal</th>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">
+                  <SortButton columnKey="nome" label="Colaborador" />
+                </th>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">
+                  <SortButton columnKey="cargo" label="Cargo" />
+                </th>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">
+                  <SortButton columnKey="unidade_nome" label="Unidade" />
+                </th>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">
+                  <SortButton columnKey="folga_fixa_semana" label="Folga Semanal" />
+                </th>
                 <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
                 <th className="text-right p-4 font-bold uppercase tracking-wider text-[10px]">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {list.length === 0 && (
-                <tr><td colSpan={6} className="p-12 text-center text-muted-foreground">Nenhum colaborador cadastrado.</td></tr>
+              {filteredAndSortedList.length === 0 && (
+                <tr><td colSpan={6} className="p-12 text-center text-muted-foreground">Nenhum colaborador encontrado com os filtros aplicados.</td></tr>
               )}
-              {list.map((p) => (
+              {filteredAndSortedList.map((p) => (
                 <tr key={p.id} className="hover:bg-muted/20 transition-colors">
                   <td className="p-4">
                     <div className="flex items-center gap-2">
@@ -318,12 +484,7 @@ export default function Colaboradores() {
                   </td>
                   <td className="p-4 hidden md:table-cell"><span className="text-muted-foreground">{p.cargo}</span></td>
                   <td className="p-4 hidden lg:table-cell">
-                    {p.data_nascimento ? (
-                      <div className="flex items-center gap-1.5 text-muted-foreground">
-                        <Cake className="size-3" />
-                        {new Date(p.data_nascimento + "T00:00:00").toLocaleDateString("pt-BR")}
-                      </div>
-                    ) : "—"}
+                    <span className="text-muted-foreground">{p.unidade_nome}</span>
                   </td>
                   <td className="p-4">
                     {p.folga_fixa_semana != null ? (
@@ -374,6 +535,21 @@ export default function Colaboradores() {
                   {cargos.map((c) => (
                     <SelectItem key={c.nome} value={c.nome}>
                       {c.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Unidade de Trabalho</Label>
+              <Select value={editForm.unidadeId} onValueChange={(value) => setEditForm({ ...editForm, unidadeId: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a unidade" />
+                </SelectTrigger>
+                <SelectContent>
+                  {unidades.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.nome}
                     </SelectItem>
                   ))}
                 </SelectContent>
