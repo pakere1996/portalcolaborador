@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { adminApi } from "@/lib/admin-api";
+import { NovoColaboradorDialog } from "@/components/NovoColaboradorDialog";
 
 // Tipagem assumida para o perfil com a unidade join
 type Profile = Tables<'profiles'> & {
@@ -283,10 +284,11 @@ export default function Colaboradores() {
           </h1>
           <p className="text-muted-foreground mt-1">Gerencie os perfis e acessos dos colaboradores.</p>
         </div>
-        {/* Novo Colaborador button placeholder - assumes a dialog/form component is needed here */}
-        <Button className="rounded-full px-6">
-            <Plus className="size-4 mr-2" /> Novo Colaborador
-        </Button>
+        <NovoColaboradorDialog 
+          unidades={unidades} 
+          cargos={cargos} 
+          onSuccess={loadData} 
+        />
       </div>
 
       {/* Filter Bar */}
