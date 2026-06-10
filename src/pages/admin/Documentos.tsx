@@ -38,15 +38,40 @@
                     <div className="space-y-3">
                       <div className="space-y-2">
                         <Label>Vincular manualmente a</Label>
+                        <Select
+                          value={manualProfileByPage[page.pageNumber] || ""}
+                          onValueChange={(value) => handleManualAssign(page.pageNumber, value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione um colaborador existente" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {profiles.map((profile) => (
+                              <SelectItem key={profile.id} value={profile.id}>
+                                {profile.nome} (CPF: {profile.cpf})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {isSuggested && (
                         <div className="flex flex-wrap gap-2">
-                          <Button variant="outline" size="sm" onClick={() => handleEditPage(page.pageNumber)}>
-                            Editar
+                          <Button
+                            type="button"
+                            onClick={() => handleOpenPreCadastroImmediate(page)}
+                          >
+                            <UserPlus className="size-4 mr-2" /> Cadastrar Colaborador
                           </Button>
-                          <Button variant="outline" size="sm" onClick={() => handleDeletePage(page.pageNumber)}>
-                            Excluir
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setPageToIgnore(page.pageNumber)}
+                          >
+                            <Ban className="size-4 mr-2" /> Ignorar
                           </Button>
                         </div>
-                      </div>
+                      )}
                     </div>
                   )}
 
