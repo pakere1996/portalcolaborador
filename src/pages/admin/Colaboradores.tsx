@@ -27,7 +27,7 @@ type Profile = Tables<'profiles'> & {
   unidade: Tables<'unidades'> | null;
 };
 type Unidade = Tables<'unidades'>;
-type Cargo = Tables<'cargos'>;
+type Cargo = { nome: string }; // Redefinido para refletir a estrutura de dados necessária
 
 type EditForm = {
   nome: string;
@@ -112,18 +112,20 @@ export default function Colaboradores() {
       setUnidades(unidadesData);
     }
 
-    // 3. Fetch Cargos
+    // 3. Fetch Cargos: Buscando cargos distintos da tabela profiles
     const { data: cargosData, error: cargosError } = await supabase
-      .from("cargos")
-      .select("nome")
-      .order("nome");
+      .from("profiles")
+      .select("cargo", { distinct: true })
+      .order("cargo");
     
     if (cargosError) {
       console.error("[Colaboradores] Erro na consulta de cargos:", cargosError);
     } else {
-      setCargos(cargosData);
-      console.log(`[Colaboradores] Cargos carregados: ${cargosData.length}`);
-      console.log("[Colaboradores] Opções de Cargos:", cargosData.map(c => c.nome));
+      // Mapeando o resultado [{ cargo: 'Nome' }] para [{ nome: 'Nome' }]
+      const distinctCargos = cargosData.map(item => ({ nome: item.cargo }));
+      setCargos(distinctCargos);
+      console.log(`[Colaboradores] Cargos carregados: ${distinctCargos.length}`);
+      console.log("[Colaboradores] Opções de Cargos:", distinctCargos.map(c => c.nome));
     }
 
     setLoading(false);
