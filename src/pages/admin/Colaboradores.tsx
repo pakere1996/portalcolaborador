@@ -11,13 +11,19 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Users, Pencil, Trash2, KeyRound, Cake, CalendarDays, RefreshCw, Shield } from "lucide-react";
 import { formatCPF, onlyDigits, isValidCPFLength } from "@/lib/cpf";
 import { adminApi } from "@/lib/admin-api";
 import { Badge } from "@/components/ui/badge";
+import { Tables } from "@/integrations/supabase/types";
 
 const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+
+type Cargo = Tables<'cargos'>;
 
 interface Profile {
   id: string;
@@ -37,7 +43,7 @@ interface Profile {
 const blankForm = {
   nome: "",
   cpf: "",
-  cargo: "Pizzaiolo",
+  cargo: "", // Deve ser vazio para forçar a seleção
   senha: "",
   dataAdmissao: "",
   dataNascimento: "",
@@ -46,6 +52,7 @@ const blankForm = {
 
 export default function Colaboradores() {
   const [list, setList] = useState<Profile[]>([]);
+  const [cargos, setCargos] = useState<Cargo[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(blankForm);
   const [busy, setBusy] = useState(false);
@@ -57,6 +64,19 @@ export default function Colaboradores() {
   const [newPwd, setNewPwd] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
 
+  const loadCargos = async () => {
+    const { data, error } = await supabase.from("cargos").select("nome").order("nome");
+    if (error) {
+      console.error("Erro ao carregar cargos:", error);
+      toast.error("Erro ao carregar cargos.");
+      return;
+    }
+    setCargos(data as Cargo[]);
+    if (data && data.length > 0 && form.cargo === "") {
+      setForm(prev => ({ ...prev, cargo: data[0].nome }));
+    }
+  };
+
   const load = async () => {
     const [profResult, rolesResult] = await Promise.all([
       supabase
@@ -66,8 +86,6 @@ export default function Colaboradores() {
       supabase.from("user_roles").select("user_id, role")
     ]);
 
-    console.log("PROFILES:", profResult.data, "ERROR:", profResult.error);
-
     const roleMap = new Map((rolesResult.data ?? []).map(r => [r.user_id, r.role]));
     const combined = (profResult.data ?? []).map(p => ({
       ...p,
@@ -76,10 +94,14 @@ export default function Colaboradores() {
     setList(combined as Profile[]);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { 
+    loadCargos();
+    load(); 
+  }, []);
 
   const create = async () => {
     if (!form.nome.trim()) return toast.error("Informe o nome");
+    if (!form.cargo.trim()) return toast.error("Selecione o cargo");
     if (!isValidCPFLength(form.cpf)) return toast.error("CPF inválido");
     if (form.senha.length < 6) return toast.error("Senha deve ter pelo menos 6 caracteres");
     setBusy(true);
@@ -87,7 +109,7 @@ export default function Colaboradores() {
       await adminApi.createUser({
         nome: form.nome.trim(),
         cpf: onlyDigits(form.cpf),
-        cargo: form.cargo.trim() || "Funcionário",
+        cargo: form.cargo.trim(),
         senha: form.senha,
         dataAdmissao: form.dataAdmissao || null,
         dataNascimento: form.dataNascimento || null,
@@ -144,11 +166,13 @@ export default function Colaboradores() {
 
   const saveEdit = async () => {
     if (!editing) return;
+    if (!editForm.cargo.trim()) return toast.error("Selecione o cargo");
+
     const { error } = await supabase
       .from("profiles")
       .update({
         nome: editForm.nome.trim(),
-        cargo: editForm.cargo.trim() || "Funcionário",
+        cargo: editForm.cargo.trim(),
         data_admissao: editForm.dataAdmissao || null,
         data_demissao: editForm.dataDemissao || null,
         data_nascimento: editForm.dataNascimento || null,
@@ -219,7 +243,18 @@ export default function Colaboradores() {
                 </div>
                 <div className="space-y-2">
                   <Label>Cargo</Label>
-                  <Input value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} placeholder="Ex: Pizzaiolo" />
+                  <Select value={form.cargo} onValueChange={(value) => setForm({ ...form, cargo: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o cargo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cargos.map((c) => (
+                        <SelectItem key={c.nome} value={c.nome}>
+                          {c.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -329,7 +364,21 @@ export default function Colaboradores() {
           <DialogHeader><DialogTitle>Editar colaborador</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2"><Label>Nome</Label><Input value={editForm.nome} onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Cargo</Label><Input value={editForm.cargo} onChange={(e) => setEditForm({ ...editForm, cargo: e.target.value })} /></div>
+            <div className="space-y-2">
+              <Label>Cargo</Label>
+              <Select value={editForm.cargo} onValueChange={(value) => setEditForm({ ...editForm, cargo: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o cargo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cargos.map((c) => (
+                    <SelectItem key={c.nome} value={c.nome}>
+                      {c.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Admissão</Label>

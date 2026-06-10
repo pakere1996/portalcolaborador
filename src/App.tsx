@@ -35,6 +35,7 @@ function AuthenticatedRoutes() {
 
   const isAdmin = role === "admin";
 
+  // Todas as rotas autenticadas são renderizadas dentro do AppShell
   return (
     <AppShell>
       <Routes>
@@ -106,6 +107,7 @@ function App() {
       <Routes>
         <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} />
         <Route path="/setup" element={hasAdmin ? <Navigate to="/login" replace /> : <SetupAdmin />} />
+        {/* A rota curinga '/*' agora aponta para AuthenticatedRoutes, que contém o AppShell e as rotas internas */}
         <Route path="/*" element={<AuthenticatedRoutes />} />
       </Routes>
     </BrowserRouter>
