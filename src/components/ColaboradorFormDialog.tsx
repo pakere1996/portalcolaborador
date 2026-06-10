@@ -36,6 +36,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { maskCNPJ } from "@/lib/utils"; // Import maskCNPJ
 
 const formSchema = z.object({
   nome: z.string().min(2, { message: "O nome deve ter pelo menos 2 caracteres." }),
@@ -128,6 +129,7 @@ export function ColaboradorFormDialog({
   });
 
   // Reset form when dialog opens/profile changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useEffect(() => {
     if (open) {
       form.reset(defaultValues);
@@ -244,7 +246,7 @@ export function ColaboradorFormDialog({
                       <SelectContent>
                         {unidades?.map((unidade) => (
                           <SelectItem key={unidade.id} value={unidade.id}>
-                            {unidade.nome}
+                            {unidade.nome} - {maskCNPJ(unidade.cnpj)}
                           </SelectItem>
                         ))}
                       </SelectContent>

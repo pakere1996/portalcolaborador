@@ -21,9 +21,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { DocumentPage, DocumentType, processPdf, saveDocument } from "@/lib/documentos";
 import { toast } from "sonner";
 import { Unidade, Profile } from "@/integrations/supabase/types";
-import { Loader2, FileText, UserPlus, Link, XCircle, CheckCircle, AlertTriangle } from "lucide-react";
+import { Loader2, FileText, UserPlus, Link, XCircle, CheckCircle, AlertTriangle, Building2 } from "lucide-react";
 import DocumentPreview from "@/components/DocumentPreview";
 import ColaboradorFormDialog from "@/components/ColaboradorFormDialog";
+import { maskCNPJ } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin/Documentos")({
   component: AdminDocumentosPage,
@@ -66,6 +67,7 @@ function AdminDocumentosPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [showColaboradorForm, setShowColaboradorForm] = useState(false);
   const [selectedProfileForManualLink, setSelectedProfileForManualLink] = useState<Profile | null>(null);
+  const [isUnitLocked, setIsUnitLocked] = useState(false); // State to lock the unit selection
 
   const { data: unidades, isLoading: isLoadingUnidades } = useQuery({
     queryKey: ["unidades"],
@@ -96,6 +98,15 @@ function AdminDocumentosPage() {
       setIsProcessing(false);
       toast.success(`PDF processado. ${pages.length} páginas encontradas.`);
       console.log("[DEBUG] Raw Processed Pages:", pages);
+      
+      // Check if the first page had an extracted unit and lock the selection
+      const firstPage = pages[0];
+      if (firstPage?.extractedData.extracted_unidade_id) {
+        setSelectedUnidadeId(firstPage.extractedData.extracted_unidade_id);
+        setIsUnitLocked(true);
+      } else {
+        setIsUnitLocked(false);
+      }
     },
     onError: (error) => {
       setIsProcessing(false);
@@ -111,6 +122,7 @@ function AdminDocumentosPage() {
       setFile(e.target.files[0]);
       setProcessedPages([]);
       setCurrentPageIndex(0);
+      setIsUnitLocked(false); // Reset lock when new file is selected
     }
   };
 
@@ -128,7 +140,7 @@ function AdminDocumentosPage() {
     setIsSaving(true);
     try {
       // NOTE: storagePath is currently a placeholder in saveDocument
-      const storagePath = `documents/${selectedUnidadeId}/${documentType}/${profileId}/${file.name}_page_${currentDocumentPage.pageIndex}`;
+      const storagePath = `documents/${currentDocumentPage.extractedData.unidade_id}/${documentType}/${profileId}/${file.name}_page_${currentDocumentPage.pageIndex}`;
       
       await saveDocument(currentDocumentPage, file, profileId, storagePath);
       
@@ -149,7 +161,7 @@ function AdminDocumentosPage() {
     } finally {
       setIsSaving(false);
     }
-  }, [file, currentDocumentPage, currentPageIndex, documentType, selectedUnidadeId]);
+  }, [file, currentDocumentPage, currentPageIndex, documentType]);
 
   const handleIgnorePage = () => {
     if (!currentDocumentPage) return;
@@ -189,6 +201,9 @@ function AdminDocumentosPage() {
       setCurrentPageIndex(prev => prev + 1);
     }
   };
+
+  const currentUnit = unidades?.find(u => u.id === currentDocumentPage?.extractedData.unidade_id);
+  const extractedUnit = unidades?.find(u => u.id === currentDocumentPage?.extractedData.extracted_unidade_id);
 
   const renderProcessingStep = () => {
     if (isProcessing) {
@@ -257,7 +272,22 @@ function AdminDocumentosPage() {
               <p><strong>CPF:</strong> {extractedData.cpf}</p>
               <p><strong>Matrícula:</strong> {extractedData.matricula || "N/A"}</p>
               <p><strong>Mês/Ano:</strong> {extractedData.mes}/{extractedData.ano || "N/A"}</p>
-              <p><strong>Unidade ID:</strong> {extractedData.unidade_id}</p>
+              
+              {/* Display Extracted Unit Info */}
+              <div className="pt-2 border-t mt-2">
+                <p className="font-semibold flex items-center gap-1">
+                  <Building2 className="size-4" /> Unidade (Extraída)
+                </p>
+                {extractedUnit ? (
+                  <div className="text-green-600">
+                    {extractedUnit.nome} - {maskCNPJ(extractedUnit.cnpj)}
+                  </div>
+                ) : (
+                  <div className="text-red-600">
+                    Não detectada automaticamente.
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -319,7 +349,7 @@ function AdminDocumentosPage() {
                     <SelectValue placeholder="Vincular Manualmente a..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {profiles?.filter(p => p.unidade_id === selectedUnidadeId).map((p) => (
+                    {profiles?.filter(p => p.unidade_id === currentDocumentPage.extractedData.unidade_id).map((p) => (
                       <SelectItem key={p.id} value={p.id}>
                         {p.nome} ({p.cpf})
                       </SelectItem>
@@ -404,22 +434,35 @@ function AdminDocumentosPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Select
-              onValueChange={setSelectedUnidadeId}
-              value={selectedUnidadeId}
-              disabled={isLoadingUnidades || isProcessing || processedPages.length > 0}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione a Unidade" />
-              </SelectTrigger>
-              <SelectContent>
-                {unidades?.map((unidade) => (
-                  <SelectItem key={unidade.id} value={unidade.id}>
-                    {unidade.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            
+            {/* Unit Selection with Lock/Correction Logic */}
+            <div className="flex gap-2">
+              <Select
+                onValueChange={setSelectedUnidadeId}
+                value={selectedUnidadeId}
+                disabled={isLoadingUnidades || isProcessing || processedPages.length > 0 || isUnitLocked}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a Unidade" />
+                </SelectTrigger>
+                <SelectContent>
+                  {unidades?.map((unidade) => (
+                    <SelectItem key={unidade.id} value={unidade.id}>
+                      {unidade.nome} - {maskCNPJ(unidade.cnpj)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {isUnitLocked && (
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsUnitLocked(false)}
+                  title="Corrigir Unidade"
+                >
+                  Corrigir
+                </Button>
+              )}
+            </div>
           </div>
           <Button
             onClick={handleProcess}
@@ -468,7 +511,7 @@ function AdminDocumentosPage() {
             matricula: currentDocumentPage?.extractedData.matricula || "",
             ativo: true,
             aprovacao_status: "aprovado",
-            unidade_id: selectedUnidadeId, // Pre-fill mandatory unit
+            unidade_id: currentDocumentPage?.extractedData.unidade_id || selectedUnidadeId, // Use the determined unit ID
             // ... other fields
           } as Profile}
         />

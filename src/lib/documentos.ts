@@ -3,6 +3,7 @@ import { Profile, SuggestedProfile, Documento, Unidade } from "@/integrations/su
 import { PDFDocument } from "pdf-lib";
 import { toast } from "sonner";
 import { getMonth, getYear } from "date-fns";
+import { cleanCNPJ } from "@/lib/utils"; // Import cleanCNPJ
 
 // --- Types ---
 
@@ -15,6 +16,7 @@ export interface ExtractedData {
   mes?: number;
   ano?: number;
   unidade_id: string;
+  extracted_unidade_id?: string; // New field for unit ID extracted from PDF
 }
 
 export interface DocumentPage {
@@ -24,6 +26,46 @@ export interface DocumentPage {
   suggestedProfile: SuggestedProfile | null;
   matchStatus: "matched" | "unmatched" | "duplicate";
   documentType: DocumentType;
+}
+
+// --- CNPJ Extraction Logic ---
+
+/**
+ * Extracts CNPJs from the PDF text.
+ * @param text The full text content of the PDF page.
+ * @returns An array of cleaned CNPJ strings.
+ */
+function extractCNPJs(text: string): string[] {
+  // Regex to find CNPJ patterns (XX.XXX.XXX/XXXX-XX or 14 digits)
+  const cnpjRegex = /(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})|(\d{14})/g;
+  const matches = text.match(cnpjRegex) || [];
+  
+  // Clean and return unique CNPJs
+  const cleanedCNPJs = matches.map(cleanCNPJ).filter(cnpj => cnpj.length === 14);
+  return Array.from(new Set(cleanedCNPJs));
+}
+
+/**
+ * Finds the unit ID based on CNPJ extracted from the text.
+ * @param text The full text content of the PDF page.
+ * @param allUnidades List of all active units.
+ * @returns The matching Unidade ID or null.
+ */
+function findUnitByCNPJ(text: string, allUnidades: Unidade[]): string | null {
+  const extractedCNPJs = extractCNPJs(text);
+  
+  for (const extractedCnpj of extractedCNPJs) {
+    const matchingUnit = allUnidades.find(unit => 
+      unit.cnpj && cleanCNPJ(unit.cnpj) === extractedCnpj
+    );
+    
+    if (matchingUnit) {
+      console.log(`[DEBUG] CNPJ Match found for unit ID: ${matchingUnit.id}`);
+      return matchingUnit.id;
+    }
+  }
+  
+  return null;
 }
 
 // --- Date Extraction Logic ---
@@ -168,13 +210,13 @@ export function findBestProfileMatch(
  * Processes a PDF file, extracts data page by page, and attempts to match profiles.
  * @param file The PDF file blob.
  * @param documentType The type of document being processed.
- * @param unidadeId The ID of the unit selected by the admin.
+ * @param adminSelectedUnidadeId The ID of the unit selected by the admin in the UI.
  * @returns A promise resolving to an array of DocumentPage objects.
  */
 export async function processPdf(
   file: File,
   documentType: DocumentType,
-  unidadeId: string
+  adminSelectedUnidadeId: string
 ): Promise<DocumentPage[]> {
   const arrayBuffer = await file.arrayBuffer();
   const pdfDoc = await PDFDocument.load(arrayBuffer);
@@ -190,6 +232,17 @@ export async function processPdf(
   if (profileError) {
     console.error("Error fetching profiles:", profileError);
     throw new Error("Failed to fetch collaborator profiles.");
+  }
+  
+  // Fetch all units once (needed for CNPJ matching)
+  const { data: allUnidades, error: unidadeError } = await supabase
+    .from("unidades")
+    .select("*")
+    .eq("ativo", true);
+
+  if (unidadeError) {
+    console.error("Error fetching units:", unidadeError);
+    throw new Error("Failed to fetch units.");
   }
 
   // Fetch all suggested profiles (pending)
@@ -225,6 +278,7 @@ export async function processPdf(
       Nome: João da Silva
       CPF: 123.456.789-00
       Matrícula: 98765
+      CNPJ: 06.002.178/0001-58
       Período de referência: de 01/05/2024 à 31/05/2024 (Folha Ponto)
       Fevereiro de 2026 (Contracheque)
     `;
@@ -234,10 +288,18 @@ export async function processPdf(
       nome: "João da Silva",
       cpf: "123.456.789-00",
       matricula: "98765",
-      unidade_id: unidadeId, // Use the admin selected unit ID
+      unidade_id: adminSelectedUnidadeId, // Default to admin selected unit ID
     };
 
-    // 1. Extract Month and Year
+    // 1. Extract Unit ID via CNPJ
+    const extractedUnidadeId = findUnitByCNPJ(pageText, allUnidades || []);
+    
+    if (extractedUnidadeId) {
+      extractedData.unidade_id = extractedUnidadeId;
+      extractedData.extracted_unidade_id = extractedUnidadeId; // Store the extracted ID separately
+    }
+
+    // 2. Extract Month and Year
     const dateInfo = extractMonthAndYear(pageText, documentType);
     if (dateInfo) {
       extractedData.mes = dateInfo.mes;
@@ -247,18 +309,18 @@ export async function processPdf(
       console.warn(`[DEBUG] Could not extract date for page ${i + 1}.`);
     }
 
-    // 2. Find Best Profile Match
+    // 3. Find Best Profile Match
     let matchedProfile = findBestProfileMatch(extractedData, allProfiles);
     let matchStatus: DocumentPage['matchStatus'] = matchedProfile ? "matched" : "unmatched";
 
-    // 3. Check for Duplicates if a match was found and date info exists
+    // 4. Check for Duplicates if a match was found and date info exists
     if (matchedProfile && extractedData.mes && extractedData.ano) {
       const isDuplicate = await checkDuplicateDocument(
         matchedProfile.id,
         documentType,
         extractedData.mes,
         extractedData.ano,
-        unidadeId
+        extractedData.unidade_id // Use the determined unit ID
       );
       if (isDuplicate) {
         matchStatus = "duplicate";
@@ -266,7 +328,7 @@ export async function processPdf(
       }
     }
 
-    // 4. Check for existing suggested profile if unmatched
+    // 5. Check for existing suggested profile if unmatched
     let suggestedProfile: SuggestedProfile | null = null;
     if (matchStatus === "unmatched") {
       const key = `${extractedData.cpf || ''}-${extractedData.nome || ''}`;

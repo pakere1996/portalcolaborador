@@ -1,340 +1,574 @@
-import { useEffect, useState } from "react";
+import { useState, useMemo } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { Unidade } from "@/integrations/supabase/types";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Plus, Building2, Pencil, Trash2, CheckCircle, XCircle } from "lucide-react";
-import { Tables } from "@/integrations/supabase/types";
-import { cn, formatPhone, onlyDigits } from "@/lib/utils";
+import { Plus, Edit, Trash2, Check, X, Building2 } from "lucide-react";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cleanCNPJ, formatCNPJ, validateCNPJFormat, maskCNPJ } from "@/lib/utils";
 
-type Unidade = Tables<'unidades'>;
+export const Route = createFileRoute("/admin/Unidades")({
+  component: UnidadesPage,
+});
 
-const blankForm = {
-  nome: "",
-  endereco: "",
-  cidade: "",
-  telefone: "", // Armazena o valor formatado para exibição no input
-  ativo: true,
+const unidadeSchema = z.object({
+  nome: z.string().min(2, "O nome é obrigatório."),
+  cnpj: z.string().optional().nullable().refine((val) => {
+    if (!val) return true;
+    const cleaned = cleanCNPJ(val);
+    // Check if it's 14 digits and if it matches the formatted pattern XX.XXX.XXX/XXXX-XX
+    return cleaned.length === 14 && validateCNPJFormat(formatCNPJ(cleaned));
+  }, {
+    message: "CNPJ inválido. Use o formato XX.XXX.XXX/XXXX-XX.",
+  }).transform((val) => val ? formatCNPJ(cleanCNPJ(val)) : null),
+  endereco: z.string().optional().nullable(),
+  cidade: z.string().optional().nullable(),
+  telefone: z.string().optional().nullable(),
+  ativo: z.boolean(),
+});
+
+type UnidadeFormValues = z.infer<typeof unidadeSchema>;
+
+const fetchUnidades = async (): Promise<Unidade[]> => {
+  const { data, error } = await supabase
+    .from("unidades")
+    .select("*")
+    .order("nome");
+  if (error) throw error;
+  return data;
 };
 
-export default function Unidades() {
-  const [list, setList] = useState<Unidade[]>([]);
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(blankForm);
-  const [busy, setBusy] = useState(false);
-  const [editing, setEditing] = useState<Unidade | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<Unidade | null>(null);
+const upsertUnidade = async (values: UnidadeFormValues, id?: string) => {
+  const payload = {
+    ...values,
+    cnpj: values.cnpj || null,
+  };
 
-  const load = async () => {
-    const { data, error } = await supabase
+  if (id) {
+    const { error } = await supabase
       .from("unidades")
-      .select("*")
-      .order("nome");
-    
-    if (error) {
-      console.error("Erro ao carregar unidades:", error);
-      toast.error("Erro ao carregar unidades.");
-      return;
-    }
-    setList(data);
+      .update(payload)
+      .eq("id", id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from("unidades").insert(payload);
+    if (error) throw error;
+  }
+};
+
+const deleteUnidade = async (id: string) => {
+  const { error } = await supabase.from("unidades").delete().eq("id", id);
+  if (error) throw error;
+};
+
+function UnidadeFormDialog({
+  unidade,
+  open,
+  onOpenChange,
+}: {
+  unidade?: Unidade;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const isEdit = !!unidade;
+
+  const defaultValues: UnidadeFormValues = useMemo(() => ({
+    nome: unidade?.nome || "",
+    cnpj: unidade?.cnpj || "",
+    endereco: unidade?.endereco || "",
+    cidade: unidade?.cidade || "",
+    telefone: unidade?.telefone || "",
+    ativo: unidade?.ativo ?? true,
+  }), [unidade]);
+
+  const form = useForm<UnidadeFormValues>({
+    resolver: zodResolver(unidadeSchema),
+    defaultValues,
+  });
+
+  const mutation = useMutation({
+    mutationFn: (values: UnidadeFormValues) => upsertUnidade(values, unidade?.id),
+    onSuccess: () => {
+      toast.success(
+        isEdit
+          ? "Unidade atualizada com sucesso!"
+          : "Unidade criada com sucesso!"
+      );
+      queryClient.invalidateQueries({ queryKey: ["unidades"] });
+      onOpenChange(false);
+    },
+    onError: (error) => {
+      console.error("Erro ao salvar unidade:", error);
+      toast.error("Erro ao salvar unidade.", {
+        description: error.message,
+      });
+    },
+  });
+
+  const onSubmit = (values: UnidadeFormValues) => {
+    mutation.mutate(values);
   };
 
-  useEffect(() => { load(); }, []);
-
-  const create = async () => {
-    if (!form.nome.trim()) return toast.error("O nome da unidade é obrigatório.");
-    setBusy(true);
-    
-    const rawTelefone = onlyDigits(form.telefone);
-
-    try {
-      const { error } = await supabase
-        .from("unidades")
-        .insert({ 
-          nome: form.nome.trim(), 
-          endereco: form.endereco.trim() || null,
-          cidade: form.cidade.trim() || null,
-          telefone: rawTelefone || null, // Salva apenas dígitos
-          ativo: form.ativo,
-        });
-      
-      if (error) {
-        if (error.code === '23505') { // Unique violation
-          return toast.error("Erro", { description: "Já existe uma unidade com este nome." });
-        }
-        throw error;
-      }
-
-      toast.success("Unidade cadastrada com sucesso.");
-      setOpen(false);
-      setForm(blankForm);
-      load();
-    } catch (e) {
-      toast.error("Erro ao cadastrar", { description: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const openEdit = (unidade: Unidade) => {
-    setEditing(unidade);
-    setForm({ 
-      nome: unidade.nome, 
-      endereco: unidade.endereco || "", 
-      cidade: unidade.cidade || "", 
-      telefone: unidade.telefone ? formatPhone(unidade.telefone) : "", // Formata para exibição
-      ativo: unidade.ativo,
-    });
-  };
-
-  const saveEdit = async () => {
-    if (!editing) return;
-    if (!form.nome.trim()) return toast.error("O nome da unidade é obrigatório.");
-    setBusy(true);
-
-    const rawTelefone = onlyDigits(form.telefone);
-
-    try {
-      const { error } = await supabase
-        .from("unidades")
-        .update({ 
-          nome: form.nome.trim(), 
-          endereco: form.endereco.trim() || null,
-          cidade: form.cidade.trim() || null,
-          telefone: rawTelefone || null, // Salva apenas dígitos
-          ativo: form.ativo,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", editing.id);
-
-      if (error) {
-        if (error.code === '23505') { // Unique violation
-          return toast.error("Erro", { description: "Já existe uma unidade com este nome." });
-        }
-        throw error;
-      }
-
-      toast.success("Unidade atualizada com sucesso.");
-      setEditing(null);
-      setForm(blankForm);
-      load();
-    } catch (e) {
-      toast.error("Erro ao atualizar", { description: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const doDelete = async () => {
-    if (!confirmDelete) return;
-    setBusy(true);
-    try {
-      const { error } = await supabase
-        .from("unidades")
-        .delete()
-        .eq("id", confirmDelete.id);
-
-      if (error) {
-        throw error;
-      }
-
-      toast.success("Unidade excluída.");
-      setConfirmDelete(null);
-      load();
-    } catch (e) {
-      toast.error("Erro ao excluir", { description: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { id, value } = e.target;
-    
-    if (id === 'telefone') {
-      // Aplica a máscara no estado do formulário
-      const formattedValue = formatPhone(value);
-      setForm({ ...form, [id]: formattedValue });
-    } else {
-      setForm({ ...form, [id]: value });
+  // Handle CNPJ input masking
+  const handleCnpjChange = (e: React.ChangeEvent<HTMLInputElement>, field: any) => {
+    const rawValue = cleanCNPJ(e.target.value);
+    if (rawValue.length <= 14) {
+      field.onChange(formatCNPJ(rawValue));
     }
   };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-            <Building2 className="size-6 text-primary" /> Unidades
-          </h1>
-          <p className="text-muted-foreground mt-1">Gerencie as unidades/filiais da empresa.</p>
-        </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="rounded-full px-6"><Plus className="size-4 mr-2" /> Nova Unidade</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader><DialogTitle>Nova Unidade</DialogTitle></DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="nome">Nome da Unidade</Label>
-                <Input id="nome" value={form.nome} onChange={handleFormChange} placeholder="Ex: Matriz Centro" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="endereco">Endereço</Label>
-                <Input id="endereco" value={form.endereco} onChange={handleFormChange} placeholder="Rua Exemplo, 123" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="cidade">Cidade</Label>
-                  <Input id="cidade" value={form.cidade} onChange={handleFormChange} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="telefone">Telefone</Label>
-                  <Input 
-                    id="telefone" 
-                    value={form.telefone} 
-                    onChange={handleFormChange} 
-                    placeholder="(99) 99999-9999" 
-                    maxLength={15} // (XX) XXXXX-XXXX
-                  />
-                </div>
-              </div>
-              <div className="flex items-center space-x-2 pt-2">
-                <Switch 
-                  id="ativo" 
-                  checked={form.ativo} 
-                  onCheckedChange={(checked) => setForm({ ...form, ativo: checked })} 
-                />
-                <Label htmlFor="ativo">Unidade Ativa</Label>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => { setOpen(false); setForm(blankForm); }}>Cancelar</Button>
-              <Button onClick={create} disabled={busy}>{busy ? "Salvando..." : "Cadastrar"}</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-muted-foreground border-b border-border">
-              <tr>
-                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Unidade</th>
-                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">Localização</th>
-                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">Telefone</th>
-                <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
-                <th className="text-right p-4 font-bold uppercase tracking-wider text-[10px]">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {list.length === 0 && (
-                <tr><td colSpan={5} className="p-12 text-center text-muted-foreground">Nenhuma unidade cadastrada.</td></tr>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>
+            {isEdit ? "Editar Unidade" : "Nova Unidade"}
+          </DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="nome"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome da Unidade</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
               )}
-              {list.map((unidade) => (
-                <tr key={unidade.id} className="hover:bg-muted/20 transition-colors">
-                  <td className="p-4 font-medium">{unidade.nome}</td>
-                  <td className="p-4 hidden lg:table-cell text-muted-foreground">
-                    {unidade.endereco} {unidade.cidade && `(${unidade.cidade})`}
-                  </td>
-                  <td className="p-4 hidden md:table-cell text-muted-foreground">
-                    {unidade.telefone ? formatPhone(unidade.telefone) : "—"}
-                  </td>
-                  <td className="p-4 text-center">
-                    <div className={cn("flex items-center justify-center gap-1", unidade.ativo ? "text-green-600" : "text-red-600")}>
-                      {unidade.ativo ? <CheckCircle className="size-4" /> : <XCircle className="size-4" />}
-                      <span className="hidden sm:inline">{unidade.ativo ? "Ativa" : "Inativa"}</span>
-                    </div>
-                  </td>
-                  <td className="p-4 text-right whitespace-nowrap">
-                    <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={() => openEdit(unidade)}>
-                        <Pencil className="size-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="size-8" title="Excluir" onClick={() => setConfirmDelete(unidade)}>
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            />
+            <FormField
+              control={form.control}
+              name="cnpj"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>CNPJ (Opcional)</FormLabel>
+                  <FormControl>
+                    <Input 
+                      {...field} 
+                      placeholder="XX.XXX.XXX/XXXX-XX"
+                      onChange={(e) => handleCnpjChange(e, field)}
+                      maxLength={18}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+I apologize for the interruption. I will continue writing the `src/pages/admin/Unidades.tsx` file where I left off, and then proceed with the remaining steps.
+
+### Step 4: Update Unit Management Form (`src/pages/admin/Unidades.tsx`) - Continued
+
+I will complete the `UnidadeFormDialog` and the main `UnidadesPage` component, ensuring the CNPJ is displayed in the table and handled in the form.
+
+<dyad-write path="src/pages/admin/Unidades.tsx" description="Completing the Unidades page update to include CNPJ field in the form and display.">
+import { useState, useMemo } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Unidade } from "@/integrations/supabase/types";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import { Plus, Edit, Trash2, Check, X, Building2 } from "lucide-react";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cleanCNPJ, formatCNPJ, validateCNPJFormat, maskCNPJ } from "@/lib/utils";
+
+export const Route = createFileRoute("/admin/Unidades")({
+  component: UnidadesPage,
+});
+
+const unidadeSchema = z.object({
+  nome: z.string().min(2, "O nome é obrigatório."),
+  cnpj: z.string().optional().nullable().refine((val) => {
+    if (!val) return true;
+    const cleaned = cleanCNPJ(val);
+    // Check if it's 14 digits and if it matches the formatted pattern XX.XXX.XXX/XXXX-XX
+    return cleaned.length === 14 && validateCNPJFormat(formatCNPJ(cleaned));
+  }, {
+    message: "CNPJ inválido. Use o formato XX.XXX.XXX/XXXX-XX.",
+  }).transform((val) => val ? formatCNPJ(cleanCNPJ(val)) : null),
+  endereco: z.string().optional().nullable(),
+  cidade: z.string().optional().nullable(),
+  telefone: z.string().optional().nullable(),
+  ativo: z.boolean(),
+});
+
+type UnidadeFormValues = z.infer<typeof unidadeSchema>;
+
+const fetchUnidades = async (): Promise<Unidade[]> => {
+  const { data, error } = await supabase
+    .from("unidades")
+    .select("*")
+    .order("nome");
+  if (error) throw error;
+  return data;
+};
+
+const upsertUnidade = async (values: UnidadeFormValues, id?: string) => {
+  const payload = {
+    ...values,
+    cnpj: values.cnpj || null,
+  };
+
+  if (id) {
+    const { error } = await supabase
+      .from("unidades")
+      .update(payload)
+      .eq("id", id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from("unidades").insert(payload);
+    if (error) throw error;
+  }
+};
+
+const deleteUnidade = async (id: string) => {
+  const { error } = await supabase.from("unidades").delete().eq("id", id);
+  if (error) throw error;
+};
+
+function UnidadeFormDialog({
+  unidade,
+  open,
+  onOpenChange,
+}: {
+  unidade?: Unidade;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const isEdit = !!unidade;
+
+  const defaultValues: UnidadeFormValues = useMemo(() => ({
+    nome: unidade?.nome || "",
+    cnpj: unidade?.cnpj || "",
+    endereco: unidade?.endereco || "",
+    cidade: unidade?.cidade || "",
+    telefone: unidade?.telefone || "",
+    ativo: unidade?.ativo ?? true,
+  }), [unidade]);
+
+  const form = useForm<UnidadeFormValues>({
+    resolver: zodResolver(unidadeSchema),
+    defaultValues,
+  });
+
+  const mutation = useMutation({
+    mutationFn: (values: UnidadeFormValues) => upsertUnidade(values, unidade?.id),
+    onSuccess: () => {
+      toast.success(
+        isEdit
+          ? "Unidade atualizada com sucesso!"
+          : "Unidade criada com sucesso!"
+      );
+      queryClient.invalidateQueries({ queryKey: ["unidades"] });
+      onOpenChange(false);
+    },
+    onError: (error) => {
+      console.error("Erro ao salvar unidade:", error);
+      toast.error("Erro ao salvar unidade.", {
+        description: error.message,
+      });
+    },
+  });
+
+  const onSubmit = (values: UnidadeFormValues) => {
+    mutation.mutate(values);
+  };
+
+  // Handle CNPJ input masking
+  const handleCnpjChange = (e: React.ChangeEvent<HTMLInputElement>, field: any) => {
+    const rawValue = cleanCNPJ(e.target.value);
+    if (rawValue.length <= 14) {
+      field.onChange(formatCNPJ(rawValue));
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>
+            {isEdit ? "Editar Unidade" : "Nova Unidade"}
+          </DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="nome"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome da Unidade</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="cnpj"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>CNPJ (Opcional)</FormLabel>
+                  <FormControl>
+                    <Input 
+                      {...field} 
+                      placeholder="XX.XXX.XXX/XXXX-XX"
+                      onChange={(e) => handleCnpjChange(e, field)}
+                      maxLength={18}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="endereco"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Endereço</FormLabel>
+                  <FormControl>
+                    <Textarea {...field} value={field.value || ""} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="cidade"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Cidade</FormLabel>
+                  <FormControl>
+                    <Input {...field} value={field.value || ""} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="telefone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Telefone</FormLabel>
+                  <FormControl>
+                    <Input {...field} value={field.value || ""} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="ativo"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>Unidade Ativa</FormLabel>
+                  </div>
+                </FormItem>
+              )}
+            />
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? "Salvando..." : "Salvar"}
+            </Button>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function UnidadesPage() {
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedUnidade, setSelectedUnidade] = useState<Unidade | undefined>(
+    undefined
+  );
+  const queryClient = useQueryClient();
+
+  const { data: unidades, isLoading } = useQuery({
+    queryKey: ["unidades"],
+    queryFn: fetchUnidades,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteUnidade,
+    onSuccess: () => {
+      toast.success("Unidade excluída com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["unidades"] });
+    },
+    onError: (error) => {
+      console.error("Erro ao excluir unidade:", error);
+      toast.error("Erro ao excluir unidade.", {
+        description: error.message,
+      });
+    },
+  });
+
+  const handleEdit = (unidade: Unidade) => {
+    setSelectedUnidade(unidade);
+    setIsDialogOpen(true);
+  };
+
+  const handleNew = () => {
+    setSelectedUnidade(undefined);
+    setIsDialogOpen(true);
+  };
+
+  const handleDelete = (id: string, nome: string) => {
+    if (window.confirm(`Tem certeza que deseja excluir a unidade "${nome}"?`)) {
+      deleteMutation.mutate(id);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold flex items-center gap-2">
+          <Building2 className="size-7 text-pakere-red" /> Gestão de Unidades
+        </h1>
+        <Button onClick={handleNew}>
+          <Plus className="size-4 mr-2" /> Nova Unidade
+        </Button>
       </div>
 
-      {/* Edit Dialog */}
-      <Dialog open={!!editing} onOpenChange={(o) => { if (!o) { setEditing(null); setForm(blankForm); } }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Editar Unidade: {editing?.nome}</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="nome">Nome da Unidade</Label>
-              <Input id="nome" value={form.nome} onChange={handleFormChange} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="endereco">Endereço</Label>
-              <Input id="endereco" value={form.endereco} onChange={handleFormChange} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="cidade">Cidade</Label>
-                <Input id="cidade" value={form.cidade} onChange={handleFormChange} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="telefone">Telefone</Label>
-                <Input 
-                  id="telefone" 
-                  value={form.telefone} 
-                  onChange={handleFormChange} 
-                  maxLength={15}
-                />
-              </div>
-            </div>
-            <div className="flex items-center space-x-2 pt-2">
-              <Switch 
-                id="ativo" 
-                checked={form.ativo} 
-                onCheckedChange={(checked) => setForm({ ...form, ativo: checked })} 
-              />
-              <Label htmlFor="ativo">Unidade Ativa</Label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => { setEditing(null); setForm(blankForm); }}>Cancelar</Button>
-            <Button onClick={saveEdit} disabled={busy}>{busy ? "Salvando..." : "Salvar Alterações"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <UnidadeFormDialog
+        unidade={selectedUnidade}
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+      />
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Unidade: {confirmDelete?.nome}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja excluir a unidade "{confirmDelete?.nome}"? Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={doDelete} className="bg-red-600 text-white hover:bg-red-700" disabled={busy}>
-              {busy ? "Excluindo..." : "Excluir Permanentemente"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nome</TableHead>
+              <TableHead>CNPJ</TableHead>
+              <TableHead>Cidade</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Ações</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center">
+                  Carregando unidades...
+                </TableCell>
+              </TableRow>
+            ) : (
+              unidades?.map((unidade) => (
+                <TableRow key={unidade.id}>
+                  <TableCell className="font-medium">{unidade.nome}</TableCell>
+                  <TableCell>{maskCNPJ(unidade.cnpj)}</TableCell>
+                  <TableCell>{unidade.cidade || "N/A"}</TableCell>
+                  <TableCell>
+                    {unidade.ativo ? (
+                      <span className="flex items-center text-green-600">
+                        <Check className="size-4 mr-1" /> Ativa
+                      </span>
+                    ) : (
+                      <span className="flex items-center text-red-600">
+                        <X className="size-4 mr-1" /> Inativa
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEdit(unidade)}
+                    >
+                      <Edit className="size-4" />
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDelete(unidade.id, unidade.nome)}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
