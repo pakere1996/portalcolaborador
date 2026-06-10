@@ -23,7 +23,7 @@ export interface Profile {
   id: string;
   nome: string;
   cpf: string;
-  matricula?: string | null; // Assumindo que perfis podem ter matrícula
+  matricula?: string | null; // Adicionado Matrícula
   unidade_id?: string | null;
 }
 
@@ -207,17 +207,30 @@ export function extractStructuredData(text: string): ExtractedData {
 
   // --- 2. Extrair Matrícula/Crachá ---
   // Procura por palavras-chave seguidas por 4 a 10 dígitos
-  const idMatch = rawText.match(/(?:Crach[áa]|Matr[íi]cula|Registro|C[óo]digo|ID)\s*:?\s*(\d{4,10})/i);
-  if (idMatch) {
-    data.matricula = idMatch[1];
-    data.cracha = idMatch[1];
+  const matriculaMatch = rawText.match(/(?:Matr[íi]cula|Registro|C[óo]digo|ID)\s*:?\s*(\d{4,10})/i);
+  if (matriculaMatch) {
+    data.matricula = matriculaMatch[1];
+  }
+  
+  // Crachá (pode ser o mesmo que matrícula, mas mantemos separado se a regex for diferente)
+  const crachaMatch = rawText.match(/(?:Crach[áa])\s*:?\s*(\d{4,10})/i);
+  if (crachaMatch) {
+    data.cracha = crachaMatch[1];
+    if (!data.matricula) data.matricula = data.cracha; // Se crachá for encontrado e matrícula não, usa crachá como matrícula
   }
 
   // --- 3. Extrair Cargo ---
   // Procura por palavras-chave seguidas por texto (3 a 50 caracteres)
+  // Melhorando a regex para capturar o texto do cargo de forma mais limpa
   const cargoMatch = rawText.match(/(?:Cargo|Fun[çc][ãa]o|Ocupa[çc][ãa]o)\s*:?\s*([A-Z][A-Za-z\s]{3,50})/i);
   if (cargoMatch) {
     data.cargo = cargoMatch[1].trim();
+  } else {
+    // Tentativa secundária: buscar texto após 'Cargo:' ou 'Função:'
+    const secondaryCargoMatch = rawText.match(/(?:Cargo|Fun[çc][ãa]o)\s*:?\s*([A-Za-z\s]{3,50})/i);
+    if (secondaryCargoMatch) {
+      data.cargo = secondaryCargoMatch[1].trim();
+    }
   }
 
   // --- 4. Extrair Unidade ---
@@ -269,12 +282,11 @@ export function findBestProfileMatch(pageText: string, profiles: Profile[]): { p
     }
   }
 
-  // 2. Prioridade: Matrícula/Crachá (se implementado no Profile)
+  // 2. Prioridade: Matrícula
   if (extracted.matricula) {
-    // Assumindo que a matrícula está armazenada em profiles.matricula
     const match = profiles.find(p => p.matricula === extracted.matricula);
     if (match) {
-      return { profile: match, score: 0.95, matchedText: `Matrícula: ${extracted.matricula}` };
+      return { profile: match, score: 0.98, matchedText: `Matrícula: ${extracted.matricula}` };
     }
   }
 
