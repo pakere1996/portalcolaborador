@@ -23,6 +23,8 @@ import {
   CalendarClock,
   UserPlus,
   Ban,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 import {
   Documento,
@@ -41,29 +43,23 @@ import {
   findDuplicateDocuments,
   getDocumentTypeLabel,
   syncAdminMonthlyDocumentReminder,
+  extractStructuredData, // Nova função
+  ExtractedData, // Nova interface
 } from "@/lib/documentos";
+import { Tables } from "@/integrations/supabase/types";
+import { PreCadastroDialog } from "@/components/PreCadastroDialog";
 
 const routeTypeMap: Record<string, DocumentType> = {
   "/admin/documentos": "contracheque",
   "/admin/documentos/ponto": "folha_ponto",
 };
 
-interface NewProfileFormState {
-  nome: string;
-  cpf: string;
-  cargo: string;
-}
+type SuggestedProfile = Tables<'suggested_profiles'>;
+type Unidade = Tables<'unidades'>;
+type Cargo = Tables<'cargos'>;
 
 function getEmptyStats(): UploadStats {
   return { auto: 0, manual: 0, pending: 0, total: 0 };
-}
-
-function getEmptyNewProfileForm(name = ""): NewProfileFormState {
-  return {
-    nome: name,
-    cpf: "",
-    cargo: "",
-  };
 }
 
 export default function AdminDocumentosPage() {
@@ -79,7 +75,11 @@ export default function AdminDocumentosPage() {
   const [draftMes, setDraftMes] = useState("");
   const [draftAno, setDraftAno] = useState("");
   const [isEditingReference, setIsEditingReference] = useState(false);
+  
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [unidades, setUnidades] = useState<Unidade[]>([]);
+  const [cargos, setCargos] = useState<Cargo[]>([]);
+
   const [docs, setDocs] = useState<Documento[]>([]);
   const [processing, setProcessing] = useState(false);
   const [pageResults, setPageResults] = useState<PageResult[]>([]);
@@ -90,10 +90,13 @@ export default function AdminDocumentosPage() {
   const [duplicateDocs, setDuplicateDocs] = useState<Documento[]>([]);
   const [pendingSave, setPendingSave] = useState(false);
   const [detectedReference, setDetectedReference] = useState("");
-  const [newProfileForms, setNewProfileForms] = useState<Record<number, NewProfileFormState>>({});
-  const [expandedNewProfilePage, setExpandedNewProfilePage] = useState<number | null>(null);
   const [ignoredPages, setIgnoredPages] = useState<Record<number, boolean>>({});
   const [pageToIgnore, setPageToIgnore] = useState<number | null>(null);
+
+  // State para o novo fluxo de pré-cadastro
+  const [suggestedProfiles, setSuggestedProfiles] = useState<SuggestedProfile[]>([]);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<SuggestedProfile | null>(null);
+  const [openPreCadastroDialog, setOpenPreCadastroDialog] = useState(false);
 
   useEffect(() => {
     setTipo(routeType);
@@ -102,8 +105,6 @@ export default function AdminDocumentosPage() {
     setPageResults([]);
     setManualProfileByPage({});
     setIdentifiedNames({});
-    setNewProfileForms({});
-    setExpandedNewProfilePage(null);
     setIgnoredPages({});
     setPageToIgnore(null);
     setIsEditingReference(false);
@@ -115,17 +116,25 @@ export default function AdminDocumentosPage() {
 
   const loadData = async () => {
     try {
-      const [profilesRes, docsRes] = await Promise.all([
-        supabase.from("profiles").select("id, nome").eq("ativo", true).order("nome"),
+      const [profilesRes, docsRes, suggestedRes, unidadesRes, cargosRes] = await Promise.all([
+        supabase.from("profiles").select("id, nome, cpf").eq("ativo", true).order("nome"),
         supabase.from("documentos").select("*").eq("tipo", tipo).order("created_at", { ascending: false }),
+        supabase.from("suggested_profiles").select("*").eq("status", "pending").order("created_at", { ascending: false }),
+        supabase.from("unidades").select("*").order("nome"),
+        supabase.from("cargos").select("*").order("nome"),
       ]);
 
       setProfiles((profilesRes.data ?? []) as Profile[]);
+      setUnidades((unidadesRes.data ?? []) as Unidade[]);
+      setCargos((cargosRes.data ?? []) as Cargo[]);
+
       const docsList = (docsRes.data ?? []) as Documento[];
       setDocs(docsList);
       updateStats(docsList);
+      setSuggestedProfiles((suggestedRes.data ?? []) as SuggestedProfile[]);
       await syncAdminMonthlyDocumentReminder();
-    } catch {
+    } catch (e) {
+      console.error(e);
       toast.error("Erro ao carregar dados");
     }
   };
@@ -160,8 +169,6 @@ export default function AdminDocumentosPage() {
     setDuplicateDocs([]);
     setPendingSave(false);
     setDetectedReference("");
-    setNewProfileForms({});
-    setExpandedNewProfilePage(null);
     setIgnoredPages({});
     setPageToIgnore(null);
     setMes("");
@@ -198,22 +205,7 @@ export default function AdminDocumentosPage() {
     }
 
     setFile(selectedFile);
-    setShowResults(false);
-    setPageResults([]);
-    setManualProfileByPage({});
-    setIdentifiedNames({});
-    setDuplicateDocs([]);
-    setPendingSave(false);
-    setDetectedReference("");
-    setNewProfileForms({});
-    setExpandedNewProfilePage(null);
-    setIgnoredPages({});
-    setPageToIgnore(null);
-    setIsEditingReference(false);
-    setMes("");
-    setAno("");
-    setDraftMes("");
-    setDraftAno("");
+    resetUploadState(); // Resetar estado antes de processar
 
     try {
       const pages = await extractPdfText(selectedFile);
@@ -255,6 +247,7 @@ export default function AdminDocumentosPage() {
 
       for (const page of pages) {
         const match = findBestProfileMatch(page.text, profiles);
+        const extractedData = extractStructuredData(page.text);
 
         if (match) {
           results.push({
@@ -265,37 +258,31 @@ export default function AdminDocumentosPage() {
             profileName: match.profile.nome,
             score: match.score,
             identifiedName: match.profile.nome,
+            extractedData: extractedData,
           });
         } else {
-          const guessedName = guessNameFromText(page.text, tipo);
+          // Colaborador não encontrado, sugerir pré-cadastro
           results.push({
             pageNumber: page.pageNumber,
             text: page.text,
-            status: "pending",
-            identifiedName: guessedName,
+            status: "suggested", // Novo status para pré-cadastro
+            identifiedName: extractedData.nome || guessNameFromText(page.text, tipo),
+            extractedData: extractedData,
           });
         }
       }
 
       setPageResults(results);
       setShowResults(true);
-      setNewProfileForms(
-        results.reduce<Record<number, NewProfileFormState>>((acc, page) => {
-          if (page.status === "pending") {
-            acc[page.pageNumber] = getEmptyNewProfileForm(page.identifiedName);
-          }
-          return acc;
-        }, {}),
-      );
       setIgnoredPages({});
-      setExpandedNewProfilePage(null);
 
       if (duplicates.length > 0) {
         toast.warning("Já existem documentos deste tipo para este mês/ano");
       } else {
         toast.success("PDF processado com sucesso");
       }
-    } catch {
+    } catch (e) {
+      console.error(e);
       toast.error("Erro ao processar PDF");
     } finally {
       setProcessing(false);
@@ -309,15 +296,12 @@ export default function AdminDocumentosPage() {
       return next;
     });
 
-    setExpandedNewProfilePage((current) => (current === pageNumber ? null : current));
-
-    setManualProfileByPage((prev) => ({
-      ...prev,
-      [pageNumber]: profileId,
-    }));
-
     const profile = profiles.find((p) => p.id === profileId);
     if (profile) {
+      setManualProfileByPage((prev) => ({
+        ...prev,
+        [pageNumber]: profileId,
+      }));
       setIdentifiedNames((prev) => ({
         ...prev,
         [pageNumber]: profile.nome,
@@ -345,101 +329,6 @@ export default function AdminDocumentosPage() {
           : page,
       ),
     );
-
-    setNewProfileForms((prev) => ({
-      ...prev,
-      [pageNumber]: {
-        ...(prev[pageNumber] ?? getEmptyNewProfileForm()),
-        nome: name,
-      },
-    }));
-  };
-
-  const handleNewProfileFieldChange = (pageNumber: number, field: keyof NewProfileFormState, value: string) => {
-    setNewProfileForms((prev) => ({
-      ...prev,
-      [pageNumber]: {
-        ...(prev[pageNumber] ?? getEmptyNewProfileForm()),
-        [field]: value,
-      },
-    }));
-  };
-
-  const toggleNewProfileForm = (pageNumber: number, suggestedName: string) => {
-    setIgnoredPages((prev) => {
-      const next = { ...prev };
-      delete next[pageNumber];
-      return next;
-    });
-
-    setNewProfileForms((prev) => ({
-      ...prev,
-      [pageNumber]: prev[pageNumber] ?? getEmptyNewProfileForm(suggestedName),
-    }));
-
-    setExpandedNewProfilePage((current) => (current === pageNumber ? null : pageNumber));
-  };
-
-  const handleCreateProfile = async (pageNumber: number) => {
-    const form = newProfileForms[pageNumber] ?? getEmptyNewProfileForm();
-    const nome = form.nome.trim();
-    const cpf = form.cpf.trim();
-    const cargo = form.cargo.trim();
-
-    if (!nome || !cpf || !cargo) {
-      toast.error("Preencha nome, CPF e cargo");
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .insert({
-        id: crypto.randomUUID(),
-        nome,
-        cpf,
-        cargo,
-        ativo: true,
-      })
-      .select("id, nome")
-      .single();
-
-    if (error) {
-      toast.error("Erro ao cadastrar colaborador");
-      return;
-    }
-
-    const createdProfile = data as Profile;
-
-    setProfiles((prev) => [...prev, createdProfile].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")));
-    setManualProfileByPage((prev) => ({
-      ...prev,
-      [pageNumber]: createdProfile.id,
-    }));
-    setIdentifiedNames((prev) => ({
-      ...prev,
-      [pageNumber]: createdProfile.nome,
-    }));
-    setIgnoredPages((prev) => {
-      const next = { ...prev };
-      delete next[pageNumber];
-      return next;
-    });
-    setExpandedNewProfilePage(null);
-    setPageResults((prev) =>
-      prev.map((page) =>
-        page.pageNumber === pageNumber
-          ? {
-              ...page,
-              status: "manual",
-              profileId: createdProfile.id,
-              profileName: createdProfile.nome,
-              identifiedName: createdProfile.nome,
-            }
-          : page,
-      ),
-    );
-
-    toast.success("Novo colaborador cadastrado e vinculado");
   };
 
   const confirmIgnorePage = () => {
@@ -456,11 +345,10 @@ export default function AdminDocumentosPage() {
       delete next[pageNumber];
       return next;
     });
-    setExpandedNewProfilePage((current) => (current === pageNumber ? null : current));
     setPageResults((prev) =>
       prev.map((page) =>
         page.pageNumber === pageNumber
-          ? { ...page, status: "pending" }
+          ? { ...page, status: "suggested" } // Volta para suggested se for ignorado
           : page,
       ),
     );
@@ -473,6 +361,7 @@ export default function AdminDocumentosPage() {
 
     setProcessing(true);
     const newStats = getEmptyStats();
+    const suggestionsToSave: Tables<'suggested_profiles'>['Insert'][] = [];
 
     try {
       const groups: Record<string, PageResult[]> = {};
@@ -483,12 +372,15 @@ export default function AdminDocumentosPage() {
         }
 
         let key: string;
+        let profileId: string | null = null;
 
         if (page.status === "auto" || (page.status === "manual" && manualProfileByPage[page.pageNumber])) {
-          const profileId = page.status === "auto" ? page.profileId : manualProfileByPage[page.pageNumber];
+          profileId = page.status === "auto" ? page.profileId! : manualProfileByPage[page.pageNumber];
           key = `profile:${profileId}`;
+        } else if (page.status === "suggested") {
+          key = `suggested:${page.pageNumber}`;
         } else {
-          key = `pending:${page.pageNumber}`;
+          continue; // Ignora páginas que não são auto, manual ou suggested
         }
 
         if (!groups[key]) groups[key] = [];
@@ -514,6 +406,7 @@ export default function AdminDocumentosPage() {
 
       for (const [key, group] of Object.entries(groups)) {
         const isProfileGroup = key.startsWith("profile:");
+        const isSuggestedGroup = key.startsWith("suggested:");
         const profileId = isProfileGroup ? key.split(":")[1] : null;
         const pageNumbers = group.map((p) => p.pageNumber);
         const mergedPdf = await createMergedPdf(file, pageNumbers);
@@ -522,7 +415,8 @@ export default function AdminDocumentosPage() {
           ? getDocumentStoragePath(profileId!, tipo, Number(ano), Number(mes))
           : getPendingDocumentStoragePath(tipo, Number(ano), Number(mes), pageNumbers, group[0].identifiedName);
 
-        const { error: uploadError } = await supabase.storage
+        // 1. Upload do arquivo
+        const { data: uploadData, error: uploadError } = await supabase.storage
           .from("documentos")
           .upload(storagePath, mergedPdf, {
             contentType: "application/pdf",
@@ -532,8 +426,9 @@ export default function AdminDocumentosPage() {
 
         if (uploadError) throw uploadError;
 
-        const payload = {
-          colaborador_id: isProfileGroup ? profileId : null,
+        // 2. Inserir Documento
+        const docPayload = {
+          colaborador_id: profileId,
           tipo,
           mes: Number(mes),
           ano: Number(ano),
@@ -542,8 +437,19 @@ export default function AdminDocumentosPage() {
           nome_pdf: group[0].identifiedName,
         };
 
-        const { error: dbError } = await supabase.from("documentos").insert(payload);
+        const { data: docData, error: dbError } = await supabase.from("documentos").insert(docPayload).select("id").single();
         if (dbError) throw dbError;
+        
+        const documentId = docData.id;
+
+        // 3. Se for sugerido, salvar na suggested_profiles
+        if (isSuggestedGroup) {
+          suggestionsToSave.push({
+            document_id: documentId,
+            extracted_data: group[0].extractedData as ExtractedData,
+            status: 'pending',
+          });
+        }
 
         if (isProfileGroup) {
           if (group.some((item) => item.status === "manual")) {
@@ -558,12 +464,19 @@ export default function AdminDocumentosPage() {
         newStats.total += 1;
       }
 
+      // Salvar todas as sugestões de perfil
+      if (suggestionsToSave.length > 0) {
+        const { error: suggestionError } = await supabase.from("suggested_profiles").insert(suggestionsToSave);
+        if (suggestionError) throw suggestionError;
+      }
+
       setStats(newStats);
       resetUploadState();
-      toast.success("Documentos salvos com sucesso");
+      toast.success("Documentos e sugestões salvos com sucesso");
       await loadData();
       await syncAdminMonthlyDocumentReminder();
-    } catch {
+    } catch (e) {
+      console.error(e);
       toast.error("Erro ao salvar documentos");
     } finally {
       setProcessing(false);
@@ -577,6 +490,24 @@ export default function AdminDocumentosPage() {
     }
 
     await persistDocuments();
+  };
+
+  const handleOpenPreCadastro = (suggestion: SuggestedProfile) => {
+    setSelectedSuggestion(suggestion);
+    setOpenPreCadastroDialog(true);
+  };
+
+  const getStatusBadge = (status: string) => {
+    if (status === "vinculado") {
+      return <Badge className="bg-green-100 text-green-700 border-green-200">Vinculado</Badge>;
+    }
+    return <Badge className="bg-orange-100 text-orange-700 border-orange-200">Pendente</Badge>;
+  };
+
+  const getHistoryBadge = (status: "ok" | "faltando" | "duplicado") => {
+    if (status === "ok") return <Badge className="bg-green-100 text-green-700 border-green-200">OK</Badge>;
+    if (status === "duplicado") return <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">Duplicado</Badge>;
+    return <Badge className="bg-red-100 text-red-700 border-red-200">Faltando</Badge>;
   };
 
   const deleteDoc = async (docId: string) => {
@@ -634,19 +565,6 @@ export default function AdminDocumentosPage() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    if (status === "vinculado") {
-      return <Badge className="bg-green-100 text-green-700 border-green-200">Vinculado</Badge>;
-    }
-    return <Badge className="bg-orange-100 text-orange-700 border-orange-200">Pendente</Badge>;
-  };
-
-  const getHistoryBadge = (status: "ok" | "faltando" | "duplicado") => {
-    if (status === "ok") return <Badge className="bg-green-100 text-green-700 border-green-200">OK</Badge>;
-    if (status === "duplicado") return <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">Duplicado</Badge>;
-    return <Badge className="bg-red-100 text-red-700 border-red-200">Faltando</Badge>;
-  };
-
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       <div>
@@ -689,7 +607,45 @@ export default function AdminDocumentosPage() {
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Painel de Conferência de Sugestões */}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserPlus className="size-5 text-primary" /> Sugestões de Pré-Cadastro ({suggestedProfiles.length})
+            </CardTitle>
+            <CardDescription>
+              Colaboradores identificados em documentos pendentes que precisam de cadastro.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {suggestedProfiles.length === 0 ? (
+              <p className="text-muted-foreground">Nenhuma sugestão pendente.</p>
+            ) : (
+              <div className="space-y-3">
+                {suggestedProfiles.map((suggestion) => {
+                  const data = suggestion.extracted_data as ExtractedData;
+                  return (
+                    <div key={suggestion.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
+                      <div>
+                        <div className="font-medium">{data.nome || "Nome não extraído"}</div>
+                        <div className="text-sm text-muted-foreground">
+                          CPF: {data.cpf || "N/A"} | Cargo: {data.cargo || "N/A"}
+                        </div>
+                      </div>
+                      <Button size="sm" onClick={() => handleOpenPreCadastro(suggestion)}>
+                        <UserPlus className="size-4 mr-2" /> Cadastrar
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Upload de Documentos</CardTitle>
@@ -855,27 +811,29 @@ export default function AdminDocumentosPage() {
               const isIgnored = !!ignoredPages[page.pageNumber];
               const isAuto = page.status === "auto";
               const isManual = page.status === "manual";
-              const isPending = page.status === "pending" && !isIgnored;
-              const showNewProfileForm = expandedNewProfilePage === page.pageNumber && isPending;
+              const isSuggested = page.status === "suggested";
+              
+              let statusBadge;
+              if (isAuto) statusBadge = <Badge className="bg-green-100 text-green-700 border-green-200">Vinculado: {page.profileName}</Badge>;
+              else if (isManual) statusBadge = <Badge className="bg-blue-100 text-blue-700 border-blue-200">Manual: {identifiedNames[page.pageNumber] || page.profileName}</Badge>;
+              else if (isSuggested) statusBadge = <Badge className="bg-orange-100 text-orange-700 border-orange-200">Pré-Cadastro Sugerido</Badge>;
+              else if (isIgnored) statusBadge = <Badge className="bg-slate-100 text-slate-700 border-slate-200">Ignorada</Badge>;
 
               return (
                 <div key={page.pageNumber} className="border rounded-lg p-4 space-y-4">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <h3 className="font-semibold">Página {page.pageNumber}</h3>
                     <div className="flex items-center gap-2 flex-wrap">
-                      {isAuto && <Badge className="bg-green-100 text-green-700 border-green-200">Auto: {page.profileName}</Badge>}
-                      {isManual && <Badge className="bg-blue-100 text-blue-700 border-blue-200">Manual: {identifiedNames[page.pageNumber] || page.profileName}</Badge>}
-                      {isPending && <Badge className="bg-orange-100 text-orange-700 border-orange-200">Pendente</Badge>}
-                      {isIgnored && <Badge className="bg-slate-100 text-slate-700 border-slate-200">Ignorada</Badge>}
+                      {statusBadge}
                     </div>
                   </div>
 
                   <div className="text-sm text-muted-foreground bg-muted/30 p-3 rounded">
-                    <p className="font-medium mb-1">Texto extraído:</p>
-                    <p className="italic">{page.text.slice(0, 220)}...</p>
+                    <p className="font-medium mb-1">Dados extraídos:</p>
+                    <p className="italic">Nome: {page.extractedData?.nome || 'N/A'} | CPF: {page.extractedData?.cpf || 'N/A'} | Cargo: {page.extractedData?.cargo || 'N/A'}</p>
                   </div>
 
-                  {(isPending || isManual) && (
+                  {(!isAuto && !isIgnored) && (
                     <div className="space-y-3">
                       <div className="space-y-2">
                         <Label>Vincular manualmente a</Label>
@@ -884,36 +842,20 @@ export default function AdminDocumentosPage() {
                           onValueChange={(value) => handleManualAssign(page.pageNumber, value)}
                         >
                           <SelectTrigger>
-                            <SelectValue placeholder="Selecione um colaborador" />
+                            <SelectValue placeholder="Selecione um colaborador existente" />
                           </SelectTrigger>
                           <SelectContent>
                             {profiles.map((profile) => (
                               <SelectItem key={profile.id} value={profile.id}>
-                                {profile.nome}
+                                {profile.nome} (CPF: {profile.cpf})
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label>Nome identificado no PDF</Label>
-                        <Input
-                          value={identifiedNames[page.pageNumber] || page.identifiedName || ""}
-                          onChange={(e) => handleNameChange(page.pageNumber, e.target.value)}
-                          placeholder="Nome do colaborador"
-                        />
-                      </div>
-
-                      {page.status === "pending" && !isIgnored && (
+                      {isSuggested && (
                         <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => toggleNewProfileForm(page.pageNumber, identifiedNames[page.pageNumber] || page.identifiedName)}
-                          >
-                            <UserPlus className="size-4 mr-2" /> Cadastrar novo colaborador
-                          </Button>
                           <Button
                             type="button"
                             variant="outline"
@@ -921,54 +863,6 @@ export default function AdminDocumentosPage() {
                           >
                             <Ban className="size-4 mr-2" /> Ignorar
                           </Button>
-                        </div>
-                      )}
-
-                      {showNewProfileForm && (
-                        <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
-                          <div className="font-medium">Novo colaborador</div>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div className="space-y-2">
-                              <Label>Nome</Label>
-                              <Input
-                                value={newProfileForms[page.pageNumber]?.nome || ""}
-                                onChange={(e) => handleNewProfileFieldChange(page.pageNumber, "nome", e.target.value)}
-                                placeholder="Nome completo"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label>CPF</Label>
-                              <Input
-                                value={newProfileForms[page.pageNumber]?.cpf || ""}
-                                onChange={(e) => handleNewProfileFieldChange(page.pageNumber, "cpf", e.target.value)}
-                                placeholder="CPF"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Cargo</Label>
-                              <Input
-                                value={newProfileForms[page.pageNumber]?.cargo || ""}
-                                onChange={(e) => handleNewProfileFieldChange(page.pageNumber, "cargo", e.target.value)}
-                                placeholder="Cargo"
-                              />
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              type="button"
-                              onClick={() => handleCreateProfile(page.pageNumber)}
-                              disabled={processing}
-                            >
-                              Vincular novo colaborador
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              onClick={() => setExpandedNewProfilePage(null)}
-                            >
-                              Cancelar
-                            </Button>
-                          </div>
                         </div>
                       )}
                     </div>
@@ -987,7 +881,7 @@ export default function AdminDocumentosPage() {
                     <Loader2 className="size-4 mr-2 animate-spin" /> Salvando...
                   </>
                 ) : (
-                  "Salvar documentos"
+                  "Salvar documentos e sugestões"
                 )}
               </Button>
             </div>
@@ -1079,6 +973,15 @@ export default function AdminDocumentosPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <PreCadastroDialog
+        open={openPreCadastroDialog}
+        onOpenChange={setOpenPreCadastroDialog}
+        suggestion={selectedSuggestion}
+        unidades={unidades}
+        cargos={cargos}
+        onSuccess={loadData}
+      />
     </div>
   );
 }

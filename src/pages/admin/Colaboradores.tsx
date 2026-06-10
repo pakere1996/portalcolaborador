@@ -21,27 +21,41 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { adminApi } from "@/lib/admin-api";
 import { NovoColaboradorDialog } from "@/components/NovoColaboradorDialog";
+import { ColaboradorForm } from "@/components/ColaboradorForm";
+import { onlyDigits } from "@/lib/cpf";
 
 // Tipagem assumida para o perfil com a unidade join
 type Profile = Tables<'profiles'> & {
   unidade: Tables<'unidades'> | null;
 };
 type Unidade = Tables<'unidades'>;
-type Cargo = Tables<'cargos'>; // Usando a tipagem correta da tabela cargos
+type Cargo = Tables<'cargos'>;
 
 type EditForm = {
   nome: string;
+  email: string;
+  cpf: string;
+  whatsapp: string;
   cargo: string;
-  folga_fixa_semana: string; // Use string for select input
-  unidade_id: string; // Use string for select input
+  unidade_id: string;
+  folga_fixa_semana: string;
+  data_nascimento: string;
+  data_admissao: string;
+  perfil_acesso: string; // Novo campo
   ativo: boolean;
 };
 
 const blankEditForm: EditForm = {
   nome: "",
+  email: "",
+  cpf: "",
+  whatsapp: "",
   cargo: "",
-  folga_fixa_semana: "null",
   unidade_id: "null",
+  folga_fixa_semana: "null",
+  data_nascimento: "",
+  data_admissao: "",
+  perfil_acesso: "user",
   ativo: true,
 };
 
@@ -175,15 +189,28 @@ export default function Colaboradores() {
 
   // --- Handlers ---
 
-  const openEdit = (profile: Profile) => {
-    console.log("[Colaboradores] Abrindo edição para:", profile.nome);
-    console.log("[Colaboradores] Cargo atual do colaborador:", profile.cargo);
+  const openEdit = async (profile: Profile) => {
+    // Buscar o role do usuário (necessário para o campo Perfil de Acesso)
+    const { data: roleData } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', profile.id)
+      .single();
+
+    const role = roleData?.role || 'user';
+
     setEditingProfile(profile);
     setEditForm({
       nome: profile.nome,
+      email: profile.email_contato || "",
+      cpf: profile.cpf,
+      whatsapp: profile.whatsapp || "",
       cargo: profile.cargo,
       folga_fixa_semana: profile.folga_fixa_semana !== null ? String(profile.folga_fixa_semana) : "null",
       unidade_id: profile.unidade_id || "null",
+      data_nascimento: profile.data_nascimento || "",
+      data_admissao: profile.data_admissao || "",
+      perfil_acesso: role,
       ativo: profile.ativo,
     });
   };
@@ -192,29 +219,63 @@ export default function Colaboradores() {
     setEditForm(prev => ({ ...prev, [id]: value }));
   };
 
-  const saveEdit = async () => {
-    if (!editingProfile) return;
-    if (!editForm.nome.trim() || !editForm.cargo.trim()) {
-      return toast.error("Nome e Cargo são obrigatórios.");
+  const validateEditForm = () => {
+    const requiredFields = ['nome', 'email', 'cpf', 'cargo', 'unidade_id', 'folga_fixa_semana', 'data_nascimento', 'data_admissao', 'perfil_acesso'];
+    
+    for (const field of requiredFields) {
+      if (field === 'unidade_id' || field === 'folga_fixa_semana') {
+        if (editForm[field] === "null") {
+          toast.error(`O campo ${field.replace('_id', '').replace('_', ' ')} é obrigatório.`);
+          return false;
+        }
+      } else if (!editForm[field].trim()) {
+        toast.error(`O campo ${field} é obrigatório.`);
+        return false;
+      }
     }
+
+    if (onlyDigits(editForm.cpf).length !== 11) {
+      toast.error("CPF inválido.", { description: "O CPF deve conter 11 dígitos." });
+      return false;
+    }
+    return true;
+  };
+
+  const saveEdit = async () => {
+    if (!editingProfile || !validateEditForm()) return;
+    
     setBusy(true);
 
     const updateData: Tables<'profiles'>['Update'] = {
       nome: editForm.nome.trim(),
+      email_contato: editForm.email.trim(),
+      whatsapp: onlyDigits(editForm.whatsapp) || null,
       cargo: editForm.cargo.trim(),
       folga_fixa_semana: editForm.folga_fixa_semana === "null" ? null : Number(editForm.folga_fixa_semana),
       unidade_id: editForm.unidade_id === "null" ? null : editForm.unidade_id,
+      data_nascimento: editForm.data_nascimento,
+      data_admissao: editForm.data_admissao,
       ativo: editForm.ativo,
       updated_at: new Date().toISOString(),
     };
 
     try {
-      const { error } = await supabase
+      // 1. Atualizar Perfil
+      const { error: profileError } = await supabase
         .from("profiles")
         .update(updateData)
         .eq("id", editingProfile.id);
 
-      if (error) throw error;
+      if (profileError) throw profileError;
+
+      // 2. Atualizar Role (Perfil de Acesso)
+      const { error: roleError } = await supabase
+        .from("user_roles")
+        .update({ role: editForm.perfil_acesso })
+        .eq("user_id", editingProfile.id);
+      
+      if (roleError) throw roleError;
+
 
       toast.success("Perfil atualizado com sucesso.");
       setEditingProfile(null);
@@ -476,89 +537,17 @@ export default function Colaboradores() {
 
       {/* Edit Dialog */}
       <Dialog open={!!editingProfile} onOpenChange={(o) => { if (!o) { setEditingProfile(null); setEditForm(blankEditForm); } }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-3xl">
           <DialogHeader><DialogTitle>Editar Colaborador: {editingProfile?.nome}</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="nome">Nome Completo</Label>
-              <Input 
-                id="nome" 
-                value={editForm.nome} 
-                onChange={(e) => handleFormChange('nome', e.target.value)} 
-                disabled={busy}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              {/* Cargo */}
-              <div className="space-y-2">
-                <Label htmlFor="cargo">Cargo</Label>
-                <Select 
-                  value={editForm.cargo} 
-                  onValueChange={(value) => handleFormChange('cargo', value)}
-                  disabled={busy}
-                >
-                  <SelectTrigger id="cargo">
-                    <SelectValue placeholder="Selecione o Cargo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cargos.map(c => (
-                      <SelectItem key={c.nome} value={c.nome}>{c.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Unidade */}
-              <div className="space-y-2">
-                <Label htmlFor="unidade_id">Unidade</Label>
-                <Select 
-                  value={editForm.unidade_id} 
-                  onValueChange={(value) => handleFormChange('unidade_id', value)}
-                  disabled={busy}
-                >
-                  <SelectTrigger id="unidade_id">
-                    <SelectValue placeholder="Selecione a Unidade" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="null">Sem Unidade</SelectItem>
-                    {unidades.map(u => (
-                      <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Folga Fixa */}
-            <div className="space-y-2">
-              <Label htmlFor="folga_fixa_semana">Folga Fixa Semanal</Label>
-              <Select 
-                value={editForm.folga_fixa_semana} 
-                onValueChange={(value) => handleFormChange('folga_fixa_semana', value)}
-                disabled={busy}
-              >
-                <SelectTrigger id="folga_fixa_semana">
-                  <SelectValue placeholder="Nenhuma Folga Fixa" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="null">Nenhuma Folga Fixa</SelectItem>
-                  {Object.entries(dayOfWeekMap).map(([key, value]) => (
-                    <SelectItem key={key} value={key}>{value}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center space-x-2 pt-2">
-              <Switch 
-                id="ativo" 
-                checked={editForm.ativo} 
-                onCheckedChange={(checked) => handleFormChange('ativo', checked)} 
-                disabled={busy}
-              />
-              <Label htmlFor="ativo">Colaborador Ativo</Label>
-            </div>
+          <div className="py-4">
+            <ColaboradorForm 
+              form={editForm} 
+              setForm={setEditForm} 
+              unidades={unidades} 
+              cargos={cargos} 
+              busy={busy} 
+              isEdit={true}
+            />
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => { setEditingProfile(null); setEditForm(blankEditForm); }} disabled={busy}>Cancelar</Button>

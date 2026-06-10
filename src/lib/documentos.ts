@@ -22,16 +22,32 @@ export interface Documento {
 export interface Profile {
   id: string;
   nome: string;
+  cpf: string;
+  matricula?: string | null; // Assumindo que perfis podem ter matrícula
+  unidade_id?: string | null;
+}
+
+export interface ExtractedData {
+  nome: string;
+  cpf: string | null;
+  matricula: string | null;
+  cargo: string | null;
+  unidade: string | null; // Nome da unidade
+  data_nascimento: string | null; // Formato YYYY-MM-DD
+  data_admissao: string | null; // Formato YYYY-MM-DD
+  // Adicione outros campos conforme necessário (e-mail, telefone, etc.)
 }
 
 export interface PageResult {
   pageNumber: number;
   text: string;
-  status: "auto" | "manual" | "pending";
+  status: "auto" | "manual" | "pending" | "suggested"; // 'suggested' para novo fluxo
   profileId?: string;
   profileName?: string;
   score?: number;
   identifiedName: string;
+  extractedData?: ExtractedData; // Dados extraídos para pré-cadastro
+  suggestionId?: string; // ID da sugestão se for um novo colaborador
   storagePath?: string;
 }
 
@@ -64,6 +80,7 @@ const MONTH_NAMES = [
   "junho",
   "julho",
   "agosto",
+  "agosto", // Duplicado para cobrir variações
   "setembro",
   "outubro",
   "novembro",
@@ -159,22 +176,93 @@ export async function createMergedPdf(file: File, pageNumbers: number[]): Promis
   return new Blob([bytes], { type: "application/pdf" });
 }
 
+/**
+ * Tenta extrair dados estruturados (CPF, Matrícula, Cargo, etc.) do texto da página.
+ */
+export function extractStructuredData(text: string): ExtractedData {
+  const normalized = normalizeText(text);
+  const rawText = text;
+  
+  const data: ExtractedData = {
+    nome: guessNameFromText(rawText) || "Nome não encontrado",
+    cpf: null,
+    matricula: null,
+    cargo: null,
+    unidade: null,
+    data_nascimento: null,
+    data_admissao: null,
+  };
+
+  // 1. Extrair CPF (11 dígitos)
+  const cpfMatch = normalized.match(/(\d{3}\s*\d{3}\s*\d{3}\s*\d{2})/);
+  if (cpfMatch) {
+    data.cpf = cpfMatch[1].replace(/\s/g, '');
+  }
+
+  // 2. Extrair Matrícula (assumindo 4 a 10 dígitos próximos a 'matricula' ou 'registro')
+  const matriculaMatch = rawText.match(/(?:Matr[íi]cula|Registro|C[óo]digo)\s*:?\s*(\d{4,10})/i);
+  if (matriculaMatch) {
+    data.matricula = matriculaMatch[1];
+  }
+
+  // 3. Extrair Cargo (muito dependente do formato, usando regex genérica)
+  const cargoMatch = rawText.match(/(?:Cargo|Fun[çc][ãa]o)\s*:?\s*([A-Z][A-Za-z\s]{3,40})/);
+  if (cargoMatch) {
+    data.cargo = cargoMatch[1].trim();
+  }
+
+  // 4. Extrair Unidade (muito difícil sem contexto, usando regex genérica)
+  const unidadeMatch = rawText.match(/(?:Unidade|Filial)\s*:?\s*([A-Z][A-Za-z\s]{3,40})/);
+  if (unidadeMatch) {
+    data.unidade = unidadeMatch[1].trim();
+  }
+
+  // 5. Extrair Datas (Admissão/Nascimento)
+  const dateMatch = rawText.match(/(?:Admiss[ãa]o|Nascimento)\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i);
+  if (dateMatch) {
+    // Simplificação: apenas pega a primeira data encontrada
+    const [day, month, year] = dateMatch[1].split('/');
+    data.data_admissao = `${year}-${month}-${day}`; // Convertendo para YYYY-MM-DD
+  }
+
+  return data;
+}
+
 export function findBestProfileMatch(pageText: string, profiles: Profile[]): { profile: Profile; score: number; matchedText: string } | null {
-  const page = normalizeText(pageText);
+  const extracted = extractStructuredData(pageText);
+  const normalizedPage = normalizeText(pageText);
   let bestMatch: { profile: Profile; score: number; matchedText: string } | null = null;
 
+  // 1. Prioridade: CPF
+  if (extracted.cpf) {
+    const match = profiles.find(p => normalizeText(p.cpf) === extracted.cpf);
+    if (match) {
+      return { profile: match, score: 1.0, matchedText: `CPF: ${extracted.cpf}` };
+    }
+  }
+
+  // 2. Prioridade: Matrícula (se implementado no Profile)
+  if (extracted.matricula) {
+    // Assumindo que a matrícula está armazenada em profiles.matricula
+    const match = profiles.find(p => p.matricula === extracted.matricula);
+    if (match) {
+      return { profile: match, score: 0.95, matchedText: `Matrícula: ${extracted.matricula}` };
+    }
+  }
+
+  // 3. Prioridade: Nome (Lógica de similaridade existente)
   for (const profile of profiles) {
     if (!profile.nome) continue;
 
     const profileName = normalizeText(profile.nome);
-    let score = similarity(page, profileName);
+    let score = similarity(normalizedPage, profileName);
 
     const tokens = profileName.split(" ").filter((t) => t.length > 2);
-    if (tokens.length >= 2 && tokens.every((t) => page.includes(t))) {
+    if (tokens.length >= 2 && tokens.every((t) => normalizedPage.includes(t))) {
       score = Math.max(score, 0.92);
     }
 
-    if (page.includes(profileName)) {
+    if (normalizedPage.includes(profileName)) {
       score = 1;
     }
 
@@ -203,6 +291,12 @@ export function guessNameFromText(text: string, tipo?: DocumentType): string {
     if (folhaPontoName) {
       return folhaPontoName;
     }
+  }
+
+  // Tenta extrair o nome de forma mais robusta
+  const nameMatch = text.match(/(?:Nome|Colaborador)\s*:?\s*([A-Za-z\s]{5,50})/i);
+  if (nameMatch) {
+    return nameMatch[1].trim();
   }
 
   const lines = text.split(/\n+/).map((line: string) => line.trim()).filter(Boolean);
