@@ -122,6 +122,8 @@ export default function Colaboradores() {
       console.error("[Colaboradores] Erro na consulta de cargos:", cargosError);
     } else {
       setCargos(cargosData);
+      console.log(`[Colaboradores] Cargos carregados: ${cargosData.length}`);
+      console.log("[Colaboradores] Opções de Cargos:", cargosData.map(c => c.nome));
     }
 
     setLoading(false);
@@ -173,6 +175,8 @@ export default function Colaboradores() {
   // --- Handlers ---
 
   const openEdit = (profile: Profile) => {
+    console.log("[Colaboradores] Abrindo edição para:", profile.nome);
+    console.log("[Colaboradores] Cargo atual do colaborador:", profile.cargo);
     setEditingProfile(profile);
     setEditForm({
       nome: profile.nome,
