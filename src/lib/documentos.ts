@@ -212,8 +212,13 @@ export function findBestProfileMatch(
   const extractedData = extractStructuredData(pageText);
   let bestMatch: { profile: Profile; score: number } | null = null;
 
+  console.log(`[Match Diagnostic] Extracted Data:`, extractedData);
+  console.log(`[Match Diagnostic] Target Unit ID:`, unidadeId);
+
   // 1. Filtrar perfis pela unidade selecionada
   const filteredProfiles = profiles.filter(p => p.unidade_id === unidadeId);
+
+  console.log(`[Match Diagnostic] Filtered Profiles Count:`, filteredProfiles.length);
 
   if (filteredProfiles.length === 0) {
     return null;
