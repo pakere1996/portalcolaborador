@@ -1,23 +1,20 @@
-export interface Documento {
-  id: string;
-  colaborador_id: string;
-  tipo: string;
-  mes: number;
-  ano: number;
-  storage_path: string | null;
-  status: string;
-  nome_pdf: string | null;
-  nome_colaborador: string | null;
-  created_at: string;
-}
+/**
+ * Document utilities for the Folgas Pakerê application.
+ * Provides helpers for document handling, CNPJ processing, and date extraction.
+ */
 
 export function getDocumentTypeLabel(tipo: string): string {
   switch (tipo) {
-    case "contracheque": return "Contracheque";
-    case "ponto": return "Folha de Ponto";
-    case "atestado": return "Atestado";
-    case "disciplinar": return "Registro Disciplinar";
-    default: return tipo;
+    case "contracheque":
+      return "Contracheque";
+    case "ponto":
+      return "Folha de Ponto";
+    case "atestado":
+      return "Atestado";
+    case "disciplinar":
+      return "Registro Disciplinar";
+    default:
+      return tipo;
   }
 }
 
@@ -74,28 +71,36 @@ export function extractCNPJs(text: string): string[] {
 
 export function extractMonthAndYear(text: string, docType: "contracheque" | "folha_ponto"): { mes: number; ano: number } | null {
   const meses: Record<string, number> = {
-    janeiro: 1, fevereiro: 2, março: 3, abril: 4, maio: 5, junho: 6,
-    julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
+    janeiro: 1,
+    fevereiro: 2,
+    março: 3,
+    abril: 4,
+    maio: 5,
+    junho: 6,
+    julho: 7,
+    agosto: 8,
+    setembro: 9,
+    outubro: 10,
+    novembro: 11,
+    dezembro: 12,
   };
-  
+
   // Try to match "Período de referência: de XX/XX/XXXX" format
   const matchPonto = text.match(/Per[íi]odo de refer[êe]ncia:\s*de\s*(\d{2})\/(\d{2})\/(\d{4})/i);
   if (matchPonto) {
     return { mes: parseInt(matchPonto[2]), ano: parseInt(matchPonto[3]) };
   }
-  
+
   // Try to match "Mês de XXXX" format (common in contracheques)
   const matchContracheque = text.match(/(\w+)\s+de\s+(\d{4})/i);
   if (matchContracheque) {
     const mes = meses[matchContracheque[1].toLowerCase()];
     if (mes) return { mes, ano: parseInt(matchContracheque[2]) };
   }
-  
+
   return null;
 }
 
 export async function syncAdminMonthlyDocumentReminder(): Promise<void> {
   console.log("Placeholder: syncAdminMonthlyDocumentReminder called.");
 }
-</dyad-chat-summary>
-<dyad-write path="src/lib/documentos.ts" description="Ensure extractCNPJs function is exported"> export function extractCNPJs(text: string): string[] { const regex = /\\d{2}\\.\\d{3}\\.\\d{3}\\/\\d{4}-\\d{2}/g; return text.match(regex) || []; }
