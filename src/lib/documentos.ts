@@ -186,14 +186,44 @@ export function findBestProfileMatch(pageText: string, profiles: Profile[]): { p
   return bestMatch;
 }
 
-export function guessNameFromText(text: string): string {
+function extractFolhaPontoName(text: string): string | null {
+  const upperText = (text ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const match = upperText.match(/\b([A-Z]{2,}(?:\s+[A-Z]{2,}){1,})\s+(\d{10})\b/);
+
+  if (!match) return null;
+
+  return match[1]
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function guessNameFromText(text: string, tipo?: DocumentType): string {
+  if (tipo === "folha_ponto") {
+    const folhaPontoName = extractFolhaPontoName(text);
+    if (folhaPontoName) {
+      return folhaPontoName;
+    }
+  }
+
   const lines = text.split(/\n+/).map((line: string) => line.trim()).filter(Boolean);
   const firstLine = lines[0]?.slice(0, 80) || "";
   return firstLine || "Colaborador não identificado";
 }
 
-export function detectReferencePeriod(text: string): ReferencePeriod | null {
-  const normalized = normalizeText(text);
+export function detectReferencePeriod(text: string, tipo?: DocumentType): ReferencePeriod | null {
+  const rawText = text ?? "";
+  const normalized = normalizeText(rawText);
+
+  if (tipo === "folha_ponto") {
+    const periodMatch = rawText.match(/Per[ií]odo\s+de\s+refer[êe]ncia\s*:?\s*de\s*(\d{2})\/(\d{2})\/(20\d{2})\s*[àa]\s*(\d{2})\/(\d{2})\/(20\d{2})/i);
+    if (periodMatch) {
+      return {
+        mes: Number(periodMatch[2]),
+        ano: Number(periodMatch[3]),
+        sourceText: periodMatch[0],
+      };
+    }
+  }
 
   const monthRegex = new RegExp(`\\b(${MONTH_NAMES.join("|")})\\s+de\\s+(20\\d{2})\\b`, "i");
   const monthMatch = normalized.match(monthRegex);

@@ -218,7 +218,7 @@ export default function AdminDocumentosPage() {
     try {
       const pages = await extractPdfText(selectedFile);
       const combinedText = pages.map((page) => page.text).join(" ");
-      const detected = detectReferencePeriod(combinedText);
+      const detected = detectReferencePeriod(combinedText, tipo);
 
       if (detected) {
         const nextMes = String(detected.mes);
@@ -267,7 +267,7 @@ export default function AdminDocumentosPage() {
             identifiedName: match.profile.nome,
           });
         } else {
-          const guessedName = guessNameFromText(page.text);
+          const guessedName = guessNameFromText(page.text, tipo);
           results.push({
             pageNumber: page.pageNumber,
             text: page.text,
