@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tables } from "@/integrations/supabase/types";
 import { onlyDigits } from "@/lib/cpf";
-import { ColaboradorForm, ColaboradorFormState } from "./ColaboradorForm";
+import { ColaboradorForm } from "./ColaboradorForm";
 import { ExtractedData, PageResult } from "@/lib/documentos";
 import { adminApi } from "@/lib/admin-api";
 import { toast } from "sonner";
@@ -18,6 +18,22 @@ import { toast } from "sonner";
 type Unidade = Tables<"unidades">;
 type Cargo = Tables<"cargos">;
 type SuggestedProfile = Tables<"suggested_profiles">;
+
+// Definindo o estado completo do formulário (incluindo Matrícula)
+export interface ColaboradorFormState {
+  nome: string;
+  cpf: string;
+  matricula: string; // Novo campo
+  email: string;
+  whatsapp: string;
+  cargo: string;
+  unidade_id: string;
+  data_nascimento: string;
+  data_admissao: string;
+  folga_fixa_semana: string;
+  perfil_acesso: string;
+  ativo?: boolean;
+}
 
 // Define a estrutura de dados iniciais que pode vir de uma sugestão (DB) ou de um PageResult (imediato)
 export type InitialData = {
@@ -40,6 +56,7 @@ interface ColaboradorFormDialogProps {
 const blankForm: ColaboradorFormState = {
   nome: "",
   cpf: "",
+  matricula: "", // Inicializando Matrícula
   email: "",
   whatsapp: "",
   cargo: "",
@@ -69,6 +86,7 @@ export const ColaboradorFormDialog: React.FC<ColaboradorFormDialogProps> = ({
       setForm({
         nome: profileToEdit.nome || "",
         cpf: profileToEdit.cpf || "",
+        matricula: profileToEdit.matricula || "", // Carregando Matrícula
         email: profileToEdit.email_contato || "",
         whatsapp: profileToEdit.whatsapp || "",
         cargo: profileToEdit.cargo || "",
@@ -77,6 +95,7 @@ export const ColaboradorFormDialog: React.FC<ColaboradorFormDialogProps> = ({
         data_admissao: profileToEdit.data_admissao || "",
         folga_fixa_semana: profileToEdit.folga_fixa_semana?.toString() || "null",
         perfil_acesso: profileToEdit.role || "colaborador",
+        ativo: profileToEdit.ativo,
       });
     } else if (initialData) {
       // Lógica de pré-preenchimento (Criação)
@@ -84,12 +103,14 @@ export const ColaboradorFormDialog: React.FC<ColaboradorFormDialogProps> = ({
 
       // Tenta encontrar a Unidade e Cargo correspondentes
       const matchedUnidade = unidades.find(u => u.nome.toLowerCase() === data.unidade?.toLowerCase());
+      // Ponto 8: Integração com Tabela de Cargos
       const matchedCargo = cargos.find(c => c.nome.toLowerCase() === data.cargo?.toLowerCase());
 
       setForm({
         ...blankForm,
         nome: data.nome || "",
         cpf: data.cpf ? onlyDigits(data.cpf) : "",
+        matricula: data.matricula || "", // Pré-preenchendo Matrícula
         cargo: matchedCargo ? matchedCargo.nome : (data.cargo || ""),
         unidade_id: matchedUnidade ? matchedUnidade.id : "null",
         data_nascimento: data.data_nascimento || "",
@@ -103,9 +124,9 @@ export const ColaboradorFormDialog: React.FC<ColaboradorFormDialogProps> = ({
   }, [initialData, open, unidades, cargos, isEditing, profileToEdit]);
 
   const validateForm = () => {
-    // Validação simplificada (a validação completa deve estar no ColaboradorForm)
+    // Ponto 9: E-mail não é mais obrigatório.
     if (!form.nome || !form.cpf || !form.cargo || form.unidade_id === "null") {
-      toast.error("Preencha todos os campos obrigatórios.");
+      toast.error("Preencha todos os campos obrigatórios (Nome, CPF, Cargo, Unidade).");
       return false;
     }
     return true;
@@ -118,8 +139,9 @@ export const ColaboradorFormDialog: React.FC<ColaboradorFormDialogProps> = ({
 
     const payload = {
       nome: form.nome.trim(),
-      email: form.email.trim() || null,
+      email: form.email.trim() || null, // Ponto 10: Usa o email informado ou null
       cpf: onlyDigits(form.cpf),
+      matricula: form.matricula.trim() || null, // Incluindo Matrícula
       whatsapp: onlyDigits(form.whatsapp) || null,
       cargo: form.cargo,
       unidade_id: form.unidade_id === "null" ? null : form.unidade_id,
@@ -135,11 +157,13 @@ export const ColaboradorFormDialog: React.FC<ColaboradorFormDialogProps> = ({
 
       if (isEditing && profileToEdit) {
         // Lógica de Edição
+        // Ponto 4: Atualizar Matrícula
         await adminApi.updateUser(profileToEdit.id, payload);
         toast.success("Colaborador atualizado com sucesso.");
         newProfileId = profileToEdit.id;
       } else {
         // Lógica de Criação
+        // Ponto 4: Criar com Matrícula
         const newProfile = await adminApi.createUser(payload);
         toast.success("Colaborador cadastrado com sucesso.", {
           description: initialData?.suggestionId ? "A sugestão foi marcada como concluída." : undefined,
@@ -156,6 +180,7 @@ export const ColaboradorFormDialog: React.FC<ColaboradorFormDialogProps> = ({
         onSuccess(newProfileId); // Se for do painel de sugestões ou cadastro manual, apenas recarrega os dados
       }
     } catch (e) {
+      // Ponto 11: Validação de Matrícula (se a Edge Function retornar erro de duplicidade)
       toast.error(isEditing ? "Erro ao atualizar colaborador" : "Erro ao cadastrar colaborador", {
         description: (e as Error).message,
       });
@@ -181,7 +206,7 @@ export const ColaboradorFormDialog: React.FC<ColaboradorFormDialogProps> = ({
           cargos={cargos}
           onSubmit={handleSubmit}
           busy={busy}
-          isEditing={isEditing}
+          isEdit={isEditing} // Corrigido para isEdit
         />
       </DialogContent>
     </Dialog>

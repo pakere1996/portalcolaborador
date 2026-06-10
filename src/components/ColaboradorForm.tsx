@@ -49,7 +49,7 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label htmlFor="nome">Nome Completo *</Label>
           <Input 
@@ -71,17 +71,27 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
             disabled={busy || isEdit} // CPF não deve ser editável após o cadastro
           />
         </div>
+        <div className="space-y-2">
+          <Label htmlFor="matricula">Matrícula</Label>
+          <Input 
+            id="matricula" 
+            value={form.matricula || ""} 
+            onChange={(e) => handleFormChange('matricula', e.target.value)} 
+            placeholder="Ex: 12345"
+            disabled={busy}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="email">E-mail *</Label>
+          <Label htmlFor="email">E-mail</Label>
           <Input 
             id="email" 
             type="email"
             value={form.email || ""} 
             onChange={(e) => handleFormChange('email', e.target.value)} 
-            placeholder="email@empresa.com"
+            placeholder="email@empresa.com (Opcional)"
             disabled={busy}
           />
         </div>
@@ -181,11 +191,11 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
           />
         </div>
         
-        {/* Perfil de Acesso (Simplificado para 'user' ou 'admin' se necessário, mas aqui vamos usar um placeholder) */}
+        {/* Perfil de Acesso */}
         <div className="space-y-2">
           <Label htmlFor="perfil_acesso">Perfil de Acesso *</Label>
           <Select 
-            value={form.perfil_acesso || "user"} 
+            value={form.perfil_acesso || "colaborador"} 
             onValueChange={(value) => handleFormChange('perfil_acesso', value)}
             disabled={busy}
           >
@@ -193,7 +203,7 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
               <SelectValue placeholder="Colaborador (Padrão)" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="user">Colaborador</SelectItem>
+              <SelectItem value="colaborador">Colaborador</SelectItem>
               <SelectItem value="admin">Administrador</SelectItem>
             </SelectContent>
           </Select>

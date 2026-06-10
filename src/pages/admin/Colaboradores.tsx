@@ -38,6 +38,7 @@ type EditForm = {
   nome: string;
   email: string;
   cpf: string;
+  matricula: string; // Adicionado Matrícula
   whatsapp: string;
   cargo: string;
   unidade_id: string;
@@ -52,6 +53,7 @@ const blankEditForm: EditForm = {
   nome: "",
   email: "",
   cpf: "",
+  matricula: "", // Adicionado Matrícula
   whatsapp: "",
   cargo: "",
   unidade_id: "null",
@@ -79,7 +81,7 @@ const dayOfWeekMap: Record<number, string> = {
   6: "Sábado",
 };
 
-type SortColumn = 'nome' | 'unidade' | 'cargo' | 'folga_fixa_semana' | 'aprovacao_status' | 'data_admissao' | 'data_nascimento';
+type SortColumn = 'nome' | 'matricula' | 'unidade' | 'cargo' | 'folga_fixa_semana' | 'aprovacao_status' | 'data_admissao' | 'data_nascimento';
 type SortOrder = 'asc' | 'desc' | 'none';
 
 export default function Colaboradores() {
@@ -179,9 +181,13 @@ export default function Colaboradores() {
   const filteredAndSortedList = useMemo(() => {
     let filtered = list;
 
-    // 1. Filtragem
+    // 1. Filtragem (Incluindo Matrícula na busca por nome/CPF)
     if (filterName) {
-      filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterName.toLowerCase()) || p.cpf.includes(filterName));
+      filtered = filtered.filter(p => 
+        p.nome.toLowerCase().includes(filterName.toLowerCase()) || 
+        p.cpf.includes(filterName) ||
+        (p.matricula && p.matricula.includes(filterName))
+      );
     }
     if (filterUnidade !== "all") {
       if (filterUnidade === "null") {
@@ -213,6 +219,10 @@ export default function Colaboradores() {
           case 'nome':
             valA = a.nome;
             valB = b.nome;
+            break;
+          case 'matricula':
+            valA = a.matricula || '';
+            valB = b.matricula || '';
             break;
           case 'unidade':
             valA = a.unidade?.nome || '';
@@ -331,12 +341,12 @@ export default function Colaboradores() {
       {/* Filter Bar */}
       <div className="bg-card border border-border rounded-xl p-4 grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="md:col-span-2">
-          <Label htmlFor="searchName" className="sr-only">Buscar por Nome/CPF</Label>
+          <Label htmlFor="searchName" className="sr-only">Buscar por Nome/CPF/Matrícula</Label>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-muted-foreground" />
             <Input 
               id="searchName" 
-              placeholder="Buscar por Nome ou CPF..." 
+              placeholder="Buscar por Nome, CPF ou Matrícula..." 
               className="pl-10"
               value={filterName}
               onChange={(e) => setFilterName(e.target.value)}
@@ -408,6 +418,12 @@ export default function Colaboradores() {
                   </Button>
                 </th>
                 <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">
+                  <Button variant="ghost" className="p-0 h-auto" onClick={() => handleSort('matricula')}>
+                    Matrícula
+                    {getSortIcon('matricula')}
+                  </Button>
+                </th>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">
                   <Button variant="ghost" className="p-0 h-auto" onClick={() => handleSort('cargo')}>
                     Cargo
                     {getSortIcon('cargo')}
@@ -437,14 +453,14 @@ export default function Colaboradores() {
             <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="p-12 text-center text-muted-foreground">
+                  <td colSpan={7} className="p-12 text-center text-muted-foreground">
                     <Loader2 className="size-6 animate-spin mx-auto mb-2" />
                     Carregando colaboradores...
                   </td>
                 </tr>
               ) : filteredAndSortedList.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-12 text-center text-muted-foreground">
+                  <td colSpan={7} className="p-12 text-center text-muted-foreground">
                     Nenhum colaborador encontrado com os filtros aplicados.
                   </td>
                 </tr>
@@ -454,6 +470,9 @@ export default function Colaboradores() {
                     <td className="p-4 font-medium">
                       {profile.nome}
                       <div className="text-xs text-muted-foreground mt-0.5 block lg:hidden">{profile.cargo}</div>
+                    </td>
+                    <td className="p-4 hidden lg:table-cell text-muted-foreground">
+                      {profile.matricula || "—"}
                     </td>
                     <td className="p-4 hidden lg:table-cell text-muted-foreground">
                       {profile.cargo}

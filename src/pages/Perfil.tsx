@@ -27,10 +27,18 @@ function DadosPessoaisTab({ profile, busy, setBusy, form, setForm, handleSave, r
           <Label className="text-xs text-muted-foreground uppercase">CPF</Label>
           <div className="font-mono">{formatCPF(profile.cpf)}</div>
         </div>
+        
+        {/* Novo campo Matrícula */}
+        <div>
+          <Label className="text-xs text-muted-foreground uppercase">Matrícula</Label>
+          <div className="font-mono">{profile.matricula || "—"}</div>
+        </div>
+        
         <div>
           <Label className="text-xs text-muted-foreground uppercase">Cargo</Label>
           <div className="text-sm">{profile.cargo}</div>
         </div>
+        
         <div>
           <Label className="text-xs text-muted-foreground uppercase">Data de Admissão</Label>
           <div className="text-sm">
@@ -58,7 +66,7 @@ function DadosPessoaisTab({ profile, busy, setBusy, form, setForm, handleSave, r
       <form onSubmit={handleSave} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="email" className="flex items-center gap-2">
-            <Mail className="size-4 text-muted-foreground" /> E-mail de Contato
+            <Mail className="size-4 text-muted-foreground" /> E-mail de Contato (Opcional)
           </Label>
           <Input
             id="email"
@@ -135,7 +143,7 @@ export default function PerfilPage() {
       .from("profiles")
       .update({
         endereco: form.endereco.trim(),
-        email_contato: form.email_contato.trim(),
+        email_contato: form.email_contato.trim() || null, // Ponto 10: Salva como null se vazio
         whatsapp: form.whatsapp.trim(),
       })
       .eq("id", profile.id);
