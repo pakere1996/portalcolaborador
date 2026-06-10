@@ -268,7 +268,11 @@ export default function Colaboradores() {
       filtered = filtered.filter(p => p.cargo === filterCargo);
     }
     if (filterUnidade !== "all") {
-      filtered = filtered.filter(p => p.unidade_id === filterUnidade);
+      if (filterUnidade === "null") {
+        filtered = filtered.filter(p => p.unidade_id === null);
+      } else {
+        filtered = filtered.filter(p => p.unidade_id === filterUnidade);
+      }
     }
     if (filterFolga !== "all") {
       const folgaNum = Number(filterFolga);
@@ -429,6 +433,7 @@ export default function Colaboradores() {
             <SelectTrigger><SelectValue placeholder="Folga Semanal" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas as Folgas</SelectItem>
+              <SelectItem value="null">Não Definida</SelectItem>
               {WEEKDAY_OPTIONS.map((d) => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
             </SelectContent>
           </Select>
