@@ -48,6 +48,8 @@ export default function LoginPage() {
           .eq("user_id", data.user?.id)
           .maybeSingle();
         
+        console.log('ROLES DATA:', rolesData, 'ERROR:', rolesError);
+
         if (rolesError) {
           console.error("Erro ao buscar roles:", rolesError);
           toast.error("Erro ao verificar permissões");
