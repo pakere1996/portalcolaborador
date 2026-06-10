@@ -13,7 +13,7 @@ import { Tables } from "@/integrations/supabase/types";
 import { formatCPF, onlyDigits } from "@/lib/cpf";
 
 type Unidade = Tables<'unidades'>;
-type Cargo = { nome: string };
+type Cargo = Tables<'cargos'>; // Usando a tipagem correta da tabela cargos
 
 interface NovoColaboradorDialogProps {
   unidades: Unidade[];
