@@ -4,7 +4,8 @@
 
     // 1. Filtragem
     if (filterName) {
-// ... existing code ...
+      filtered = filtered.filter(p => p.nome.toLowerCase().includes(filterName.toLowerCase()));
+    }
     if (filterUnidade !== "all") {
       if (filterUnidade === "null") {
         filtered = filtered.filter(p => p.unidade_id === null);
@@ -21,4 +22,15 @@
       }
     }
     if (filterStatus !== "all") {
-// ... existing code ...
+      filtered = filtered.filter(p => p.aprovacao_status === filterStatus);
+    }
+
+    // 2. Ordenação
+    if (sortOrder === "asc") {
+      filtered = filtered.sort((a, b) => a.nome.localeCompare(b.nome));
+    } else if (sortOrder === "desc") {
+      filtered = filtered.sort((a, b) => b.nome.localeCompare(a.nome));
+    }
+
+    return filtered;
+  }, [list, filterName, filterUnidade, filterFolga, filterStatus, sortOrder]);
