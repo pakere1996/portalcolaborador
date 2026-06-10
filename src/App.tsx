@@ -27,7 +27,8 @@ import DocumentosDisciplinar from "./pages/admin/DocumentosDisciplinar";
 import SetupAdmin from "./pages/SetupAdmin";
 
 function AuthenticatedRoutes() {
-  const { isAuthenticated, role } = useAuth();
+  const { session, role } = useAuth();
+  const isAuthenticated = !!session;
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -91,9 +92,10 @@ function AuthenticatedRoutes() {
 }
 
 function App() {
-  const { isAuthenticated, isLoading, hasAdmin } = useAuth();
+  const { session, loading } = useAuth();
+  const isAuthenticated = !!session;
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-red-600"></div>
@@ -106,7 +108,7 @@ function App() {
       <Toaster richColors position="top-right" />
       <Routes>
         <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} />
-        <Route path="/setup" element={hasAdmin ? <Navigate to="/login" replace /> : <SetupAdmin />} />
+        <Route path="/setup" element={<SetupAdmin />} />
         <Route path="/*" element={<AuthenticatedRoutes />} />
       </Routes>
     </>
