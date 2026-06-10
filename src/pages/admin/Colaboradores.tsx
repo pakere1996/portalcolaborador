@@ -44,7 +44,7 @@ const blankForm = {
   folgaFixa: "",
 };
 
-export default function Funcionarios() {
+export default function Colaboradores() {
   const [list, setList] = useState<Profile[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(blankForm);
@@ -94,7 +94,7 @@ export default function Funcionarios() {
         folgaFixaSemana: form.folgaFixa === "" ? null : Number(form.folgaFixa),
         role: "funcionario",
       });
-      toast.success("Funcionário cadastrado");
+      toast.success("Colaborador cadastrado");
       setOpen(false);
       setForm(blankForm);
       load();
@@ -184,7 +184,7 @@ export default function Funcionarios() {
     if (!confirmDelete) return;
     try {
       await adminApi.deleteUser(confirmDelete.id);
-      toast.success("Funcionário excluído");
+      toast.success("Colaborador excluído");
       setConfirmDelete(null);
       load();
     } catch (e) {
@@ -197,16 +197,16 @@ export default function Funcionarios() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-            <Users className="size-6 text-primary" /> Funcionários
+            <Users className="size-6 text-primary" /> Colaboradores
           </h1>
           <p className="text-muted-foreground mt-1">Cadastre e gerencie a equipe.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="rounded-full px-6"><Plus className="size-4 mr-2" /> Novo Funcionário</Button>
+            <Button className="rounded-full px-6"><Plus className="size-4 mr-2" /> Novo Colaborador</Button>
           </DialogTrigger>
           <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Novo funcionário</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>Novo colaborador</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label>Nome Completo</Label>
@@ -257,7 +257,7 @@ export default function Funcionarios() {
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-muted-foreground border-b border-border">
               <tr>
-                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Funcionário</th>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Colaborador</th>
                 <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">Cargo</th>
                 <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">Nascimento</th>
                 <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Folga Semanal</th>
@@ -267,7 +267,7 @@ export default function Funcionarios() {
             </thead>
             <tbody className="divide-y divide-border">
               {list.length === 0 && (
-                <tr><td colSpan={6} className="p-12 text-center text-muted-foreground">Nenhum funcionário cadastrado.</td></tr>
+                <tr><td colSpan={6} className="p-12 text-center text-muted-foreground">Nenhum colaborador cadastrado.</td></tr>
               )}
               {list.map((p) => (
                 <tr key={p.id} className="hover:bg-muted/20 transition-colors">
@@ -285,7 +285,7 @@ export default function Funcionarios() {
                   <td className="p-4 hidden lg:table-cell">
                     {p.data_nascimento ? (
                       <div className="flex items-center gap-1.5 text-muted-foreground">
-                        <Cake className="size-3 text-amber-500" />
+                        <Cake className="size-3" />
                         {new Date(p.data_nascimento + "T00:00:00").toLocaleDateString("pt-BR")}
                       </div>
                     ) : "—"}
@@ -326,7 +326,7 @@ export default function Funcionarios() {
 
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Editar funcionário</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Editar colaborador</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2"><Label>Nome</Label><Input value={editForm.nome} onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })} /></div>
             <div className="space-y-2"><Label>Cargo</Label><Input value={editForm.cargo} onChange={(e) => setEditForm({ ...editForm, cargo: e.target.value })} /></div>

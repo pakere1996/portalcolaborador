@@ -1,83 +1,115 @@
-import { Routes, Route, Navigate } from "react-router-dom";
-import { useAuth } from "@/lib/auth-context";
-import { AppShell } from "@/components/AppShell";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "sonner";
+import { AppShell } from "./components/AppShell";
+import { AuthProvider, useAuth } from "./lib/auth-context";
+import Login from "./pages/Login";
+import Home from "./pages/Home";
+import Perfil from "./pages/Perfil";
+import Calendario from "./pages/Calendario";
+import Trocas from "./pages/Trocas";
+import Historico from "./pages/Historico";
+import Documentos from "./pages/Documentos";
+import DocumentosAtestados from "./pages/DocumentosAtestados";
 
-import LoginPage from "@/pages/Login";
-import SetupAdminPage from "@/pages/SetupAdmin";
-import HomePage from "@/pages/Home"; // Importação da nova Home
-import CalendarioPage from "@/pages/Calendario";
-import HistoricoPage from "@/pages/Historico";
-import TrocasPage from "@/pages/Trocas";
-import PerfilPage from "@/pages/Perfil";
-import DocumentosPage from "@/pages/Documentos";
-import DocumentosAtestadosPage from "@/pages/DocumentosAtestados";
+// Admin Pages
+import HomeAdmin from "./pages/admin/HomeAdmin";
+import Colaboradores from "./pages/admin/Colaboradores";
+import Cargos from "./pages/admin/Cargos";
+import Unidades from "./pages/admin/Unidades";
+import CalendarioAdmin from "./pages/admin/Calendario";
+import Solicitacoes from "./pages/admin/Solicitacoes";
+import Aprovacoes from "./pages/admin/Aprovacoes";
+import TrocasAdmin from "./pages/admin/Trocas";
+import Bloqueios from "./pages/admin/Bloqueios";
+import DocumentosAdmin from "./pages/admin/Documentos";
+import DocumentosAtestadosAdmin from "./pages/admin/DocumentosAtestadosAdmin";
+import DocumentosDisciplinar from "./pages/admin/DocumentosDisciplinar";
+import SetupAdmin from "./pages/SetupAdmin";
 
-import AdminHome from "@/pages/admin/HomeAdmin"; // Importação da nova Admin Home
-import AdminDashboard from "@/pages/admin/Dashboard";
-import AdminCalendario from "@/pages/admin/Calendario";
-import AdminSolicitacoes from "@/pages/admin/Solicitacoes";
-import AdminAprovacoes from "@/pages/admin/Aprovacoes";
-import AdminTrocas from "@/pages/admin/Trocas";
-import AdminBloqueios from "@/pages/admin/Bloqueios";
-import AdminFuncionarios from "@/pages/admin/Funcionarios";
-import AdminDocumentos from "@/pages/admin/Documentos";
-import AdminDocumentosAtestados from "@/pages/admin/DocumentosAtestadosAdmin";
-import AdminDocumentosDisciplinar from "@/pages/admin/DocumentosDisciplinar";
+function AuthenticatedRoutes() {
+  const { isAuthenticated, role } = useAuth();
 
-function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
-  const { session, role, loading } = useAuth();
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
 
-  if (loading) {
+  const isAdmin = role === "admin";
+
+  return (
+    <AppShell>
+      <Routes>
+        {/* Shared Routes */}
+        <Route path="/perfil" element={<Perfil />} />
+        <Route path="/calendario" element={<Calendario />} />
+        <Route path="/trocas" element={<Trocas />} />
+        <Route path="/historico" element={<Historico />} />
+        <Route path="/documentos" element={<Documentos />} />
+        <Route path="/documentos/atestados" element={<DocumentosAtestados />} />
+        <Route path="/documentos/ponto" element={<Documentos />} /> {/* Reusing Documentos for Ponto */}
+
+        {/* Employee Home */}
+        <Route path="/home" element={<Home />} />
+        <Route path="/" element={<Navigate to="/home" replace />} />
+
+        {/* Admin Routes */}
+        {isAdmin ? (
+          <>
+            <Route path="/admin" element={<Navigate to="/admin/home" replace />} />
+            <Route path="/admin/home" element={<HomeAdmin />} />
+            
+            {/* Cadastro Group */}
+            <Route path="/admin/colaboradores" element={<Colaboradores />} />
+            <Route path="/admin/cargos" element={<Cargos />} />
+            <Route path="/admin/unidades" element={<Unidades />} />
+
+            {/* Folgas Group */}
+            <Route path="/admin/calendario" element={<CalendarioAdmin />} />
+            <Route path="/admin/solicitacoes" element={<Solicitacoes />} />
+            <Route path="/admin/aprovacoes" element={<Aprovacoes />} />
+            <Route path="/admin/trocas" element={<TrocasAdmin />} />
+            <Route path="/admin/bloqueios" element={<Bloqueios />} />
+
+            {/* Documentos Group */}
+            <Route path="/admin/documentos" element={<DocumentosAdmin />} />
+            <Route path="/admin/documentos/ponto" element={<DocumentosAdmin />} />
+            <Route path="/admin/documentos/atestados" element={<DocumentosAtestadosAdmin />} />
+            <Route path="/admin/documentos/disciplinar" element={<DocumentosDisciplinar />} />
+            
+            {/* Setup */}
+            <Route path="/admin/setup" element={<SetupAdmin />} />
+          </>
+        ) : (
+          <Route path="/admin/*" element={<Navigate to="/home" replace />} />
+        )}
+
+        {/* Fallback for authenticated users */}
+        <Route path="*" element={<Navigate to="/home" replace />} />
+      </Routes>
+    </AppShell>
+  );
+}
+
+function App() {
+  const { isAuthenticated, isLoading, hasAdmin } = useAuth();
+
+  if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <div className="size-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm font-medium text-muted-foreground">Verificando permissões...</p>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-red-600"></div>
       </div>
     );
   }
 
-  if (!session) return <Navigate to="/login" replace />;
-
-  if (adminOnly && role !== "admin") {
-    console.warn("[App] Acesso negado: Usuário não é administrador. Role atual:", role);
-    return <Navigate to="/home" replace />; // Redireciona para a home do colaborador se não for admin
-  }
-
-  return <AppShell>{children}</AppShell>;
-}
-
-export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/setup-admin" element={<SetupAdminPage />} />
-
-      {/* Rotas do Colaborador */}
-      <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
-      <Route path="/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
-      <Route path="/historico" element={<ProtectedRoute><HistoricoPage /></ProtectedRoute>} />
-      <Route path="/trocas" element={<ProtectedRoute><TrocasPage /></ProtectedRoute>} />
-      <Route path="/perfil" element={<ProtectedRoute><PerfilPage /></ProtectedRoute>} />
-      <Route path="/documentos" element={<ProtectedRoute><DocumentosPage /></ProtectedRoute>} />
-      <Route path="/documentos/ponto" element={<ProtectedRoute><DocumentosPage /></ProtectedRoute>} />
-      <Route path="/documentos/atestados" element={<ProtectedRoute><DocumentosAtestadosPage /></ProtectedRoute>} />
-
-      {/* Rotas do Admin */}
-      <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
-      <Route path="/admin/home" element={<ProtectedRoute adminOnly><AdminHome /></ProtectedRoute>} />
-      <Route path="/admin/calendario" element={<ProtectedRoute adminOnly><AdminCalendario /></ProtectedRoute>} />
-      <Route path="/admin/solicitacoes" element={<ProtectedRoute adminOnly><AdminSolicitacoes /></ProtectedRoute>} />
-      <Route path="/admin/aprovacoes" element={<ProtectedRoute adminOnly><AdminAprovacoes /></ProtectedRoute>} />
-      <Route path="/admin/trocas" element={<ProtectedRoute adminOnly><AdminTrocas /></ProtectedRoute>} />
-      <Route path="/admin/bloqueios" element={<ProtectedRoute adminOnly><AdminBloqueios /></ProtectedRoute>} />
-      <Route path="/admin/funcionarios" element={<ProtectedRoute adminOnly><AdminFuncionarios /></ProtectedRoute>} />
-      <Route path="/admin/documentos" element={<ProtectedRoute adminOnly><AdminDocumentos /></ProtectedRoute>} />
-      <Route path="/admin/documentos/ponto" element={<ProtectedRoute adminOnly><AdminDocumentos /></ProtectedRoute>} />
-      <Route path="/admin/documentos/atestados" element={<ProtectedRoute adminOnly><AdminDocumentosAtestados /></ProtectedRoute>} />
-      <Route path="/admin/documentos/disciplinar" element={<ProtectedRoute adminOnly><AdminDocumentosDisciplinar /></ProtectedRoute>} />
-
-      <Route path="*" element={<Navigate to="/login" replace />} />
-    </Routes>
+    <BrowserRouter>
+      <Toaster richColors position="top-right" />
+      <Routes>
+        <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} />
+        <Route path="/setup" element={hasAdmin ? <Navigate to="/login" replace /> : <SetupAdmin />} />
+        <Route path="/*" element={<AuthenticatedRoutes />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
+
+export default App;

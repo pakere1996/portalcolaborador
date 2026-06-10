@@ -16,7 +16,9 @@ import {
   Settings,
   FileText,
   FileWarning,
-  Home, // Importando o ícone Home
+  Home,
+  Briefcase, // Using Briefcase for Cargos
+  Building2, // Using Building2 for Unidades
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -33,6 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [folgasOpen, setFolgasOpen] = useState(true);
   const [docsOpen, setDocsOpen] = useState(false);
+  const [cadastroOpen, setCadastroOpen] = useState(false); // New state for Cadastro menu
 
   useEffect(() => {
     setOpen(false);
@@ -41,6 +44,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (path.startsWith("/documentos") || path.startsWith("/admin/documentos")) {
       setDocsOpen(true);
+    }
+    // Open Cadastro menu if any of its routes are active
+    if (path.startsWith("/admin/colaboradores") || path.startsWith("/admin/cargos") || path.startsWith("/admin/unidades")) {
+      setCadastroOpen(true);
     }
   }, [path]);
 
@@ -72,6 +79,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/documentos/disciplinar", label: "Registros Disciplinares", icon: Shield },
   ];
 
+  const adminCadastroNav: NavItem[] = [
+    { to: "/admin/colaboradores", label: "Colaboradores", icon: Users },
+    { to: "/admin/cargos", label: "Cargos", icon: Briefcase },
+    { to: "/admin/unidades", label: "Unidades", icon: Building2 },
+  ];
+
   const isAdmin = role === "admin";
   const folgaNav = isAdmin ? adminFolgaNav : employeeFolgaNav;
   const docsNav = isAdmin ? adminDocsNav : employeeDocsNav;
@@ -79,14 +92,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // A home agora é a rota principal
   const homePath = isAdmin ? "/admin/home" : "/home";
 
+  const isDocsActive = path.startsWith("/documentos") || path.startsWith("/admin/documentos");
+  const isCadastroActive = path.startsWith("/admin/colaboradores") || path.startsWith("/admin/cargos") || path.startsWith("/admin/unidades");
+
   const isFolgaActive = path.startsWith("/calendario") ||
     path.startsWith("/trocas") ||
     path.startsWith("/historico") ||
-    (path.startsWith("/admin") && path !== "/admin/funcionarios" && !path.startsWith("/admin/documentos"));
-  const isDocsActive = path.startsWith("/documentos") || path.startsWith("/admin/documentos");
+    (path.startsWith("/admin") && !isDocsActive && !isCadastroActive);
 
-  const cadastroPath = isAdmin ? "/admin/funcionarios" : "/perfil";
-  const cadastroLabel = isAdmin ? "Gestão de Equipe" : "Meu Cadastro";
+  const cadastroPath = isAdmin ? "/admin/colaboradores" : "/perfil";
+  const cadastroLabel = "Cadastro";
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
@@ -130,19 +145,61 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span>Início</span>
           </Link>
 
-          {/* Link para Cadastro/Gestão de Equipe */}
-          <Link
-            to={cadastroPath}
-            className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors mb-2",
-              path === cadastroPath
-                ? "bg-primary/15 text-primary font-bold"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent",
-            )}
-          >
-            {isAdmin ? <Users className="size-4" /> : <Settings className="size-4" />}
-            <span>{cadastroLabel}</span>
-          </Link>
+          {/* Menu Cadastro (Colaborador ou Admin) */}
+          {isAdmin ? (
+            <div className="space-y-1">
+              <button
+                onClick={() => setCadastroOpen(!cadastroOpen)}
+                className={cn(
+                  "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
+                  isCadastroActive ? "text-primary bg-primary/5" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <Users className="size-4" />
+                  <span>{cadastroLabel}</span>
+                </div>
+                {cadastroOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+              </button>
+
+              {cadastroOpen && (
+                <div className="pl-4 space-y-1 mt-1 border-l border-border ml-5">
+                  {adminCadastroNav.map((item) => {
+                    const active = path === item.to;
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        key={item.to}
+                        to={item.to}
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+                          active
+                            ? "bg-primary/15 text-primary font-medium"
+                            : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                        )}
+                      >
+                        <Icon className="size-4" />
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <Link
+              to={cadastroPath}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors mb-2",
+                path === cadastroPath
+                  ? "bg-primary/15 text-primary font-bold"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent",
+              )}
+            >
+              <Settings className="size-4" />
+              <span>Meu {cadastroLabel}</span>
+            </Link>
+          )}
 
           <div className="space-y-1">
             <button

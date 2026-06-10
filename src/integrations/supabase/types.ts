@@ -53,6 +53,30 @@ export type Database = {
         }
         Relationships: []
       }
+      cargos: {
+        Row: {
+          id: string
+          nome: string
+          descricao: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          nome: string
+          descricao?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          nome?: string
+          descricao?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       datas_bloqueadas: {
         Row: {
           auto: boolean
@@ -325,6 +349,39 @@ export type Database = {
           solicitante_aprovou?: boolean
           solicitante_id?: string
           status?: Database["public"]["Enums"]["troca_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      unidades: {
+        Row: {
+          id: string
+          nome: string
+          endereco: string | null
+          cidade: string | null
+          telefone: string | null
+          ativo: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          nome: string
+          endereco?: string | null
+          cidade?: string | null
+          telefone?: string | null
+          ativo?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          nome?: string
+          endereco?: string | null
+          cidade?: string | null
+          telefone?: string | null
+          ativo?: boolean
+          created_at?: string
           updated_at?: string
         }
         Relationships: []
