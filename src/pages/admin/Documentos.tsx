@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Loader2, FileText, Download, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { PDFDocument, PDFPage } from "pdf-lib";
+import { PDFDocument } from "pdf-lib";
 import { extractCNPJs, cleanCNPJ, extractMonthAndYear } from "@/lib/documentos";
 import { maskCNPJ } from "@/lib/utils";
 
@@ -148,9 +148,9 @@ export default function AdminDocumentosPage() {
       setIsProcessing(false);
       return results;
     },
-    onSuccess: (results) => {
+    onSuccess: async (results) => {
       // Now we need to determine the status for each page (matched, unmatched, duplicate)
-      const updatedResults = results.map((result) => {
+      const updatedResults = await Promise.all(results.map(async (result) => {
         if (!result.extractedData) {
           return { ...result, status: "unmatched" };
         }
@@ -178,7 +178,7 @@ export default function AdminDocumentosPage() {
             .eq("mes", mes)
             .eq("ano", ano);
 
-          if (count > 0) {
+          if (count && count > 0) {
             return { ...result, status: "duplicate", matchedProfile };
           }
           return { ...result, status: "matched", matchedProfile };
@@ -195,7 +195,7 @@ export default function AdminDocumentosPage() {
           status: "unmatched",
           matchedProfile: profileByCpf || null,
         };
-      });
+      }));
 
       setPageResults(updatedResults);
       setCurrentPageIndex(0);
