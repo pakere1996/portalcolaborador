@@ -47,7 +47,7 @@ import {
   ExtractedData, // Nova interface
 } from "@/lib/documentos";
 import { Tables } from "@/integrations/supabase/types";
-import { PreCadastroDialog } from "@/components/PreCadastroDialog";
+import { ColaboradorFormDialog, InitialData } from "@/components/ColaboradorFormDialog"; // Importação atualizada
 
 const routeTypeMap: Record<string, DocumentType> = {
   "/admin/documentos": "contracheque",
@@ -1035,14 +1035,26 @@ export default function AdminDocumentosPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <PreCadastroDialog
+      <ColaboradorFormDialog
         open={openPreCadastroDialog}
         onOpenChange={setOpenPreCadastroDialog}
-        suggestion={selectedSuggestion}
-        pageResult={selectedPageResult} // Passando o PageResult
         unidades={unidades}
         cargos={cargos}
-        onSuccess={handlePreCadastroSuccess} // Usando o novo handler
+        onSuccess={handlePreCadastroSuccess}
+        // Construindo o initialData baseado na fonte
+        initialData={
+          selectedSuggestion
+            ? {
+                extractedData: selectedSuggestion.extracted_data as ExtractedData,
+                suggestionId: selectedSuggestion.id,
+              }
+            : selectedPageResult
+            ? {
+                extractedData: selectedPageResult.extractedData as ExtractedData,
+                pageNumber: selectedPageResult.pageNumber,
+              }
+            : null
+        }
       />
     </div>
   );

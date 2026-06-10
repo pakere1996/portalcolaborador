@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { adminApi } from "@/lib/admin-api";
-import { NovoColaboradorDialog } from "@/components/NovoColaboradorDialog";
+import { ColaboradorFormDialog } from "@/components/ColaboradorFormDialog";
 import { ColaboradorForm } from "@/components/ColaboradorForm";
 import { onlyDigits } from "@/lib/cpf";
 
@@ -30,20 +30,6 @@ type Profile = Tables<'profiles'> & {
 };
 type Unidade = Tables<'unidades'>;
 type Cargo = Tables<'cargos'>;
-
-type EditForm = {
-  nome: string;
-  email: string;
-  cpf: string;
-  whatsapp: string;
-  cargo: string;
-  unidade_id: string;
-  folga_fixa_semana: string;
-  data_nascimento: string;
-  data_admissao: string;
-  perfil_acesso: string; // Novo campo
-  ativo: boolean;
-};
 
 const blankEditForm: EditForm = {
   nome: "",
@@ -86,7 +72,10 @@ export default function Colaboradores() {
   // Edit/Delete State
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
-  const [editForm, setEditForm] = useState<EditForm>(blankEditForm);
+  const [openNewDialog, setOpenNewDialog] = useState(false); // Estado para abrir o diálogo de novo colaborador
+  
+  // O formulário de edição será gerenciado pelo ColaboradorFormDialog
+  const [profileToEditWithRole, setProfileToEditWithRole] = useState<Profile & { role: string } | null>(null);
 
   // Filter States
   const [filterName, setFilterName] = useState("");
@@ -197,95 +186,9 @@ export default function Colaboradores() {
       .eq('user_id', profile.id)
       .single();
 
-    const role = roleData?.role || 'user';
+    const role = (roleData?.role || 'colaborador') as string;
 
-    setEditingProfile(profile);
-    setEditForm({
-      nome: profile.nome,
-      email: profile.email_contato || "",
-      cpf: profile.cpf,
-      whatsapp: profile.whatsapp || "",
-      cargo: profile.cargo,
-      folga_fixa_semana: profile.folga_fixa_semana !== null ? String(profile.folga_fixa_semana) : "null",
-      unidade_id: profile.unidade_id || "null",
-      data_nascimento: profile.data_nascimento || "",
-      data_admissao: profile.data_admissao || "",
-      perfil_acesso: role,
-      ativo: profile.ativo,
-    });
-  };
-
-  const handleFormChange = (id: keyof EditForm, value: string | boolean) => {
-    setEditForm(prev => ({ ...prev, [id]: value }));
-  };
-
-  const validateEditForm = () => {
-    const requiredFields = ['nome', 'email', 'cpf', 'cargo', 'unidade_id', 'folga_fixa_semana', 'data_nascimento', 'data_admissao', 'perfil_acesso'];
-    
-    for (const field of requiredFields) {
-      if (field === 'unidade_id' || field === 'folga_fixa_semana') {
-        if (editForm[field] === "null") {
-          toast.error(`O campo ${field.replace('_id', '').replace('_', ' ')} é obrigatório.`);
-          return false;
-        }
-      } else if (!editForm[field].trim()) {
-        toast.error(`O campo ${field} é obrigatório.`);
-        return false;
-      }
-    }
-
-    if (onlyDigits(editForm.cpf).length !== 11) {
-      toast.error("CPF inválido.", { description: "O CPF deve conter 11 dígitos." });
-      return false;
-    }
-    return true;
-  };
-
-  const saveEdit = async () => {
-    if (!editingProfile || !validateEditForm()) return;
-    
-    setBusy(true);
-
-    const updateData: Tables<'profiles'>['Update'] = {
-      nome: editForm.nome.trim(),
-      email_contato: editForm.email.trim(),
-      whatsapp: onlyDigits(editForm.whatsapp) || null,
-      cargo: editForm.cargo.trim(),
-      folga_fixa_semana: editForm.folga_fixa_semana === "null" ? null : Number(editForm.folga_fixa_semana),
-      unidade_id: editForm.unidade_id === "null" ? null : editForm.unidade_id,
-      data_nascimento: editForm.data_nascimento,
-      data_admissao: editForm.data_admissao,
-      ativo: editForm.ativo,
-      updated_at: new Date().toISOString(),
-    };
-
-    try {
-      // 1. Atualizar Perfil
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update(updateData)
-        .eq("id", editingProfile.id);
-
-      if (profileError) throw profileError;
-
-      // 2. Atualizar Role (Perfil de Acesso)
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .update({ role: editForm.perfil_acesso })
-        .eq("user_id", editingProfile.id);
-      
-      if (roleError) throw roleError;
-
-
-      toast.success("Perfil atualizado com sucesso.");
-      setEditingProfile(null);
-      setEditForm(blankEditForm);
-      loadData();
-    } catch (e) {
-      toast.error("Erro ao atualizar perfil", { description: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
+    setProfileToEditWithRole({ ...profile, role });
   };
 
   const handleToggleActive = async (profile: Profile) => {
@@ -350,11 +253,9 @@ export default function Colaboradores() {
           </h1>
           <p className="text-muted-foreground mt-1">Gerencie os perfis e acessos dos colaboradores.</p>
         </div>
-        <NovoColaboradorDialog 
-          unidades={unidades} 
-          cargos={cargos} 
-          onSuccess={loadData} 
-        />
+        <Button onClick={() => setOpenNewDialog(true)}>
+          <Plus className="mr-2 size-4" /> Novo Colaborador
+        </Button>
       </div>
 
       {/* Filter Bar */}
@@ -535,26 +436,27 @@ export default function Colaboradores() {
         </div>
       </div>
 
-      {/* Edit Dialog */}
-      <Dialog open={!!editingProfile} onOpenChange={(o) => { if (!o) { setEditingProfile(null); setEditForm(blankEditForm); } }}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader><DialogTitle>Editar Colaborador: {editingProfile?.nome}</DialogTitle></DialogHeader>
-          <div className="py-4">
-            <ColaboradorForm 
-              form={editForm} 
-              setForm={setEditForm} 
-              unidades={unidades} 
-              cargos={cargos} 
-              busy={busy} 
-              isEdit={true}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => { setEditingProfile(null); setEditForm(blankEditForm); }} disabled={busy}>Cancelar</Button>
-            <Button onClick={saveEdit} disabled={busy}>{busy ? "Salvando..." : "Salvar Alterações"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Novo Colaborador Dialog (Unificado) */}
+      <ColaboradorFormDialog
+        open={openNewDialog}
+        onOpenChange={setOpenNewDialog}
+        initialData={null}
+        unidades={unidades}
+        cargos={cargos}
+        onSuccess={loadData}
+      />
+
+      {/* Edit Dialog (Unificado) */}
+      <ColaboradorFormDialog
+        open={!!profileToEditWithRole}
+        onOpenChange={(o) => { if (!o) setProfileToEditWithRole(null); }}
+        initialData={null}
+        unidades={unidades}
+        cargos={cargos}
+        onSuccess={loadData}
+        isEditing={true}
+        profileToEdit={profileToEditWithRole}
+      />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
