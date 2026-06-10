@@ -13,10 +13,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Plus, Users, Pencil, Trash2, KeyRound, Cake, CalendarDays, RefreshCw, Shield, Mail } from "lucide-react";
-import { formatCPF, onlyDigits } from "@/lib/cpf";
+import { formatCPF, onlyDigits, isValidCPFLength } from "@/lib/cpf";
 import { adminApi } from "@/lib/admin-api";
 import { Badge } from "@/components/ui/badge";
-import { isValidCPFLength } from "@/lib/cpf";
 
 const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
