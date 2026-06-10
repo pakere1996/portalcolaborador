@@ -160,17 +160,21 @@ export default function AdminDocumentosPage() {
     navigate(value === "contracheque" ? "/admin/documentos" : "/admin/documentos/ponto");
   };
 
-  const resetUploadState = () => {
-    setFile(null);
+  const resetResultsState = () => {
     setShowResults(false);
     setPageResults([]);
     setManualProfileByPage({});
     setIdentifiedNames({});
     setDuplicateDocs([]);
     setPendingSave(false);
-    setDetectedReference("");
     setIgnoredPages({});
     setPageToIgnore(null);
+  };
+
+  const resetUploadState = () => {
+    setFile(null);
+    resetResultsState();
+    setDetectedReference("");
     setMes("");
     setAno("");
     setDraftMes("");
@@ -205,7 +209,15 @@ export default function AdminDocumentosPage() {
     }
 
     setFile(selectedFile);
-    resetUploadState(); // Resetar estado antes de processar
+    resetResultsState(); // Resetar apenas os resultados, mantendo o período se já estiver setado
+
+    // Resetar o período de referência para forçar a re-detecção ou entrada manual
+    setMes("");
+    setAno("");
+    setDraftMes("");
+    setDraftAno("");
+    setDetectedReference("");
+    setIsEditingReference(false);
 
     try {
       const pages = await extractPdfText(selectedFile);
