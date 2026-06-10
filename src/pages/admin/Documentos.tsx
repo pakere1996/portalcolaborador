@@ -1,4 +1,18 @@
 // ... existing code ...
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {pageResults.map((page) => {
+              const isIgnored = !!ignoredPages[page.pageNumber];
+              const isAuto = page.status === "auto";
+              const isManual = page.status === "manual";
+              const isSuggested = page.status === "suggested";
+              const isLinked = page.status === "linked"; // Novo status
+
+              let statusBadge;
+              if (isAuto) statusBadge = <Badge className="bg-green-100 text-green-700 border-green-200">Vinculado: {page.profileName}</Badge>;
+              else if (isManual) statusBadge = <Badge className="bg-blue-100 text-blue-700 border-blue-200">Manual: {identifiedNames[page.pageNumber] || page.profileName}</Badge>;
+              else if (isLinked) statusBadge = <Badge className="bg-green-100 text-green-700 border-green-200">Vinculado (Novo): {page.profileName}</Badge>;
+              else if (isSuggested) statusBadge = <Badge className="bg-orange-100 text-orange-700 border-orange-200">Pré-Cadastro Sugerido</Badge>;
               else if (isIgnored) statusBadge = <Badge className="bg-slate-100 text-slate-700 border-slate-200">Ignorada</Badge>;
 
               return (
@@ -21,4 +35,88 @@
                   </div>
 
                   {(!isAuto && !isLinked && !isIgnored) && (
-// ... existing code ...
+                    <div className="space-y-3">
+                      <h4 className="font-medium">Ações</h4>
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handleEditPage(page.pageNumber)}>
+                          Editar
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => handleDeletePage(page.pageNumber)}>
+                          Excluir
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {isAuto && (
+                    <div className="space-y-3">
+                      <h4 className="font-medium">Dados de Vinculação</h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Nome do Vinculado</p>
+                          <p className="font-medium">{page.profileName}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Status</p>
+                          <p className="font-medium text-green-600">Vinculado</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {isManual && (
+                    <div className="space-y-3">
+                      <h4 className="font-medium">Dados de Manual</h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Nome Identificado</p>
+                          <p className="font-medium">{identifiedNames[page.pageNumber] || page.profileName}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Status</p>
+                          <p className="font-medium text-blue-600">Manual</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {isSuggested && (
+                    <div className="space-y-3">
+                      <h4 className="font-medium">Pré-Cadastro Sugerido</h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Nome Sugerido</p>
+                          <p className="font-medium">{page.profileName}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Status</p>
+                          <p className="font-medium text-orange-600">Pré-Cadastro Sugerido</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {isLinked && (
+                    <div className="space-y-3">
+                      <h4 className="font-medium">Vinculação (Novo)</h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Nome do Vinculado</p>
+                          <p className="font-medium">{page.profileName}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Status</p>
+                          <p className="font-medium text-green-600">Vinculado (Novo)</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+};
