@@ -28,6 +28,19 @@ export interface DocumentPage {
   documentType: DocumentType;
 }
 
+// --- Utility Functions ---
+
+const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
+  folha_ponto: "Folha de Ponto",
+  contracheque: "Contracheque",
+  atestado: "Atestado Médico",
+  disciplinar: "Documento Disciplinar",
+};
+
+export function getDocumentTypeLabel(type: DocumentType): string {
+  return DOCUMENT_TYPE_LABELS[type] || type;
+}
+
 // --- CNPJ Extraction Logic ---
 
 /**
