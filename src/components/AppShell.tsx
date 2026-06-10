@@ -16,6 +16,7 @@ import {
   Settings,
   FileText,
   FileWarning,
+  Home, // Importando o ícone Home
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -125,8 +126,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 : "text-muted-foreground hover:text-foreground hover:bg-accent",
             )}
           >
-            <Shield className="size-4" />
-            <span>{isAdmin ? "Dashboard Principal" : "Home"}</span>
+            <Home className="size-4" />
+            <span>Início</span>
           </Link>
 
           {/* Link para Cadastro/Gestão de Equipe */}
