@@ -56,6 +56,7 @@ export async function extractPdfText(file: File): Promise<{ pageNumber: number; 
   await new Promise(resolve => setTimeout(resolve, 500));
 
   const mockText = `
+    Período: 05/2024
     Página 1
     Nome: João da Silva
     CPF: 123.456.789-00
