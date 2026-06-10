@@ -4,6 +4,7 @@ import { AppShell } from "@/components/AppShell";
 
 import LoginPage from "@/pages/Login";
 import SetupAdminPage from "@/pages/SetupAdmin";
+import HomePage from "@/pages/Home"; // Importação da nova Home
 import CalendarioPage from "@/pages/Calendario";
 import HistoricoPage from "@/pages/Historico";
 import TrocasPage from "@/pages/Trocas";
@@ -11,6 +12,7 @@ import PerfilPage from "@/pages/Perfil";
 import DocumentosPage from "@/pages/Documentos";
 import DocumentosAtestadosPage from "@/pages/DocumentosAtestados";
 
+import AdminHome from "@/pages/admin/HomeAdmin"; // Importação da nova Admin Home
 import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminCalendario from "@/pages/admin/Calendario";
 import AdminSolicitacoes from "@/pages/admin/Solicitacoes";
@@ -38,7 +40,7 @@ function ProtectedRoute({ children, adminOnly = false }: { children: React.React
 
   if (adminOnly && role !== "admin") {
     console.warn("[App] Acesso negado: Usuário não é administrador. Role atual:", role);
-    return <Navigate to="/calendario" replace />;
+    return <Navigate to="/home" replace />; // Redireciona para a home do colaborador se não for admin
   }
 
   return <AppShell>{children}</AppShell>;
@@ -51,6 +53,8 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/setup-admin" element={<SetupAdminPage />} />
 
+      {/* Rotas do Colaborador */}
+      <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
       <Route path="/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
       <Route path="/historico" element={<ProtectedRoute><HistoricoPage /></ProtectedRoute>} />
       <Route path="/trocas" element={<ProtectedRoute><TrocasPage /></ProtectedRoute>} />
@@ -59,7 +63,9 @@ export default function App() {
       <Route path="/documentos/ponto" element={<ProtectedRoute><DocumentosPage /></ProtectedRoute>} />
       <Route path="/documentos/atestados" element={<ProtectedRoute><DocumentosAtestadosPage /></ProtectedRoute>} />
 
+      {/* Rotas do Admin */}
       <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
+      <Route path="/admin/home" element={<ProtectedRoute adminOnly><AdminHome /></ProtectedRoute>} />
       <Route path="/admin/calendario" element={<ProtectedRoute adminOnly><AdminCalendario /></ProtectedRoute>} />
       <Route path="/admin/solicitacoes" element={<ProtectedRoute adminOnly><AdminSolicitacoes /></ProtectedRoute>} />
       <Route path="/admin/aprovacoes" element={<ProtectedRoute adminOnly><AdminAprovacoes /></ProtectedRoute>} />

@@ -19,7 +19,13 @@ export default function LoginPage() {
   // If the user is already authenticated, send them to the main app
   useEffect(() => {
     if (session) {
-      navigate("/calendario", { replace: true });
+      // Redireciona para a home correta se já estiver logado
+      const role = localStorage.getItem('user_role');
+      if (role === 'admin') {
+        navigate("/admin/home", { replace: true });
+      } else {
+        navigate("/home", { replace: true });
+      }
     }
   }, [session, navigate]);
 
@@ -57,10 +63,16 @@ export default function LoginPage() {
         }
         
         const role = rolesData?.role;
+        
+        // Armazena o role para uso no useEffect (redirecionamento de sessão existente)
+        if (role) {
+            localStorage.setItem('user_role', role);
+        }
+
         if (role === "admin") {
-          navigate("/admin/calendario", { replace: true });
+          navigate("/admin/home", { replace: true });
         } else {
-          navigate("/calendario", { replace: true });
+          navigate("/home", { replace: true });
         }
       } else {
         toast.error("Resposta inválida do servidor");

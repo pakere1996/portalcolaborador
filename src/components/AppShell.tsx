@@ -74,6 +74,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isAdmin = role === "admin";
   const folgaNav = isAdmin ? adminFolgaNav : employeeFolgaNav;
   const docsNav = isAdmin ? adminDocsNav : employeeDocsNav;
+  
+  // A home agora é a rota principal
+  const homePath = isAdmin ? "/admin/home" : "/home";
+
   const isFolgaActive = path.startsWith("/calendario") ||
     path.startsWith("/trocas") ||
     path.startsWith("/historico") ||
@@ -111,6 +115,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-180px)]">
+          {/* Link para a Home/Dashboard principal */}
+          <Link
+            to={homePath}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors mb-2",
+              path === homePath
+                ? "bg-red-600 text-white font-bold hover:bg-red-700"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent",
+            )}
+          >
+            <Shield className="size-4" />
+            <span>{isAdmin ? "Dashboard Principal" : "Home"}</span>
+          </Link>
+
+          {/* Link para Cadastro/Gestão de Equipe */}
           <Link
             to={cadastroPath}
             className={cn(
