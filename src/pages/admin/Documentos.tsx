@@ -22,7 +22,7 @@ import { DocumentPage, DocumentType, processPdf, saveDocument } from "@/lib/docu
 import { toast } from "sonner";
 import { Unidade, Profile } from "@/integrations/supabase/types";
 import { Loader2, FileText, UserPlus, Link, XCircle, CheckCircle, AlertTriangle, Building2 } from "lucide-react";
-import DocumentPreview from "@/components/DocumentPreview";
+import { DocumentPreview } from "@/components/DocumentPreview";
 import ColaboradorFormDialog from "@/components/ColaboradorFormDialog";
 import { maskCNPJ } from "@/lib/utils";
 
@@ -67,7 +67,7 @@ function AdminDocumentosPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [showColaboradorForm, setShowColaboradorForm] = useState(false);
   const [selectedProfileForManualLink, setSelectedProfileForManualLink] = useState<Profile | null>(null);
-  const [isUnitLocked, setIsUnitLocked] = useState(false); // State to lock the unit selection
+  const [isUnitLocked, setIsUnitLocked] = useState(false);
 
   const { data: unidades, isLoading: isLoadingUnidades } = useQuery({
     queryKey: ["unidades"],
@@ -99,7 +99,6 @@ function AdminDocumentosPage() {
       toast.success(`PDF processado. ${pages.length} páginas encontradas.`);
       console.log("[DEBUG] Raw Processed Pages:", pages);
       
-      // Check if the first page had an extracted unit and lock the selection
       const firstPage = pages[0];
       if (firstPage?.extractedData.extracted_unidade_id) {
         setSelectedUnidadeId(firstPage.extractedData.extracted_unidade_id);
@@ -122,7 +121,7 @@ function AdminDocumentosPage() {
       setFile(e.target.files[0]);
       setProcessedPages([]);
       setCurrentPageIndex(0);
-      setIsUnitLocked(false); // Reset lock when new file is selected
+      setIsUnitLocked(false);
     }
   };
 
@@ -139,12 +138,10 @@ function AdminDocumentosPage() {
 
     setIsSaving(true);
     try {
-      // NOTE: storagePath is currently a placeholder in saveDocument
       const storagePath = `documents/${currentDocumentPage.extractedData.unidade_id}/${documentType}/${profileId}/${file.name}_page_${currentDocumentPage.pageIndex}`;
       
       await saveDocument(currentDocumentPage, file, profileId, storagePath);
       
-      // Mark page as processed (linked)
       setProcessedPages(prev => 
         prev.map((page, index) => 
           index === currentPageIndex ? { ...page, matchStatus: "matched" } : page
@@ -166,7 +163,6 @@ function AdminDocumentosPage() {
   const handleIgnorePage = () => {
     if (!currentDocumentPage) return;
     
-    // Mark page as ignored
     setProcessedPages(prev => 
       prev.map((page, index) => 
         index === currentPageIndex ? { ...page, matchStatus: "unmatched" } : page
@@ -195,8 +191,6 @@ function AdminDocumentosPage() {
   const handleColaboradorFormClose = (success: boolean) => {
     setShowColaboradorForm(false);
     if (success) {
-      // If a new collaborator was created, we should re-run the matching logic for the current page
-      // For simplicity, we just invalidate profiles and move to the next page, assuming the admin will re-process if needed.
       queryClient.invalidateQueries({ queryKey: ["profiles"] });
       setCurrentPageIndex(prev => prev + 1);
     }
@@ -273,7 +267,6 @@ function AdminDocumentosPage() {
               <p><strong>Matrícula:</strong> {extractedData.matricula || "N/A"}</p>
               <p><strong>Mês/Ano:</strong> {extractedData.mes}/{extractedData.ano || "N/A"}</p>
               
-              {/* Display Extracted Unit Info */}
               <div className="pt-2 border-t mt-2">
                 <p className="font-semibold flex items-center gap-1">
                   <Building2 className="size-4" /> Unidade (Extraída)
@@ -337,7 +330,6 @@ function AdminDocumentosPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {/* Manual Link */}
                 <Select
                   onValueChange={(profileId) => {
                     const profile = profiles?.find(p => p.id === profileId) || null;
@@ -367,7 +359,6 @@ function AdminDocumentosPage() {
                   </Button>
                 )}
 
-                {/* Create New Colaborador */}
                 <Button 
                   onClick={handleCreateNewColaborador} 
                   variant="outline" 
@@ -377,7 +368,6 @@ function AdminDocumentosPage() {
                   Cadastrar Novo Colaborador
                 </Button>
 
-                {/* Ignore */}
                 <Button 
                   onClick={handleIgnorePage} 
                   variant="secondary" 
@@ -389,7 +379,6 @@ function AdminDocumentosPage() {
             </Card>
           )}
           
-          {/* Action for Duplicates */}
           {isDuplicate && (
             <Button 
               onClick={handleIgnorePage} 
@@ -435,7 +424,6 @@ function AdminDocumentosPage() {
               </SelectContent>
             </Select>
             
-            {/* Unit Selection with Lock/Correction Logic */}
             <div className="flex gap-2">
               <Select
                 onValueChange={setSelectedUnidadeId}
@@ -495,24 +483,21 @@ function AdminDocumentosPage() {
         </Card>
       )}
 
-      {/* Dialog for creating new collaborator */}
       {showColaboradorForm && (
         <ColaboradorFormDialog
           open={showColaboradorForm}
           onOpenChange={(open) => {
             if (!open) handleColaboradorFormClose(false);
           }}
-          // Pass extracted data to pre-fill the form if possible
           profile={{
-            id: "", // Placeholder
+            id: "",
             nome: currentDocumentPage?.extractedData.nome || "",
             cpf: currentDocumentPage?.extractedData.cpf || "",
-            cargo: "", // Unknown
+            cargo: "",
             matricula: currentDocumentPage?.extractedData.matricula || "",
             ativo: true,
             aprovacao_status: "aprovado",
-            unidade_id: currentDocumentPage?.extractedData.unidade_id || selectedUnidadeId, // Use the determined unit ID
-            // ... other fields
+            unidade_id: currentDocumentPage?.extractedData.unidade_id || selectedUnidadeId,
           } as Profile}
         />
       )}
