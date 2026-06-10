@@ -1,230 +1,76 @@
 import { supabase } from "@/integrations/supabase/client";
-import { Profile, SuggestedProfile, Documento, Unidade } from "@/integrations/supabase/types";
 import { PDFDocument } from "pdf-lib";
 import { toast } from "sonner";
-import { getMonth, getYear } from "date-fns";
-import { cleanCNPJ } from "@/lib/utils"; // Import cleanCNPJ
-
-// --- Types ---
-
-export type DocumentType = "folha_ponto" | "contracheque" | "atestado" | "disciplinar";
-
-export interface ExtractedData {
-  nome: string;
-  cpf: string;
-  matricula?: string;
-  mes?: number;
-  ano?: number;
-  unidade_id: string;
-  extracted_unidade_id?: string; // New field for unit ID extracted from PDF
-}
-
-export interface DocumentPage {
-  pageIndex: number;
-  text: string;
-  extractedData: ExtractedData;
-  suggestedProfile: SuggestedProfile | null;
-  matchStatus: "matched" | "unmatched" | "duplicate";
-  documentType: DocumentType;
-}
-
-// --- Utility Functions ---
-
-const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
-  folha_ponto: "Folha de Ponto",
-  contracheque: "Contracheque",
-  atestado: "Atestado Médico",
-  disciplinar: "Documento Disciplinar",
-};
-
-export function getDocumentTypeLabel(type: DocumentType): string {
-  return DOCUMENT_TYPE_LABELS[type] || type;
-}
-
-// --- CNPJ Extraction Logic ---
+import { ExtractedData, DocumentPage, DocumentType } from "./types";
+import { cleanCNPJ, maskCNPJ } from "./utils";
 
 /**
- * Extracts CNPJs from the PDF text.
- * @param text The full text content of the PDF page.
- * @returns An array of cleaned CNPJ strings.
+ * Extracts all CNPJ patterns from the given text.
+ * Returns an array of cleaned 14‑digit CNPJ strings.
  */
 function extractCNPJs(text: string): string[] {
-  // Regex to find CNPJ patterns (XX.XXX.XXX/XXXX-XX or 14 digits)
   const cnpjRegex = /(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})|(\d{14})/g;
   const matches = text.match(cnpjRegex) || [];
-  
-  // Clean and return unique CNPJs
-  const cleanedCNPJs = matches.map(cleanCNPJ).filter(cnpj => cnpj.length === 14);
-  return Array.from(new Set(cleanedCNPJs));
+  return matches.map(cleanCNPJ).filter(cnpj => cnpj.length === 14);
 }
 
 /**
- * Finds the unit ID based on CNPJ extracted from the text.
- * @param text The full text content of the PDF page.
- * @param allUnidades List of all active units.
- * @returns The matching Unidade ID or null.
+ * Finds the unit ID that matches a given CNPJ.
+ * If multiple units share the same CNPJ, the first match is returned.
  */
-function findUnitByCNPJ(text: string, allUnidades: Unidade[]): string | null {
-  const extractedCNPJs = extractCNPJs(text);
-  
-  for (const extractedCnpj of extractedCNPJs) {
-    const matchingUnit = allUnidades.find(unit => 
-      unit.cnpj && cleanCNPJ(unit.cnpj) === extractedCnpj
-    );
-    
-    if (matchingUnit) {
-      console.log(`[DEBUG] CNPJ Match found for unit ID: ${matchingUnit.id}`);
-      return matchingUnit.id;
-    }
-  }
-  
-  return null;
+function findUnitByCNPJ(cnpj: string, unidades: any[]): string | null {
+  const cleaned = cleanCNPJ(cnpj);
+  const match = unidades.find(u => u.cnpj && cleanCNPJ(u.cnpj) === cleaned);
+  return match ? match.id : null;
 }
-
-// --- Date Extraction Logic ---
 
 /**
  * Extracts month and year from the PDF text based on document type.
- * @param text The full text content of the PDF page.
- * @param type The type of document (folha_ponto or contracheque).
- * @returns { mes: number, ano: number } or null if not found.
+ * Returns { mes: number, ano: number } or null if not found.
  */
 function extractMonthAndYear(text: string, type: DocumentType): { mes: number; ano: number } | null {
   const currentYear = new Date().getFullYear();
 
   if (type === "folha_ponto") {
-    // Pattern: 'Período de referência: de DD/MM/AAAA à DD/MM/AAAA'
     const match = text.match(/Período de referência:\s*de\s*(\d{2})\/(\d{2})\/(\d{4})/i);
     if (match) {
-      const day = parseInt(match[1], 10);
       const month = parseInt(match[2], 10);
       const year = parseInt(match[3], 10);
-      
-      // Use the month and year from the start date
       if (month >= 1 && month <= 12 && year > 2000) {
-        console.log(`[DEBUG] Folha Ponto Date Match: ${day}/${month}/${year}`);
         return { mes: month, ano: year };
       }
     }
   } else if (type === "contracheque") {
-    // Pattern: Month name followed by year (e.g., Fevereiro de 2026)
     const monthNames = [
       "janeiro", "fevereiro", "março", "abril", "maio", "junho",
       "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"
     ];
-    
-    // Regex to find month name followed by 'de' and a 4-digit year
-    const monthYearRegex = new RegExp(`(${monthNames.join('|')})\\s+de\\s+(\\d{4})`, 'i');
+    const monthYearRegex = new RegExp(`(${monthNames.join('|')})\\s+de\\s+(\\d{4})`, "i");
     const match = text.toLowerCase().match(monthYearRegex);
-
     if (match) {
-      const monthName = match[1];
+      const monthIndex = monthNames.indexOf(match[1].toLowerCase());
       const year = parseInt(match[2], 10);
-      const mes = monthNames.indexOf(monthName) + 1;
-
-      if (mes > 0 && year > 2000) {
-        console.log(`[DEBUG] Contracheque Date Match: ${monthName} (${mes}) of ${year}`);
-        return { mes, ano: year };
+      if (monthIndex > 0 && year > 2000) {
+        return { mes: monthIndex + 1, ano: year };
       }
     }
   }
 
-  // Fallback: If no specific pattern is found, try to find a generic MM/YYYY or YYYY pattern
-  const genericMatch = text.match(/(\d{2})\/(\d{4})/);
-  if (genericMatch) {
-    const month = parseInt(genericMatch[1], 10);
-    const year = parseInt(genericMatch[2], 10);
+  // Fallback: try generic MM/YYYY pattern
+  const generic = text.match(/(\d{2})\/(\d{4})/);
+  if (generic) {
+    const month = parseInt(generic[1], 10);
+    const year = parseInt(generic[2], 10);
     if (month >= 1 && month <= 12 && year > 2000) {
-      console.log(`[DEBUG] Generic Date Match: ${month}/${year}`);
       return { mes: month, ano: year };
     }
   }
-
-  // If all else fails, use current month/year as a last resort (or null)
   return null;
 }
 
-// --- Profile Matching Logic ---
-
 /**
- * Finds the best matching profile for the extracted data, strictly filtering by unit.
- * @param extractedData Data extracted from the PDF page.
- * @param allProfiles All active profiles available for matching.
- * @returns The best matching profile or null.
- */
-export function findBestProfileMatch(
-  extractedData: ExtractedData,
-  allProfiles: Profile[]
-): Profile | null {
-  console.log("[Match Diagnostic] Starting profile match.");
-  console.log("[Match Diagnostic] Extracted Data:", extractedData);
-
-  const targetUnitId = extractedData.unidade_id;
-
-  // 1. Filter profiles strictly by the selected unit and ensure they have a unit_id
-  const unitFilteredProfiles = allProfiles.filter(p => 
-    p.ativo === true && 
-    p.unidade_id === targetUnitId
-  );
-
-  console.log(`[Match Diagnostic] Profiles filtered by Unit ID (${targetUnitId}): ${unitFilteredProfiles.length} profiles remaining.`);
-
-  if (unitFilteredProfiles.length === 0) {
-    console.log("[Match Diagnostic] No active profiles found for the selected unit.");
-    return null;
-  }
-
-  // 2. Try matching by CPF (highest priority)
-  if (extractedData.cpf) {
-    const cpfMatch = unitFilteredProfiles.find(
-      (p) => p.cpf === extractedData.cpf
-    );
-    if (cpfMatch) {
-      console.log("[Match Diagnostic] Match found by CPF.");
-      return cpfMatch;
-    }
-  }
-
-  // 3. Try matching by Matricula
-  if (extractedData.matricula) {
-    const matriculaMatch = unitFilteredProfiles.find(
-      (p) => p.matricula === extractedData.matricula
-    );
-    if (matriculaMatch) {
-      console.log("[Match Diagnostic] Match found by Matricula.");
-      return matriculaMatch;
-    }
-  }
-
-  // 4. Try matching by Name (fuzzy match, lower priority)
-  if (extractedData.nome) {
-    const normalizedExtractedName = extractedData.nome.toLowerCase().trim();
-    const nameMatch = unitFilteredProfiles.find((p) => {
-      const normalizedProfileName = p.nome.toLowerCase().trim();
-      // Simple check: profile name must be contained in the extracted name, or vice versa
-      return (
-        normalizedExtractedName.includes(normalizedProfileName) ||
-        normalizedProfileName.includes(normalizedExtractedName)
-      );
-    });
-    if (nameMatch) {
-      console.log("[Match Diagnostic] Match found by Name (fuzzy).");
-      return nameMatch;
-    }
-  }
-
-  console.log("[Match Diagnostic] No match found for extracted data.");
-  return null;
-}
-
-// --- Core Processing Function ---
-
-/**
- * Processes a PDF file, extracts data page by page, and attempts to match profiles.
- * @param file The PDF file blob.
- * @param documentType The type of document being processed.
- * @param adminSelectedUnidadeId The ID of the unit selected by the admin in the UI.
- * @returns A promise resolving to an array of DocumentPage objects.
+ * Main processor: given a PDF file, its document type, and the admin‑selected unit,
+ * returns an array of DocumentPage objects containing extracted data and the matched unidade_id.
  */
 export async function processPdf(
   file: File,
@@ -234,241 +80,85 @@ export async function processPdf(
   const arrayBuffer = await file.arrayBuffer();
   const pdfDoc = await PDFDocument.load(arrayBuffer);
   const numPages = pdfDoc.getPageCount();
-  const pages: DocumentPage[] = [];
+  const extractedPages: DocumentPage[] = [];
 
-  // Fetch all active profiles once
-  const { data: allProfiles, error: profileError } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("ativo", true);
-
-  if (profileError) {
-    console.error("Error fetching profiles:", profileError);
-    throw new Error("Failed to fetch collaborator profiles.");
-  }
-  
-  // Fetch all units once (needed for CNPJ matching)
-  const { data: allUnidades, error: unidadeError } = await supabase
+  // Fetch all units once (used for CNPJ → unidade mapping)
+  const { data: unidades, error: unidadeError } = await supabase
     .from("unidades")
     .select("*")
     .eq("ativo", true);
+  if (unidadeError) throw new Error(`Failed to load unidades: ${unidadeError.message}`);
 
-  if (unidadeError) {
-    console.error("Error fetching units:", unidadeError);
-    throw new Error("Failed to fetch units.");
-  }
-
-  // Fetch all suggested profiles (pending)
-  const { data: suggestedProfiles, error: suggestedError } = await supabase
-    .from("suggested_profiles")
+  // Fetch all profiles for later matching
+  const { data: profiles, error: profileError } = await supabase
+    .from("profiles")
     .select("*")
-    .eq("status", "pending");
-
-  if (suggestedError) {
-    console.error("Error fetching suggested profiles:", suggestedError);
-    throw new Error("Failed to fetch suggested profiles.");
-  }
-
-  const suggestedMap = new Map<string, SuggestedProfile>();
-  suggestedProfiles.forEach(sp => {
-    // Key by a combination of extracted data fields for quick lookup
-    const key = `${sp.extracted_data.cpf || ''}-${sp.extracted_data.nome || ''}`;
-    suggestedMap.set(key, sp);
-  });
-
+    .eq("ativo", true);
+  if (profileError) throw new Error(`Failed to load profiles: ${profileError.message}`);
 
   for (let i = 0; i < numPages; i++) {
-    // NOTE: PDF text extraction is complex and usually requires a dedicated library
-    // Since we don't have a full PDF parser here, we rely on the mock/placeholder
-    // text extraction provided by the environment or a simplified approach.
-    // For this implementation, we assume 'pdf-lib' or similar provides basic text.
-    // In a real TanStack Start app, this might be handled by a Server Function
-    // using a Deno-compatible PDF parser.
+    const page = pdfDoc.getPage(i);
+    const text = await page.getTextContent({ onlyText: true });
+    const pageText = text.items.map(item => item.str).join(" ");
 
-    // Placeholder for text extraction (assuming we get text somehow)
-    const pageText = `
-      Página ${i + 1} de ${numPages}.
-      Nome: João da Silva
-      CPF: 123.456.789-00
-      Matrícula: 98765
-      CNPJ: 06.002.178/0001-58
-      Período de referência: de 01/05/2024 à 31/05/2024 (Folha Ponto)
-      Fevereiro de 2026 (Contracheque)
-    `;
-
-    // Mock Extracted Data (Replace with actual extraction logic)
-    const extractedData: ExtractedData = {
-      nome: "João da Silva",
-      cpf: "123.456.789-00",
-      matricula: "98765",
-      unidade_id: adminSelectedUnidadeId, // Default to admin selected unit ID
-    };
-
-    // 1. Extract Unit ID via CNPJ
-    const extractedUnidadeId = findUnitByCNPJ(pageText, allUnidades || []);
-    
-    if (extractedUnidadeId) {
-      extractedData.unidade_id = extractedUnidadeId;
-      extractedData.extracted_unidade_id = extractedUnidadeId; // Store the extracted ID separately
-    }
-
-    // 2. Extract Month and Year
-    const dateInfo = extractMonthAndYear(pageText, documentType);
-    if (dateInfo) {
-      extractedData.mes = dateInfo.mes;
-      extractedData.ano = dateInfo.ano;
-    } else {
-      // If date cannot be extracted, we cannot proceed with matching/saving
-      console.warn(`[DEBUG] Could not extract date for page ${i + 1}.`);
-    }
-
-    // 3. Find Best Profile Match
-    let matchedProfile = findBestProfileMatch(extractedData, allProfiles);
-    let matchStatus: DocumentPage['matchStatus'] = matchedProfile ? "matched" : "unmatched";
-
-    // 4. Check for Duplicates if a match was found and date info exists
-    if (matchedProfile && extractedData.mes && extractedData.ano) {
-      const isDuplicate = await checkDuplicateDocument(
-        matchedProfile.id,
-        documentType,
-        extractedData.mes,
-        extractedData.ano,
-        extractedData.unidade_id // Use the determined unit ID
-      );
-      if (isDuplicate) {
-        matchStatus = "duplicate";
-        matchedProfile = null; // Treat as unmatched for processing flow
+    // 1️⃣ Extract CNPJ(s) and pick the first that maps to a unit    const extractedCNPJs = extractCNPJs(pageText);
+    let matchedUnidadeId: string | null = null;
+    if (pageText.includes("CNPJ") || pageText.includes("cnpj")) {
+      for (const cnpj of extractedCNPJs) {
+        const unitId = findUnitByCNPJ(cnpj, unidades);
+        if (unitId) {
+          matchedUnidadeId = unitId;
+          break;
+        }
       }
     }
 
-    // 5. Check for existing suggested profile if unmatched
-    let suggestedProfile: SuggestedProfile | null = null;
-    if (matchStatus === "unmatched") {
-      const key = `${extractedData.cpf || ''}-${extractedData.nome || ''}`;
-      suggestedProfile = suggestedMap.get(key) || null;
+    // 2️⃣ If no unit found via CNPJ, fall back to the admin‑selected unit
+    if (!matchedUnidadeId) {
+      matchedUnidadeId = adminSelectedUnidadeId;
     }
 
+    // 3️⃣ Extract month/year based on document type
+    const dateInfo = extractMonthAndYear(pageText, documentType);
+    const mes = dateInfo?.mes ?? null;
+    const ano = dateInfo?.ano ?? null;
 
-    pages.push({
+    // 4️⃣ Build the extracted data object
+    const extractedData: ExtractedData = {
+      nome: pageText.match(/Nome:\s*([^\n]+)/)?.[1]?.trim() ?? "",
+      cpf: pageText.match(/CPF:\s*([^\n]+)/)?.[1]?.trim() ?? "",
+      matricula: pageText.match(/Matrícula:\s*([^\n]+)/)?.[1]?.trim() ?? "",
+      unidade_id: matchedUnidadeId,
+      extracted_unidade_id: matchedUnidadeId, // expose for UI reference
+      mes,
+      ano,
+    };
+
+    // 5️⃣ Determine match status (matched / unmatched / duplicate)
+    let matchStatus: DocumentPage["matchStatus"] = "unmatched";
+    if (mes && ano && extractedData.cpf) {
+      // Check for existing document with same colaborador, type, month, year, unidade
+      const { count, error: duplicateError } = await supabase
+        .from("documentos")
+        .select("id", { count: "exact", head: true })
+        .eq("colaborador_id", extractedData.cpf ?? "")
+        .eq("tipo", documentType)
+        .eq("mes", mes)
+        .eq("ano", ano)
+        .eq("unidade_id", matchedUnidadeId);
+      if (duplicateError) throw new Error(`Duplicate check failed: ${duplicateError.message}`);
+      matchStatus = count > 0 ? "duplicate" : "matched";
+    }
+
+    // 6️⃣ Assemble the DocumentPage object
+    extractedPages.push({
       pageIndex: i,
       text: pageText,
       extractedData,
-      suggestedProfile,
       matchStatus,
       documentType,
     });
   }
 
-  return pages;
-}
-
-/**
- * Checks if a document with the same collaborator, type, month, year, and unit already exists.
- */
-async function checkDuplicateDocument(
-  colaboradorId: string,
-  tipo: DocumentType,
-  mes: number,
-  ano: number,
-  unidadeId: string
-): Promise<boolean> {
-  const { count, error } = await supabase
-    .from("documentos")
-    .select("id", { count: "exact", head: true })
-    .eq("colaborador_id", colaboradorId)
-    .eq("tipo", tipo)
-    .eq("mes", mes)
-    .eq("ano", ano)
-    .eq("unidade_id", unidadeId);
-
-  if (error) {
-    console.error("Error checking for duplicates:", error);
-    // If there's an error, assume no duplicate to allow processing, but log the error
-    return false;
-  }
-
-  return count > 0;
-}
-
-/**
- * Saves the processed document to the database and storage.
- * @param page The processed document page data.
- * @param file The original PDF file.
- * @param profileId The ID of the collaborator to link the document to.
- * @param storagePath The path where the PDF page slice will be stored.
- */
-export async function saveDocument(
-  page: DocumentPage,
-  file: File,
-  profileId: string,
-  storagePath: string
-): Promise<Documento> {
-  const { extractedData, documentType } = page;
-
-  if (!extractedData.mes || !extractedData.ano) {
-    throw new Error("Mês e ano são obrigatórios para salvar o documento.");
-  }
-
-  // 1. Save the document metadata to the database
-  const { data: documentData, error: dbError } = await supabase
-    .from("documentos")
-    .insert({
-      colaborador_id: profileId,
-      tipo: documentType,
-      mes: extractedData.mes,
-      ano: extractedData.ano,
-      unidade_id: extractedData.unidade_id,
-      storage_path: storagePath,
-      nome_pdf: file.name,
-      status: "vinculado",
-    })
-    .select()
-    .single();
-
-  if (dbError) {
-    console.error("Error saving document metadata:", dbError);
-    throw new Error(`Falha ao salvar metadados do documento: ${dbError.message}`);
-  }
-
-  // 2. Upload the file slice to storage (Placeholder: we assume the full file is uploaded elsewhere)
-  // In a real scenario, we would slice the PDF page and upload it.
-  // For now, we just confirm the path.
-
-  toast.success(`Documento de ${documentType} salvo para ${profileId}.`);
-  return documentData;
-}
-
-/**
- * Creates a suggested profile entry for an unmatched document.
- */
-export async function createSuggestedProfile(
-  page: DocumentPage,
-  documentId: string
-): Promise<SuggestedProfile> {
-  const { extractedData } = page;
-
-  const { data, error } = await supabase
-    .from("suggested_profiles")
-    .insert({
-      document_id: documentId,
-      extracted_data: extractedData,
-      status: "pending",
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error("Error creating suggested profile:", error);
-    throw new Error("Falha ao criar sugestão de perfil.");
-  }
-
-  return data;
-}
-
-/**
- * Placeholder function to resolve import error.
- */
-export async function syncAdminMonthlyDocumentReminder() {
-  console.log("Placeholder: syncAdminMonthlyDocumentReminder called.");
-  // Implementation for sending monthly document reminders to admins would go here.
+  return extractedPages;
 }

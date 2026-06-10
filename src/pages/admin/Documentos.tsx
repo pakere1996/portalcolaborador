@@ -1,99 +1,58 @@
 import { useState, useMemo, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Profile, Unidade } from "@/integrations/supabase/types";
-import { toast } from "sonner";
-import { Loader2, FileText, CheckCircle, XCircle, Link, UserPlus, Building2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DocumentPreview } from "@/components/DocumentPreview";
-import { ColaboradorFormDialog } from "@/components/ColaboradorFormDialog";
-import { processPdf, saveDocument, DocumentPage, DocumentType } from "@/lib/documentos";
+import { FileText, Download, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Tables } from "@/integrations/supabase/types";
+import { processPdf, DocumentPage, DocumentType } from "@/lib/documentos";
 import { maskCNPJ } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
+import { useQuery, useMutation } from "@tanstack/react-query";
 
 const documentTypes: { value: DocumentType; label: string }[] = [
   { value: "contracheque", label: "Contracheque" },
   { value: "folha_ponto", label: "Folha de Ponto" },
 ];
 
-const fetchUnidades = async (): Promise<Unidade[]> => {
-  const { data, error } = await supabase
-    .from("unidades")
-    .select("*")
-    .eq("ativo", true)
-    .order("nome");
-  if (error) throw error;
-  return data;
-};
-
-const fetchProfiles = async (): Promise<Profile[]> => {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("ativo", true)
-    .order("nome");
+const fetchUnidades = async (): Promise<any[]> => {
+  const { data, error } = await supabase.from("unidades").select("*").eq("ativo", true);
   if (error) throw error;
   return data;
 };
 
 export default function AdminDocumentosPage() {
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
   const [documentType, setDocumentType] = useState<DocumentType | "">("");
   const [selectedUnidadeId, setSelectedUnidadeId] = useState<string>("");
+  const [unidades] = useQuery(["unidades"], fetchUnidades);
   const [processedPages, setProcessedPages] = useState<DocumentPage[]>([]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showColaboradorForm, setShowColaboradorForm] = useState(false);
-  const [selectedProfileForManualLink, setSelectedProfileForManualLink] = useState<Profile | null>(null);
+  const [selectedProfileForManualLink, setSelectedProfileForManualLink] = useState<any>(null);
   const [isUnitLocked, setIsUnitLocked] = useState(false);
 
-  const { data: unidades, isLoading: isLoadingUnidades } = useQuery({
-    queryKey: ["unidades"],
-    queryFn: fetchUnidades,
-  });
-
-  const { data: profiles, isLoading: isLoadingProfiles } = useQuery({
-    queryKey: ["profiles"],
-    queryFn: fetchProfiles,
-  });
-
-  const currentDocumentPage = useMemo(() => {
-    if (processedPages.length === 0) return null;
-    return processedPages[currentPageIndex];
-  }, [processedPages, currentPageIndex]);
-
-  const isReadyToProcess = file && documentType && selectedUnidadeId;
-  const isProcessingComplete = currentPageIndex >= processedPages.length && processedPages.length > 0;
-
+  // Mutation that runs processPdf and stores the result
   const processPdfMutation = useMutation({
-    mutationFn: async ({ file, documentType, unidadeId }: { file: File, documentType: DocumentType, unidadeId: string }) => {
+    mutationFn: async ({ file, documentType, unidadeId }: { file: File; documentType: DocumentType; unidadeId: string }) => {
       setIsProcessing(true);
-      return processPdf(file, documentType, unidadeId);
-    },
-    onSuccess: (pages) => {
+      const pages = await processPdf(file, documentType, unidadeId);
       setProcessedPages(pages);
       setCurrentPageIndex(0);
       setIsProcessing(false);
-      toast.success(`PDF processado. ${pages.length} páginas encontradas.`);
-      console.log("[DEBUG] Raw Processed Pages:", pages);
-      const firstPage = pages[0];
-      if (firstPage?.extractedData.extracted_unidade_id) {
-        setSelectedUnidadeId(firstPage.extractedData.extracted_unidade_id);
+      // Auto‑lock the unidade field after first successful processing
+      if (pages.length > 0) {
+        setSelectedUnidadeId(pages[0].extractedData.extracted_unidade_id);
         setIsUnitLocked(true);
-      } else {
-        setIsUnitLocked(false);
       }
+      return pages;
     },
     onError: (error) => {
       setIsProcessing(false);
-      console.error("Erro ao processar PDF:", error);
-      toast.error("Erro ao processar PDF.", {
-        description: error.message,
-      });
+      toast.error("Erro ao processar PDF.", { description: error.message });
     },
   });
 
@@ -115,13 +74,15 @@ export default function AdminDocumentosPage() {
   };
 
   const handleSavePage = useCallback(async (profileId: string) => {
-    if (!file || !currentDocumentPage) return;
-
+    if (!file || !currentPageIndex) return;
     setIsSaving(true);
     try {
-      const storagePath = `documents/${currentDocumentPage.extractedData.unidade_id}/${documentType}/${profileId}/${file.name}_page_${currentPageIndex}`;
-      await saveDocument(currentDocumentPage, file, profileId, storagePath);
-      
+      const storagePath = `documentos/${selectedUnidadeId}/${documentType}/${profileId}/${file.name}_page_${currentPageIndex}`;
+      await supabase.storage.from("documentos").upload(storagePath, file, {
+        contentType: file.type,
+        upsert: true,
+      });
+      toast.success(`Página ${currentPageIndex + 1} vinculada com sucesso.`);
       setProcessedPages(prev => {
         const newPages = [...prev];
         if (newPages[currentPageIndex]) {
@@ -129,22 +90,17 @@ export default function AdminDocumentosPage() {
         }
         return newPages;
       });
-      
-      toast.success(`Página ${currentPageIndex + 1} vinculada com sucesso.`);
       setCurrentPageIndex(prev => prev + 1);
     } catch (error) {
       console.error("Erro ao salvar documento:", error);
-      toast.error("Falha ao salvar documento.", {
-        description: error instanceof Error ? error.message : "Erro desconhecido.",
-      });
+      toast.error("Falha ao salvar documento.", { description: error instanceof Error ? error.message : "Erro desconhecido." });
     } finally {
       setIsSaving(false);
     }
-  }, [file, currentDocumentPage, currentPageIndex, documentType]);
+  }, [file, currentPageIndex, selectedUnidadeId, documentType]);
 
   const handleIgnorePage = () => {
-    if (!currentDocumentPage) return;
-    
+    if (!currentPageIndex) return;
     setProcessedPages(prev => {
       const newPages = [...prev];
       if (newPages[currentPageIndex]) {
@@ -152,12 +108,11 @@ export default function AdminDocumentosPage() {
       }
       return newPages;
     });
-    
     toast.info(`Página ${currentPageIndex + 1} ignorada.`);
     setCurrentPageIndex(prev => prev + 1);
   };
 
-  const handleManualLink = (profile: Profile) => {
+  const handleManualLink = (profile: any) => {
     setSelectedProfileForManualLink(profile);
   };
 
@@ -172,16 +127,10 @@ export default function AdminDocumentosPage() {
     setShowColaboradorForm(true);
   };
 
-  const handleColaboradorFormClose = (success: boolean) => {
-    setShowColaboradorForm(false);
-    if (success) {
-      queryClient.invalidateQueries({ queryKey: ["profiles"] });
-      setCurrentPageIndex(prev => prev + 1);
-    }
-  };
-
-  const currentUnit = unidades?.find(u => u.id === currentDocumentPage?.extractedData.unidade_id);
-  const extractedUnit = unidades?.find(u => u.id === currentDocumentPage?.extractedData.extracted_unidade_id);
+  const currentUnit = unidades?.find(u => u.id === selectedUnidadeId);
+  const extractedUnit = processedPages?.[currentPageIndex]?.extractedData?.extracted_unidade_id
+    ?.toString()
+    ?.match(/\d+/)?.[0];
 
   const renderProcessingStep = () => {
     if (isProcessing) {
@@ -193,26 +142,26 @@ export default function AdminDocumentosPage() {
       );
     }
 
-    if (isProcessingComplete) {
+    if (currentPageIndex >= processedPages.length && processedPages.length > 0) {
       const linkedCount = processedPages.filter(p => p.matchStatus === "matched").length;
       const duplicateCount = processedPages.filter(p => p.matchStatus === "duplicate").length;
       const unmatchedCount = processedPages.filter(p => p.matchStatus === "unmatched").length;
 
       return (
         <div className="p-6 text-center">
-          <CheckCircle className="h-12 w-12 mx-auto text-green-500 mb-4" />
+          <Loader2 className="h-12 w-12 animate-spin text-green-500 mr-2" />
           <h3 className="text-xl font-semibold">Processamento Concluído!</h3>
           <p className="text-muted-foreground mt-2">
             {linkedCount} documentos vinculados, {duplicateCount} duplicatas detectadas, {unmatchedCount} páginas ignoradas/pendentes.
           </p>
-          <Button onClick={() => { setFile(null); setProcessedPages([]); }} className="mt-6">
+          <Button onClick={() => { setFile(null); setProcessedPages([]); }}>
             Processar Novo Documento
           </Button>
         </div>
       );
     }
 
-    if (!currentDocumentPage) {
+    if (!currentPageIndex) {
       return (
         <div className="p-6 text-center text-muted-foreground">
           {processedPages.length > 0 ? "Clique em 'Processar PDF' para iniciar." : "Aguardando arquivo para processamento."}
@@ -220,9 +169,11 @@ export default function AdminDocumentosPage() {
       );
     }
 
-    const { extractedData, matchStatus } = currentDocumentPage;
-    const matchedProfile = profiles?.find(p => p.cpf === extractedData.cpf || p.matricula === extractedData.matricula);
-    const isMatched = matchStatus === "matched" && matchedProfile;
+    const { extractedData, matchStatus } = processedPages[currentPageIndex];
+    const matchedProfile = processedPages.length > 0 && processedPages[currentPageIndex].extractedData
+      ? processedPages[currentPageIndex].extractedData.nome
+      : "";
+    const isMatched = matchStatus === "matched";
     const isDuplicate = matchStatus === "duplicate";
     const isUnmatched = matchStatus === "unmatched";
 
@@ -232,26 +183,25 @@ export default function AdminDocumentosPage() {
           <h4 className="text-lg font-semibold">
             Página {currentPageIndex + 1} de {processedPages.length}
           </h4>
-          <DocumentPreview pageText={currentDocumentPage.text} />
+          <DocumentPreview pageText={processedPages[currentPageIndex].text} />
         </div>
 
         <div className="lg:col-span-1 space-y-4">
           <Card className="border-pakere-yellow">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" /> Dados Extraídos
+                <FileText className="h-5 w-5" />
+                <CardDescription>
+                  Informações lidas automaticamente do PDF.
+                </CardDescription>
               </CardTitle>
-              <CardDescription>
-                Informações lidas automaticamente do PDF.
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p><strong>Nome:</strong> {extractedData.nome}</p>
               <p><strong>CPF:</strong> {extractedData.cpf}</p>
               <p><strong>Matrícula:</strong> {extractedData.matricula || "N/A"}</p>
               <p><strong>Mês/Ano:</strong> {extractedData.mes}/{extractedData.ano || "N/A"}</p>
-              
-              <div className="pt-2 border-t mt-2">
+                            <div className="pt-2 border-t mt-2">
                 <p className="font-semibold flex items-center gap-1">
                   <Building2 className="size-4" /> Unidade (Extraída)
                 </p>
@@ -279,27 +229,30 @@ export default function AdminDocumentosPage() {
             <Card className="border-green-500">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-green-600">
-                  <CheckCircle className="h-5 w-5" /> Colaborador Encontrado
+                  <CheckCircle className="h-5 w-5" />
+                  <CardDescription>
+                    Colaborador Encontrado
+                  </CardDescription>
                 </CardTitle>
-                <CardDescription>
-                  O sistema encontrou um colaborador correspondente.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p><strong>Nome:</strong> {matchedProfile?.nome}</p>
-                <p><strong>CPF:</strong> {matchedProfile?.cpf}</p>
-                <p><strong>Ação:</strong> Vincular automaticamente.</p>
+                <CardContent className="space-y-2 text-sm">
+                  <p><strong>Nome:</strong> {matchedProfile}</p>
+                  <p><strong>CPF:</strong> {processedPages[currentPageIndex].extractedData.cpf}</p>
+                  <p><strong>Ação:</strong> Vincular automaticamente.</p>
+                </CardContent>
+                <div className="p-4 pt-0">
+                  <Button                    onClick={() => handleSavePage(selectedProfileForManualLink?.id)}
+                    className="w-full bg-green-600 hover:bg-green-700"
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Link className="h-4 w-4 mr-2" />
+                    )}
+                    Confirmar Vínculo
+                  </Button>
+                </div>
               </CardContent>
-              <div className="p-4 pt-0">
-                <Button 
-                  onClick={() => handleSavePage(matchedProfile?.id)} 
-                  className="w-full bg-green-600 hover:bg-green-700"
-                  disabled={isSaving}
-                >
-                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link className="h-4 w-4 mr-2" />}
-                  Confirmar Vínculo
-                </Button>
-              </div>
             </Card>
           )}
 
@@ -307,70 +260,53 @@ export default function AdminDocumentosPage() {
             <Card className="border-pakere-red">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-pakere-red">
-                  <XCircle className="h-5 w-5" /> Colaborador Não Encontrado
+                  <XCircle className="h-5 w-5" />
+                  <CardDescription>
+                    Colaborador Não Encontrado
+                  </CardDescription>
                 </CardTitle>
-                <CardDescription>
-                  Nenhum perfil ativo correspondente foi encontrado na unidade selecionada.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Select
-                  onValueChange={(profileId) => {
-                    const profile = profiles?.find(p => p.id === profileId) || null;
-                    handleManualLink(profile);
-                  }}
-                  value={selectedProfileForManualLink?.id || ""}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Vincular Manualmente a..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {profiles?.filter(p => p.unidade_id === currentDocumentPage.extractedData.unidade_id).map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.nome} ({p.cpf})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedProfileForManualLink && (
-                  <Button 
-                    onClick={handleConfirmManualLink}
-                    className="w-full"
-                    disabled={isSaving}
+                <CardContent className="space-y-3">
+                  <Select
+                    onValueChange={(profileId: string) => {
+                      const profile = processedPages[currentPageIndex].extractedData;
+                      const candidate = unidades.find(u => u.id === profileId);
+                      if (candidate) handleManualLink(candidate);
+                    }}
+                    value={selectedProfileForManualLink?.id || ""}
                   >
-                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link className="h-4 w-4 mr-2" />}
-                    Confirmar Vínculo Manual
+                    <SelectTrigger>
+                      <SelectValue placeholder="Vincular Manualmente a..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {unidades
+                        .filter(u => u.id === extractedData.extracted_unidade_id)
+                        .map(u => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.nome} ({u.cnpj})
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedProfileForManualLink && (
+                    <Button
+                      onClick={handleConfirmManualLink}
+                      className="w-full"
+                      disabled={isSaving}
+                    >
+                      {isSaving ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <Link className="h-4 w-4 mr-2" />
+                      )}
+                      Confirmar Vínculo Manual
+                    </Button>
+                  )}
+                  <Button onClick={handleIgnorePage} variant="secondary" className="w-full">
+                    Ignorar Página
                   </Button>
-                )}
-
-                <Button 
-                  onClick={handleCreateNewColaborador}
-                  variant="outline" 
-                  className="w-full"
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Cadastrar Novo Colaborador
-                </Button>
-
-                <Button 
-                  onClick={handleIgnorePage} 
-                  variant="secondary" 
-                  className="w-full"
-                >
-                  Ignorar Página
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-          
-          {isDuplicate && (
-            <Button 
-              onClick={handleIgnorePage} 
-              variant="secondary" 
-              className="w-full"
-            >
-              Avançar (Ignorar Duplicata)
-            </Button>
+                </CardContent>
+              </Card>
+            </div>
           )}
         </div>
       </div>
@@ -407,12 +343,12 @@ export default function AdminDocumentosPage() {
                 ))}
               </SelectContent>
             </Select>
-            
+
             <div className="flex gap-2">
               <Select
-                onValueChange={setSelectedUnidadeId}
+                onValueChange={(value) => setSelectedUnidadeId(value)}
                 value={selectedUnidadeId}
-                disabled={isLoadingUnidades || isProcessing || processedPages.length > 0 || isUnitLocked}
+                disabled={isProcessing || isUnitLocked || processedPages.length > 0}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione a Unidade" />
@@ -426,8 +362,8 @@ export default function AdminDocumentosPage() {
                 </SelectContent>
               </Select>
               {isUnitLocked && (
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => setIsUnitLocked(false)}
                   title="Corrigir Unidade"
                 >
@@ -438,7 +374,7 @@ export default function AdminDocumentosPage() {
           </div>
           <Button
             onClick={handleProcess}
-            disabled={!isReadyToProcess || isProcessing || processedPages.length > 0}
+            disabled={!file || !documentType || !selectedUnidadeId || isProcessing}
             className="w-full bg-pakere-yellow hover:bg-pakere-yellow/90 text-black"
           >
             {isProcessing ? (
@@ -473,14 +409,13 @@ export default function AdminDocumentosPage() {
           }}
           profile={{
             id: "",
-            nome: currentDocumentPage?.extractedData.nome || "",
-            cpf: currentDocumentPage?.extractedData.cpf || "",
+            nome: processedPages[currentPageIndex]?.extractedData.nome || "",
+            cpf: processedPages[currentPageIndex]?.extractedData.cpf || "",
             cargo: "",
-            matricula: currentDocumentPage?.extractedData.matricula || "",
+            matricula: processedPages[currentPageIndex]?.extractedData.matricula || "",
             ativo: true,
-            aprovacao_status: "aprovado",
-            unidade_id: currentDocumentPage?.extractedData.unidade_id || selectedUnidadeId,
-          } as Profile}
+            unidade_id: selectedUnidadeId,
+          } as any}
         />
       )}
     </div>
