@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useRef, type ReactNode, useCallback } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -39,9 +39,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const lastLoadedUid = useRef<string | null>(null);
 
-  const loadProfile = async (uid: string) => {
+  const loadProfile = useCallback(async (uid: string) => {
     // Evita carregar o mesmo perfil múltiplas vezes em sucessão rápida
-    if (lastLoadedUid.current === uid && profile && role) {
+    if (lastLoadedUid.current === uid) {
       setLoading(false);
       return;
     }
@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // Dependências vazias para garantir que a função seja estável
 
   useEffect(() => {
     // 1. Verifica sessão inicial
@@ -117,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => sub.subscription.unsubscribe();
-  }, []);
+  }, [loadProfile]); // Adiciona loadProfile como dependência para garantir que o useEffect use a versão estável
 
   const signOut = async () => {
     await supabase.auth.signOut();
