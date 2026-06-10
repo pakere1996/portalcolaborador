@@ -1,62 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
-import { createFileRoute } from "@tanstack/react-router";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { DocumentPage, DocumentType, processPdf, saveDocument } from "@/lib/documentos";
-import { toast } from "sonner";
-import { Unidade, Profile } from "@/integrations/supabase/types";
-import { Loader2, FileText, UserPlus, Link, XCircle, CheckCircle, AlertTriangle, Building2 } from "lucide-react";
-import { DocumentPreview } from "@/components/DocumentPreview";
-import ColaboradorFormDialog from "@/components/ColaboradorFormDialog";
-import { maskCNPJ } from "@/lib/utils";
-
-export const Route = createFileRoute("/admin/Documentos")({
-  component: AdminDocumentosPage,
-});
-
-const documentTypes: { value: DocumentType; label: string }[] = [
-  { value: "folha_ponto", label: "Folha de Ponto" },
-  { value: "contracheque", label: "Contracheque" },
-  { value: "atestado", label: "Atestado Médico" },
-  { value: "disciplinar", label: "Documento Disciplinar" },
-];
-
-const fetchUnidades = async (): Promise<Unidade[]> => {
-  const { data, error } = await supabase
-    .from("unidades")
-    .select("*")
-    .eq("ativo", true)
-    .order("nome");
-  if (error) throw error;
-  return data;
-};
-
-const fetchProfiles = async (): Promise<Profile[]> => {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("ativo", true);
-  if (error) throw error;
-  return data;
-};
-
-function AdminDocumentosPage() {
+export default function AdminDocumentosPage() {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [documentType, setDocumentType] = useState<DocumentType | "">("");
@@ -98,8 +40,7 @@ function AdminDocumentosPage() {
       setIsProcessing(false);
       toast.success(`PDF processado. ${pages.length} páginas encontradas.`);
       console.log("[DEBUG] Raw Processed Pages:", pages);
-      
-      const firstPage = pages[0];
+            const firstPage = pages[0];
       if (firstPage?.extractedData.extracted_unidade_id) {
         setSelectedUnidadeId(firstPage.extractedData.extracted_unidade_id);
         setIsUnitLocked(true);
@@ -138,14 +79,12 @@ function AdminDocumentosPage() {
 
     setIsSaving(true);
     try {
-      const storagePath = `documents/${currentDocumentPage.extractedData.unidade_id}/${documentType}/${profileId}/${file.name}_page_${currentDocumentPage.pageIndex}`;
-      
-      await saveDocument(currentDocumentPage, file, profileId, storagePath);
+      const storagePath = `documents/${currentDocumentPage.extractedData.unidade_id}/${documentType}/${profileId}/${file.name}_page_${currentPageIndex}`;
+            await saveDocument(currentDocumentPage, file, profileId, storagePath);
       
       setProcessedPages(prev => 
         prev.map((page, index) => 
           index === currentPageIndex ? { ...page, matchStatus: "matched" } : page
-        )
       );
       
       toast.success(`Página ${currentPageIndex + 1} vinculada com sucesso.`);
@@ -163,8 +102,7 @@ function AdminDocumentosPage() {
   const handleIgnorePage = () => {
     if (!currentDocumentPage) return;
     
-    setProcessedPages(prev => 
-      prev.map((page, index) => 
+    setProcessedPages(prev =>       prev.map((page, index) => 
         index === currentPageIndex ? { ...page, matchStatus: "unmatched" } : page
       )
     );
@@ -302,13 +240,13 @@ function AdminDocumentosPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
-                <p><strong>Nome:</strong> {matchedProfile.nome}</p>
-                <p><strong>CPF:</strong> {matchedProfile.cpf}</p>
+                <p><strong>Nome:</strong> {matchedProfile?.nome}</p>
+                <p><strong>CPF:</strong> {matchedProfile?.cpf}</p>
                 <p><strong>Ação:</strong> Vincular automaticamente.</p>
               </CardContent>
               <div className="p-4 pt-0">
                 <Button 
-                  onClick={() => handleSavePage(matchedProfile.id)} 
+                  onClick={() => handleSavePage(matchedProfile?.id)} 
                   className="w-full bg-green-600 hover:bg-green-700"
                   disabled={isSaving}
                 >
@@ -350,8 +288,7 @@ function AdminDocumentosPage() {
                 </Select>
                 {selectedProfileForManualLink && (
                   <Button 
-                    onClick={handleConfirmManualLink} 
-                    className="w-full"
+                    onClick={handleConfirmManualLink}                     className="w-full"
                     disabled={isSaving}
                   >
                     {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link className="h-4 w-4 mr-2" />}
@@ -360,8 +297,7 @@ function AdminDocumentosPage() {
                 )}
 
                 <Button 
-                  onClick={handleCreateNewColaborador} 
-                  variant="outline" 
+                  onClick={handleCreateNewColaborador}                   variant="outline" 
                   className="w-full"
                 >
                   <UserPlus className="h-4 w-4 mr-2" />
@@ -470,9 +406,7 @@ function AdminDocumentosPage() {
       {processedPages.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>
-              Revisão e Vinculação
-            </CardTitle>
+            <CardTitle>Revisão e Vinculação</CardTitle>
             <CardDescription>
               Revise os dados extraídos e vincule cada página a um colaborador.
             </CardDescription>
