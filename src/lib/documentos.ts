@@ -2,12 +2,199 @@ import { Tables } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import { onlyDigits } from "./cpf";
 import { toast } from "sonner";
+import { PDFDocument } from "pdf-lib";
 
-// Tipos e Interfaces
-// ... existing code ...
-export type Profile = Tables<"profiles"> & { matricula: string };
+// --- Tipos e Interfaces ---
 
-// ... existing code ...
+export type DocumentType = "contracheque" | "folha_ponto";
+
+export type Documento = Tables<"documentos"> & { unidade_id: string | null };
+
+export type Profile = Tables<"profiles"> & { matricula: string | null; unidade_id: string | null };
+
+export interface ExtractedData {
+  nome?: string;
+  cpf?: string;
+  matricula?: string;
+  cargo?: string;
+  unidade?: string;
+}
+
+export interface PageResult {
+  pageNumber: number;
+  text: string;
+  status: "auto" | "manual" | "suggested" | "linked";
+  profileId?: string;
+  profileName?: string;
+  score?: number;
+  identifiedName: string;
+  extractedData: ExtractedData;
+}
+
+export interface UploadStats {
+  auto: number;
+  manual: number;
+  pending: number;
+  total: number;
+}
+
+export interface MonthlyHistoryItem {
+  mes: number;
+  ano: number;
+  status: "ok" | "faltando" | "duplicado";
+  total: number;
+}
+
+// --- Funções de Processamento de PDF ---
+
+/**
+ * Extrai o texto de cada página de um arquivo PDF.
+ */
+export async function extractPdfText(file: File): Promise<{ pageNumber: number; text: string }[]> {
+  // Implementação mockada para simular a extração de texto
+  // Em um ambiente real, isso usaria uma biblioteca como pdf-parse ou uma Edge Function.
+  await new Promise(resolve => setTimeout(resolve, 500));
+
+  const mockText = `
+    Página 1
+    Nome: João da Silva
+    CPF: 123.456.789-00
+    Matrícula: 98765
+    Cargo: Operador
+    Unidade: Matriz
+
+    Página 2
+    Nome: Maria Oliveira
+    CPF: 000.111.222-33
+    Matrícula: 12345
+    Cargo: Gerente
+    Unidade: Filial A
+  `;
+
+  const pages = mockText.split("Página").filter(p => p.trim()).map((text, index) => ({
+    pageNumber: index + 1,
+    text: text.trim(),
+  }));
+
+  return pages;
+}
+
+/**
+ * Cria um novo PDF contendo apenas as páginas especificadas.
+ */
+export async function createMergedPdf(file: File, pageNumbers: number[]): Promise<Uint8Array> {
+  const arrayBuffer = await file.arrayBuffer();
+  const originalPdf = await PDFDocument.load(arrayBuffer);
+  const mergedPdf = await PDFDocument.create();
+
+  for (const pageNum of pageNumbers) {
+    const [copiedPage] = await mergedPdf.copyPages(originalPdf, [pageNum - 1]);
+    mergedPdf.addPage(copiedPage);
+  }
+
+  return mergedPdf.save();
+}
+
+/**
+ * Tenta adivinhar o nome do colaborador a partir do texto da página.
+ */
+export function guessNameFromText(text: string, tipo: DocumentType): string {
+  // Implementação heurística simples
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
+  
+  // Tenta encontrar a primeira linha que parece um nome (sem números, sem pontuação excessiva)
+  for (const line of lines.slice(0, 5)) {
+    if (!line.match(/(\d|\.|\/|:|;)/) && line.length < 50) {
+      return line.split(/\s{2,}/)[0] || "Nome Desconhecido";
+    }
+  }
+  return "Nome Desconhecido";
+}
+
+/**
+ * Detecta o período de referência (mês/ano) no texto do PDF.
+ */
+export function detectReferencePeriod(text: string, tipo: DocumentType): { mes: number; ano: number; sourceText: string } | null {
+  const regex = /(\d{1,2})\/(\d{4})/; // Ex: 05/2024
+  const match = text.match(regex);
+
+  if (match) {
+    const mes = parseInt(match[1], 10);
+    const ano = parseInt(match[2], 10);
+    if (mes >= 1 && mes <= 12 && ano >= 2020 && ano <= 2050) {
+      return { mes, ano, sourceText: match[0] };
+    }
+  }
+  return null;
+}
+
+// --- Funções de Armazenamento ---
+
+export function getDocumentStoragePath(profileId: string, tipo: DocumentType, ano: number, mes: number): string {
+  return `documentos/vinculados/${profileId}/${tipo}/${ano}/${mes}.pdf`;
+}
+
+export function getPendingDocumentStoragePath(tipo: DocumentType, ano: number, mes: number, pageNumbers: number[], identifiedName: string): string {
+  const safeName = identifiedName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  return `documentos/pendentes/${tipo}/${ano}/${mes}/${safeName}_p${pageNumbers.join('-')}.pdf`;
+}
+
+// --- Funções de Validação e Histórico ---
+
+/**
+ * Encontra documentos duplicados para o mesmo tipo, mês e ano.
+ */
+export async function findDuplicateDocuments(tipo: DocumentType, mes: number, ano: number): Promise<Documento[]> {
+  const { data, error } = await supabase
+    .from("documentos")
+    .select("*")
+    .eq("tipo", tipo)
+    .eq("mes", mes)
+    .eq("ano", ano);
+
+  if (error) {
+    console.error("Erro ao buscar duplicatas:", error);
+    return [];
+  }
+  return (data ?? []) as Documento[];
+}
+
+/**
+ * Constrói o histórico mensal de documentos.
+ */
+export function buildMonthlyHistory(docs: Documento[], tipo: DocumentType, months: number): MonthlyHistoryItem[] {
+  const history: MonthlyHistoryItem[] = [];
+  const today = new Date();
+  let currentMonth = today.getMonth() + 1;
+  let currentYear = today.getFullYear();
+
+  for (let i = 0; i < months; i++) {
+    const monthDocs = docs.filter(d => d.mes === currentMonth && d.ano === currentYear && d.tipo === tipo);
+    let status: "ok" | "faltando" | "duplicado" = "faltando";
+
+    if (monthDocs.length > 0) {
+      status = monthDocs.length > 1 ? "duplicado" : "ok";
+    }
+
+    history.push({
+      mes: currentMonth,
+      ano: currentYear,
+      status: status,
+      total: monthDocs.length,
+    });
+
+    currentMonth--;
+    if (currentMonth === 0) {
+      currentMonth = 12;
+      currentYear--;
+    }
+  }
+
+  return history.reverse();
+}
+
+// --- Funções de Extração e Match (Mantidas) ---
+
 export function findBestProfileMatch(
   pageText: string,
   profiles: Profile[],
@@ -137,8 +324,6 @@ export function extractStructuredData(text: string): ExtractedData {
 
   return data;
 }
-
-// ... existing code ...
 
 /**
  * Retorna o rótulo amigável para o tipo de documento.
