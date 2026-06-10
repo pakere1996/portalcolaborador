@@ -14,7 +14,7 @@ import {
 import { toast } from "sonner";
 import { Plus, Building2, Pencil, Trash2, CheckCircle, XCircle } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
-import { cn } from "@/lib/utils";
+import { cn, formatPhone, onlyDigits } from "@/lib/utils";
 
 type Unidade = Tables<'unidades'>;
 
@@ -22,7 +22,7 @@ const blankForm = {
   nome: "",
   endereco: "",
   cidade: "",
-  telefone: "",
+  telefone: "", // Armazena o valor formatado para exibição no input
   ativo: true,
 };
 
@@ -53,6 +53,9 @@ export default function Unidades() {
   const create = async () => {
     if (!form.nome.trim()) return toast.error("O nome da unidade é obrigatório.");
     setBusy(true);
+    
+    const rawTelefone = onlyDigits(form.telefone);
+
     try {
       const { error } = await supabase
         .from("unidades")
@@ -60,7 +63,7 @@ export default function Unidades() {
           nome: form.nome.trim(), 
           endereco: form.endereco.trim() || null,
           cidade: form.cidade.trim() || null,
-          telefone: form.telefone.trim() || null,
+          telefone: rawTelefone || null, // Salva apenas dígitos
           ativo: form.ativo,
         });
       
@@ -88,7 +91,7 @@ export default function Unidades() {
       nome: unidade.nome, 
       endereco: unidade.endereco || "", 
       cidade: unidade.cidade || "", 
-      telefone: unidade.telefone || "",
+      telefone: unidade.telefone ? formatPhone(unidade.telefone) : "", // Formata para exibição
       ativo: unidade.ativo,
     });
   };
@@ -98,6 +101,8 @@ export default function Unidades() {
     if (!form.nome.trim()) return toast.error("O nome da unidade é obrigatório.");
     setBusy(true);
 
+    const rawTelefone = onlyDigits(form.telefone);
+
     try {
       const { error } = await supabase
         .from("unidades")
@@ -105,7 +110,7 @@ export default function Unidades() {
           nome: form.nome.trim(), 
           endereco: form.endereco.trim() || null,
           cidade: form.cidade.trim() || null,
-          telefone: form.telefone.trim() || null,
+          telefone: rawTelefone || null, // Salva apenas dígitos
           ativo: form.ativo,
           updated_at: new Date().toISOString(),
         })
@@ -153,7 +158,15 @@ export default function Unidades() {
   };
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setForm({ ...form, [e.target.id]: e.target.value });
+    const { id, value } = e.target;
+    
+    if (id === 'telefone') {
+      // Aplica a máscara no estado do formulário
+      const formattedValue = formatPhone(value);
+      setForm({ ...form, [id]: formattedValue });
+    } else {
+      setForm({ ...form, [id]: value });
+    }
   };
 
   return (
@@ -183,11 +196,17 @@ export default function Unidades() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="cidade">Cidade</Label>
-                  <Input id="cidade" value={form.cidade} onChange={handleFormChange} placeholder="Ex: São Paulo" />
+                  <Input id="cidade" value={form.cidade} onChange={handleFormChange} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="telefone">Telefone</Label>
-                  <Input id="telefone" value={form.telefone} onChange={handleFormChange} placeholder="(99) 9999-9999" />
+                  <Input 
+                    id="telefone" 
+                    value={form.telefone} 
+                    onChange={handleFormChange} 
+                    placeholder="(99) 99999-9999" 
+                    maxLength={15} // (XX) XXXXX-XXXX
+                  />
                 </div>
               </div>
               <div className="flex items-center space-x-2 pt-2">
@@ -229,7 +248,9 @@ export default function Unidades() {
                   <td className="p-4 hidden lg:table-cell text-muted-foreground">
                     {unidade.endereco} {unidade.cidade && `(${unidade.cidade})`}
                   </td>
-                  <td className="p-4 hidden md:table-cell text-muted-foreground">{unidade.telefone || "—"}</td>
+                  <td className="p-4 hidden md:table-cell text-muted-foreground">
+                    {unidade.telefone ? formatPhone(unidade.telefone) : "—"}
+                  </td>
                   <td className="p-4 text-center">
                     <div className={cn("flex items-center justify-center gap-1", unidade.ativo ? "text-green-600" : "text-red-600")}>
                       {unidade.ativo ? <CheckCircle className="size-4" /> : <XCircle className="size-4" />}
@@ -273,7 +294,12 @@ export default function Unidades() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="telefone">Telefone</Label>
-                <Input id="telefone" value={form.telefone} onChange={handleFormChange} />
+                <Input 
+                  id="telefone" 
+                  value={form.telefone} 
+                  onChange={handleFormChange} 
+                  maxLength={15}
+                />
               </div>
             </div>
             <div className="flex items-center space-x-2 pt-2">
