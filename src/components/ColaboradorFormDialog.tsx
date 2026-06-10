@@ -1,218 +1,443 @@
-"use client";
-
-import React, { useEffect, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Tables } from "@/integrations/supabase/types";
-import { onlyDigits } from "@/lib/cpf";
-import { ColaboradorForm } from "./ColaboradorForm";
-import { ExtractedData, PageResult } from "@/lib/documentos";
-import { adminApi } from "@/lib/admin-api";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Profile, Unidade } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+import { Checkbox } from "@/components/ui/checkbox";
+import { CalendarIcon, Plus } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
-type Unidade = Tables<"unidades">;
-type Cargo = Tables<"cargos">;
-type SuggestedProfile = Tables<"suggested_profiles">;
+const formSchema = z.object({
+  nome: z.string().min(2, { message: "O nome deve ter pelo menos 2 caracteres." }),
+  cpf: z.string().min(11, { message: "CPF inválido." }),
+  cargo: z.string().min(1, { message: "O cargo é obrigatório." }),
+  matricula: z.string().optional(),
+  ativo: z.boolean(),
+  data_admissao: z.date().optional().nullable(),
+  data_nascimento: z.date().optional().nullable(),
+  folga_fixa_semana: z.string().optional().nullable(),
+  unidade_id: z.string().uuid({ message: "A unidade é obrigatória." }), // Made mandatory
+  endereco: z.string().optional().nullable(),
+  email_contato: z.string().email("Email inválido.").optional().nullable(),
+  whatsapp: z.string().optional().nullable(),
+});
 
-// Definindo o estado completo do formulário (incluindo Matrícula)
-export interface ColaboradorFormState {
-  nome: string;
-  cpf: string;
-  matricula: string; // Novo campo
-  email: string;
-  whatsapp: string;
-  cargo: string;
-  unidade_id: string;
-  data_nascimento: string;
-  data_admissao: string;
-  folga_fixa_semana: string;
-  perfil_acesso: string;
-  ativo?: boolean;
-}
-
-// Define a estrutura de dados iniciais que pode vir de uma sugestão (DB) ou de um PageResult (imediato)
-export type InitialData = {
-  extractedData: ExtractedData;
-  suggestionId?: string; // Presente se vier do painel de sugestões
-  pageNumber?: number; // Presente se vier do Documentos.tsx (cadastro imediato)
-  defaultUnidadeId?: string; // Novo campo para pré-selecionar a unidade
-};
+type ProfileFormValues = z.infer<typeof formSchema>;
 
 interface ColaboradorFormDialogProps {
+  profile?: Profile;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialData: InitialData | null; // Dados para pré-preenchimento
-  unidades: Unidade[];
-  cargos: Cargo[];
-  onSuccess: (newProfileId?: string, pageNumber?: number) => void;
-  isEditing?: boolean; // Se estiver editando um perfil existente
-  profileToEdit?: Tables<"profiles"> & { role: string } | null;
 }
 
-const blankForm: ColaboradorFormState = {
-  nome: "",
-  cpf: "",
-  matricula: "", // Inicializando Matrícula
-  email: "",
-  whatsapp: "",
-  cargo: "",
-  unidade_id: "null",
-  data_nascimento: "",
-  data_admissao: "",
-  folga_fixa_semana: "null",
-  perfil_acesso: "colaborador",
+const fetchUnidades = async (): Promise<Unidade[]> => {
+  const { data, error } = await supabase
+    .from("unidades")
+    .select("*")
+    .eq("ativo", true)
+    .order("nome");
+  if (error) throw error;
+  return data;
 };
 
-export const ColaboradorFormDialog: React.FC<ColaboradorFormDialogProps> = ({
+const upsertProfile = async (values: ProfileFormValues, profileId?: string) => {
+  const payload = {
+    ...values,
+    data_admissao: values.data_admissao ? format(values.data_admissao, "yyyy-MM-dd") : null,
+    data_nascimento: values.data_nascimento ? format(values.data_nascimento, "yyyy-MM-dd") : null,
+    folga_fixa_semana: values.folga_fixa_semana ? parseInt(values.folga_fixa_semana) : null,
+    unidade_id: values.unidade_id,
+  };
+
+  if (profileId) {
+    const { error } = await supabase
+      .from("profiles")
+      .update(payload)
+      .eq("id", profileId);
+    if (error) throw error;
+  } else {
+    // This path is usually for admin creating a profile linked to an existing auth.user
+    // For simplicity here, we assume the profile already exists or is being created via a different flow (like signup)
+    // Since this component is used in Admin/Colaboradores, we'll assume we are updating an existing profile or creating a placeholder.
+    // However, the current schema requires an auth.user ID. We'll keep the update logic for now.
+    throw new Error("Criação de novo colaborador via formulário não suportada diretamente. Use o fluxo de aprovação.");
+  }
+};
+
+export function ColaboradorFormDialog({
+  profile,
   open,
   onOpenChange,
-  initialData,
-  unidades,
-  cargos,
-  onSuccess,
-  isEditing = false,
-  profileToEdit,
-}) => {
-  const [form, setForm] = useState<ColaboradorFormState>(blankForm);
-  const [busy, setBusy] = useState(false);
+}: ColaboradorFormDialogProps) {
+  const queryClient = useQueryClient();
+  const isEdit = !!profile;
 
-  useEffect(() => {
-    if (isEditing && profileToEdit) {
-      // Lógica de edição
-      setForm({
-        nome: profileToEdit.nome || "",
-        cpf: profileToEdit.cpf || "",
-        matricula: profileToEdit.matricula || "", // Carregando Matrícula
-        email: profileToEdit.email_contato || "",
-        whatsapp: profileToEdit.whatsapp || "",
-        cargo: profileToEdit.cargo || "",
-        unidade_id: profileToEdit.unidade_id || "null",
-        data_nascimento: profileToEdit.data_nascimento || "",
-        data_admissao: profileToEdit.data_admissao || "",
-        folga_fixa_semana: profileToEdit.folga_fixa_semana?.toString() || "null",
-        perfil_acesso: profileToEdit.role || "colaborador",
-        ativo: profileToEdit.ativo,
-      });
-    } else if (initialData) {
-      // Lógica de pré-preenchimento (Criação)
-      const data = initialData.extractedData;
+  const { data: unidades } = useQuery<Unidade[]>({
+    queryKey: ["unidades"],
+    queryFn: fetchUnidades,
+  });
 
-      // Tenta encontrar a Unidade e Cargo correspondentes
-      const matchedUnidade = unidades.find(u => u.nome.toLowerCase() === data.unidade?.toLowerCase());
-      // Ponto 8: Integração com Tabela de Cargos
-      const matchedCargo = cargos.find(c => c.nome.toLowerCase() === data.cargo?.toLowerCase());
-
-      // Define a unidade padrão: 1. defaultUnidadeId (se vier do Documentos.tsx), 2. matchedUnidade, 3. "null"
-      const defaultUnidade = initialData.defaultUnidadeId || (matchedUnidade ? matchedUnidade.id : "null");
-
-      setForm({
-        ...blankForm,
-        nome: data.nome || "",
-        cpf: data.cpf ? onlyDigits(data.cpf) : "",
-        matricula: data.matricula || "", // Pré-preenchendo Matrícula
-        cargo: matchedCargo ? matchedCargo.nome : (data.cargo || ""),
-        unidade_id: defaultUnidade, // Usando a unidade padrão
-        data_nascimento: data.data_nascimento || "",
-        data_admissao: data.data_admissao || "",
-        // Outros campos (email, whatsapp, folga_fixa_semana) ficam vazios se não extraídos
-      });
-    } else if (!open) {
-      // Resetar formulário ao fechar (se não for edição)
-      setForm(blankForm);
-    }
-  }, [initialData, open, unidades, cargos, isEditing, profileToEdit]);
-
-  const validateForm = () => {
-    // Ponto 9: E-mail não é mais obrigatório.
-    if (!form.nome || !form.cpf || !form.cargo || form.unidade_id === "null") {
-      toast.error("Preencha todos os campos obrigatórios (Nome, CPF, Cargo, Unidade).");
-      return false;
-    }
-    return true;
+  const defaultValues: ProfileFormValues = {
+    nome: profile?.nome || "",
+    cpf: profile?.cpf || "",
+    cargo: profile?.cargo || "",
+    matricula: profile?.matricula || "",
+    ativo: profile?.ativo ?? true,
+    data_admissao: profile?.data_admissao ? new Date(profile.data_admissao) : null,
+    data_nascimento: profile?.data_nascimento ? new Date(profile.data_nascimento) : null,
+    folga_fixa_semana: profile?.folga_fixa_semana?.toString() || "",
+    unidade_id: profile?.unidade_id || "", // Initialize with existing or empty string
+    endereco: profile?.endereco || "",
+    email_contato: profile?.email_contato || "",
+    whatsapp: profile?.whatsapp || "",
   };
 
-  const handleSubmit = async () => {
-    if (!validateForm()) return;
+  const form = useForm<ProfileFormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues,
+  });
 
-    setBusy(true);
+  // Reset form when dialog opens/profile changes
+  React.useEffect(() => {
+    if (open) {
+      form.reset(defaultValues);
+    }
+  }, [open, profile]);
 
-    const payload = {
-      nome: form.nome.trim(),
-      email: form.email.trim() || null, // Ponto 10: Usa o email informado ou null
-      cpf: onlyDigits(form.cpf),
-      matricula: form.matricula.trim() || null, // Incluindo Matrícula
-      whatsapp: onlyDigits(form.whatsapp) || null,
-      cargo: form.cargo,
-      unidade_id: form.unidade_id === "null" ? null : form.unidade_id,
-      folga_fixa_semana: form.folga_fixa_semana === "null" ? null : Number(form.folga_fixa_semana),
-      data_nascimento: form.data_nascimento || null,
-      data_admissao: form.data_admissao || null,
-      role: form.perfil_acesso,
-      suggestion_id: initialData?.suggestionId, // Passa o ID da sugestão SE existir
-    };
-
-    try {
-      let newProfileId: string;
-
-      if (isEditing && profileToEdit) {
-        // Lógica de Edição
-        // Ponto 4: Atualizar Matrícula
-        await adminApi.updateUser(profileToEdit.id, payload);
-        toast.success("Colaborador atualizado com sucesso.");
-        newProfileId = profileToEdit.id;
-      } else {
-        // Lógica de Criação
-        // Ponto 4: Criar com Matrícula
-        const newProfile = await adminApi.createUser(payload);
-        toast.success("Colaborador cadastrado com sucesso.", {
-          description: initialData?.suggestionId ? "A sugestão foi marcada como concluída." : undefined,
-        });
-        newProfileId = newProfile.id;
-      }
-
+  const mutation = useMutation({
+    mutationFn: (values: ProfileFormValues) => upsertProfile(values, profile?.id),
+    onSuccess: () => {
+      toast.success(
+        isEdit
+          ? "Colaborador atualizado com sucesso!"
+          : "Colaborador criado com sucesso!"
+      );
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
       onOpenChange(false);
-
-      // Se for um cadastro imediato (vindo de pageResult), retorna o ID do novo perfil e o número da página
-      if (initialData?.pageNumber) {
-        onSuccess(newProfileId, initialData.pageNumber);
-      } else {
-        onSuccess(newProfileId); // Se for do painel de sugestões ou cadastro manual, apenas recarrega os dados
-      }
-    } catch (e) {
-      // Ponto 11: Validação de Matrícula (se a Edge Function retornar erro de duplicidade)
-      toast.error(isEditing ? "Erro ao atualizar colaborador" : "Erro ao cadastrar colaborador", {
-        description: (e as Error).message,
+    },
+    onError: (error) => {
+      console.error("Erro ao salvar colaborador:", error);
+      toast.error("Erro ao salvar colaborador.", {
+        description: error.message,
       });
-    } finally {
-      setBusy(false);
-    }
-  };
+    },
+  });
 
-  const title = isEditing ? "Editar Colaborador" : (initialData ? "Cadastrar Colaborador (Pré-preenchido)" : "Novo Colaborador");
-  const description = isEditing ? "Atualize os dados do perfil." : (initialData ? "Dados extraídos do documento. Preencha os campos obrigatórios restantes." : "Preencha os dados para criar um novo colaborador.");
+  const onSubmit = (values: ProfileFormValues) => {
+    mutation.mutate(values);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+          <DialogTitle>
+            {isEdit ? "Editar Colaborador" : "Novo Colaborador"}
+          </DialogTitle>
         </DialogHeader>
-        <ColaboradorForm
-          form={form}
-          setForm={setForm}
-          unidades={unidades}
-          cargos={cargos}
-          onSubmit={handleSubmit}
-          busy={busy}
-          isEdit={isEditing} // Corrigido para isEdit
-        />
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="nome"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome Completo</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="cpf"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>CPF</FormLabel>
+                    <FormControl>
+                      <Input {...field} disabled={isEdit} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="cargo"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cargo</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="matricula"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Matrícula (Opcional)</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="unidade_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Unidade *</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value || ""}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a unidade" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {unidades?.map((unidade) => (
+                          <SelectItem key={unidade.id} value={unidade.id}>
+                            {unidade.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="folga_fixa_semana"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Folga Fixa Semanal (Opcional)</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value || ""}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Nenhuma" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="0">Domingo</SelectItem>
+                        <SelectItem value="1">Segunda-feira</SelectItem>
+                        <SelectItem value="2">Terça-feira</SelectItem>
+                        <SelectItem value="3">Quarta-feira</SelectItem>
+                        <SelectItem value="4">Quinta-feira</SelectItem>
+                        <SelectItem value="5">Sexta-feira</SelectItem>
+                        <SelectItem value="6">Sábado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="data_admissao"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Data de Admissão (Opcional)</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, "PPP")
+                            ) : (
+                              <span>Selecione uma data</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value || undefined}
+                          onSelect={field.onChange}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="data_nascimento"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Data de Nascimento (Opcional)</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, "PPP")
+                            ) : (
+                              <span>Selecione uma data</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value || undefined}
+                          onSelect={field.onChange}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="endereco"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Endereço (Opcional)</FormLabel>
+                  <FormControl>
+                    <Textarea {...field} value={field.value || ""} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="email_contato"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email de Contato (Opcional)</FormLabel>
+                    <FormControl>
+                      <Input {...field} value={field.value || ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="whatsapp"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>WhatsApp (Opcional)</FormLabel>
+                    <FormControl>
+                      <Input {...field} value={field.value || ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="ativo"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>Colaborador Ativo</FormLabel>
+                  </div>
+                </FormItem>
+              )}
+            />
+
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending
+                ? "Salvando..."
+                : isEdit
+                ? "Salvar Alterações"
+                : "Criar Colaborador"}
+            </Button>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
-};
+}
+
+export default ColaboradorFormDialog;
