@@ -1,3 +1,43 @@
+import { useState, useMemo, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Profile, Unidade } from "@/integrations/supabase/types";
+import { toast } from "sonner";
+import { Loader2, FileText, CheckCircle, XCircle, Link, UserPlus, Building2, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DocumentPreview } from "@/components/DocumentPreview";
+import { ColaboradorFormDialog } from "@/components/ColaboradorFormDialog";
+import { processPdf, saveDocument, DocumentPage, DocumentType } from "@/lib/documentos";
+import { maskCNPJ } from "@/lib/utils";
+
+const documentTypes: { value: DocumentType; label: string }[] = [
+  { value: "contracheque", label: "Contracheque" },
+  { value: "folha_ponto", label: "Folha de Ponto" },
+];
+
+const fetchUnidades = async (): Promise<Unidade[]> => {
+  const { data, error } = await supabase
+    .from("unidades")
+    .select("*")
+    .eq("ativo", true)
+    .order("nome");
+  if (error) throw error;
+  return data;
+};
+
+const fetchProfiles = async (): Promise<Profile[]> => {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("ativo", true)
+    .order("nome");
+  if (error) throw error;
+  return data;
+};
+
 export default function AdminDocumentosPage() {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
@@ -21,10 +61,10 @@ export default function AdminDocumentosPage() {
     queryFn: fetchProfiles,
   });
 
-  const currentDocumentPage = useMemo(() => processedPages[currentPageIndex], [
-    processedPages,
-    currentPageIndex,
-  ]);
+  const currentDocumentPage = useMemo(() => {
+    if (processedPages.length === 0) return null;
+    return processedPages[currentPageIndex];
+  }, [processedPages, currentPageIndex]);
 
   const isReadyToProcess = file && documentType && selectedUnidadeId;
   const isProcessingComplete = currentPageIndex >= processedPages.length && processedPages.length > 0;
@@ -40,7 +80,7 @@ export default function AdminDocumentosPage() {
       setIsProcessing(false);
       toast.success(`PDF processado. ${pages.length} páginas encontradas.`);
       console.log("[DEBUG] Raw Processed Pages:", pages);
-            const firstPage = pages[0];
+      const firstPage = pages[0];
       if (firstPage?.extractedData.extracted_unidade_id) {
         setSelectedUnidadeId(firstPage.extractedData.extracted_unidade_id);
         setIsUnitLocked(true);
@@ -80,12 +120,15 @@ export default function AdminDocumentosPage() {
     setIsSaving(true);
     try {
       const storagePath = `documents/${currentDocumentPage.extractedData.unidade_id}/${documentType}/${profileId}/${file.name}_page_${currentPageIndex}`;
-            await saveDocument(currentDocumentPage, file, profileId, storagePath);
+      await saveDocument(currentDocumentPage, file, profileId, storagePath);
       
-      setProcessedPages(prev => 
-        prev.map((page, index) => 
-          index === currentPageIndex ? { ...page, matchStatus: "matched" } : page
-      );
+      setProcessedPages(prev => {
+        const newPages = [...prev];
+        if (newPages[currentPageIndex]) {
+          newPages[currentPageIndex] = { ...newPages[currentPageIndex], matchStatus: "matched" };
+        }
+        return newPages;
+      });
       
       toast.success(`Página ${currentPageIndex + 1} vinculada com sucesso.`);
       setCurrentPageIndex(prev => prev + 1);
@@ -102,10 +145,13 @@ export default function AdminDocumentosPage() {
   const handleIgnorePage = () => {
     if (!currentDocumentPage) return;
     
-    setProcessedPages(prev =>       prev.map((page, index) => 
-        index === currentPageIndex ? { ...page, matchStatus: "unmatched" } : page
-      )
-    );
+    setProcessedPages(prev => {
+      const newPages = [...prev];
+      if (newPages[currentPageIndex]) {
+        newPages[currentPageIndex] = { ...newPages[currentPageIndex], matchStatus: "unmatched" };
+      }
+      return newPages;
+    });
     
     toast.info(`Página ${currentPageIndex + 1} ignorada.`);
     setCurrentPageIndex(prev => prev + 1);
@@ -288,7 +334,8 @@ export default function AdminDocumentosPage() {
                 </Select>
                 {selectedProfileForManualLink && (
                   <Button 
-                    onClick={handleConfirmManualLink}                     className="w-full"
+                    onClick={handleConfirmManualLink}
+                    className="w-full"
                     disabled={isSaving}
                   >
                     {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link className="h-4 w-4 mr-2" />}
@@ -297,7 +344,8 @@ export default function AdminDocumentosPage() {
                 )}
 
                 <Button 
-                  onClick={handleCreateNewColaborador}                   variant="outline" 
+                  onClick={handleCreateNewColaborador}
+                  variant="outline" 
                   className="w-full"
                 >
                   <UserPlus className="h-4 w-4 mr-2" />
