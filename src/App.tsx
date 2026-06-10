@@ -1,7 +1,7 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AppShell } from "./components/AppShell";
-import { AuthProvider, useAuth } from "./lib/auth-context";
+import { useAuth } from "./lib/auth-context";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Perfil from "./pages/Perfil";
@@ -102,15 +102,14 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
+    <>
       <Toaster richColors position="top-right" />
       <Routes>
         <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} />
         <Route path="/setup" element={hasAdmin ? <Navigate to="/login" replace /> : <SetupAdmin />} />
-        {/* A rota curinga '/*' agora aponta para AuthenticatedRoutes, que contém o AppShell e as rotas internas */}
         <Route path="/*" element={<AuthenticatedRoutes />} />
       </Routes>
-    </BrowserRouter>
+    </>
   );
 }
 
