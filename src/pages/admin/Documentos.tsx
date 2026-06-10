@@ -1,4 +1,11 @@
 // ... existing code ...
+      {showResults && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Resultados do Processamento</CardTitle>
+            <CardDescription>
+              Revise e confirme o vínculo de cada página antes de salvar.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {pageResults.map((page) => {
@@ -74,76 +81,35 @@
                       )}
                     </div>
                   )}
-
-                  {isAuto && (
-                    <div className="space-y-3">
-                      <h4 className="font-medium">Dados de Vinculação</h4>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <p className="text-sm text-muted-foreground">Nome do Vinculado</p>
-                          <p className="font-medium">{page.profileName}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Status</p>
-                          <p className="font-medium text-green-600">Vinculado</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {isManual && (
-                    <div className="space-y-3">
-                      <h4 className="font-medium">Dados de Manual</h4>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <p className="text-sm text-muted-foreground">Nome Identificado</p>
-                          <p className="font-medium">{identifiedNames[page.pageNumber] || page.profileName}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Status</p>
-                          <p className="font-medium text-blue-600">Manual</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {isSuggested && (
-                    <div className="space-y-3">
-                      <h4 className="font-medium">Pré-Cadastro Sugerido</h4>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <p className="text-sm text-muted-foreground">Nome Sugerido</p>
-                          <p className="font-medium">{page.profileName}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Status</p>
-                          <p className="font-medium text-orange-600">Pré-Cadastro Sugerido</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {isLinked && (
-                    <div className="space-y-3">
-                      <h4 className="font-medium">Vinculação (Novo)</h4>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <p className="text-sm text-muted-foreground">Nome do Vinculado</p>
-                          <p className="font-medium">{page.profileName}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Status</p>
-                          <p className="font-medium text-green-600">Vinculado (Novo)</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}
+
+            <div className="flex gap-4 flex-wrap">
+              <Button
+                onClick={handleSave}
+                disabled={isProcessing}
+                className="flex-1"
+              >
+                {isProcessing ? (
+                  <Spinner className="size-4 mr-2" />
+                ) : (
+                  <Check className="size-4 mr-2" />
+                )}
+                {isProcessing ? 'Salvando...' : 'Salvar Vínculos'}
+              </Button>
+              <Button
+                onClick={handleReset}
+                variant="outline"
+                className="flex-1"
+              >
+                <RefreshCw className="size-4 mr-2" />
+                Resetar
+              </Button>
+            </div>
           </CardContent>
         </Card>
-      </div>
+      )}
     </div>
   );
 };
