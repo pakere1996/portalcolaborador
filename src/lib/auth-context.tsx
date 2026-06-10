@@ -39,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const lastLoadedUid = useRef<string | null>(null);
 
+  // Estabiliza a função loadProfile para que ela não mude a cada renderização
   const loadProfile = useCallback(async (uid: string) => {
     // Evita carregar o mesmo perfil múltiplas vezes em sucessão rápida
     if (lastLoadedUid.current === uid) {
@@ -84,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []); // Dependências vazias para garantir que a função seja estável
+  }, []);
 
   useEffect(() => {
     // 1. Verifica sessão inicial
@@ -117,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => sub.subscription.unsubscribe();
-  }, [loadProfile]); // Adiciona loadProfile como dependência para garantir que o useEffect use a versão estável
+  }, []); // Array de dependências vazio para executar apenas na montagem
 
   const signOut = async () => {
     await supabase.auth.signOut();
