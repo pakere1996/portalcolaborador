@@ -6,11 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, FileText, Download, AlertTriangle, CheckCircle2, XCircle, Plus } from "lucide-react";
+import { Loader2, FileText, Plus } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { PDFDocument } from "pdf-lib";
-import { extractCNPJs, cleanCNPJ, extractMonthAndYear } from "@/lib/documentos";
-import { maskCNPJ } from "@/lib/utils";
+import { getDocument } from "pdfjs-dist";
+import { extractCNPJFromText, cleanCNPJ, extractPeriodoFromText } from "@/lib/documentos";
 
 const DOCUMENT_TYPE_MAP: Record<string, "contracheque" | "folha_ponto"> = {
   "/admin/documentos": "contracheque",
@@ -71,13 +71,11 @@ export default function AdminDocumentosPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Determine document type from route
   const documentType = useMemo(() => {
     const path = window.location.pathname;
     return DOCUMENT_TYPE_MAP[path] || "contracheque";
   }, []);
 
-  // Fetch active unidades
   const { data: unidades = [] } = useQuery({
     queryKey: ["unidades"],
     queryFn: async () => {
@@ -91,7 +89,6 @@ export default function AdminDocumentosPage() {
     },
   });
 
-  // Fetch active profiles
   const { data: profiles = [] } = useQuery({
     queryKey: ["profiles"],
     queryFn: async () => {
@@ -105,10 +102,8 @@ export default function AdminDocumentosPage() {
     },
   });
 
-  // Mutations
   const queryClient = useQueryClient();
 
-  // Mutation to process the uploaded file (split into pages and extract data)
   const processFileMutation = useMutation({
     mutationFn: async (uploadedFile: File) => {
       setIsProcessing(true);
@@ -118,7 +113,6 @@ export default function AdminDocumentosPage() {
       const results: PageResult[] = [];
 
       for (let i = 0; i < numPages; i++) {
-        // Extract a single page PDF
         const singlePagePdf = await PDFDocument.create();
         const [copiedPage] = await singlePagePdf.copyPages(pdfDoc, [i]);
         singlePagePdf.addPage(copiedPage);
@@ -126,10 +120,8 @@ export default function AdminDocumentosPage() {
         const blob = new Blob([singlePagePdfBytes], { type: "application/pdf" });
         const singlePageFile = new File([blob], `page_${i}.pdf`, { type: "application/pdf" });
 
-        // Extract data from the single page PDF
         const extractedData = await extractDataFromPdfFile(singlePageFile, documentType);
 
-        // Determine unidade_id from CNPJ in the extracted text
         const unidadeIdFromCnpj = await getUnidadeIdFromCnpjInText(
           extractedData?.text || "",
           unidades
@@ -149,7 +141,6 @@ export default function AdminDocumentosPage() {
       return results;
     },
     onSuccess: async (results) => {
-      // Now we need to determine the status for each page (matched, unmatched, duplicate)
       const updatedResults = await Promise.all(results.map(async (result) => {
         if (!result.extractedData) {
           return { ...result, status: "unmatched" as const };
@@ -157,7 +148,6 @@ export default function AdminDocumentosPage() {
 
         const { cpf, unidade_id: extractedUnidadeId, mes, ano } = result.extractedData;
 
-        // Check for duplicate: if we have a profile match, check if document already exists
         let matchedProfile: Profile | null = null;
         if (cpf && extractedUnidadeId && mes !== null && ano !== null) {
           matchedProfile = profiles.find(
@@ -169,7 +159,6 @@ export default function AdminDocumentosPage() {
         }
 
         if (matchedProfile) {
-          // Check for duplicate document
           const { count } = await supabase
             .from("documentos")
             .select("id", { count: "exact", head: true })
@@ -184,7 +173,6 @@ export default function AdminDocumentosPage() {
           return { ...result, status: "matched" as const, matchedProfile };
         }
 
-        // If we have a profile by CPF but different unidade, we still consider unmatched
         const profileByCpf = profiles.find(
           (p) => p.cpf === cpf && p.ativo === true
         );
@@ -205,7 +193,6 @@ export default function AdminDocumentosPage() {
     },
   });
 
-  // Mutation to upload a one-page PDF and create a document record
   const uploadDocumentMutation = useMutation({
     mutationFn: async ({
       perfilId,
@@ -227,7 +214,6 @@ export default function AdminDocumentosPage() {
 
       if (uploadError) throw uploadError;
 
-      // Create document record
       const { error: insertError } = await supabase
         .from("documentos")
         .insert({
@@ -245,11 +231,9 @@ export default function AdminDocumentosPage() {
     onSuccess: () => {
       toast.success("Documento vinculado com sucesso!");
       setIsUploading(false);
-      // Move to next page
       if (currentPageIndex < pageResults.length - 1) {
         setCurrentPageIndex(currentPageIndex + 1);
       } else {
-        // All pages processed
         setPageResults([]);
         setFile(null);
       }
@@ -260,7 +244,6 @@ export default function AdminDocumentosPage() {
     },
   });
 
-  // Mutation to create a new colaborador
   const createColaboradorMutation = useMutation({
     mutationFn: async ({
       nome,
@@ -284,7 +267,7 @@ export default function AdminDocumentosPage() {
           unidade_id,
           data_nascimento: data_nascimento || null,
           ativo: true,
-          cargo: "Colaborador", // default cargo
+          cargo: "Colaborador",
         })
         .select();
 
@@ -312,56 +295,86 @@ export default function AdminDocumentosPage() {
     },
   });
 
-  // Helper function to extract data from a single page PDF file
+  const extractPdfTextFromFile = async (file: File): Promise<string> => {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await getDocument({ data: arrayBuffer }).promise;
+    const pageTexts: string[] = [];
+
+    for (let i = 0; i < pdf.numPages; i++) {
+      const page = await pdf.getPage(i + 1);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item: any) => ("str" in item ? item.str : ""))
+        .join(" ");
+
+      if (pageText.trim()) {
+        pageTexts.push(pageText);
+      }
+    }
+
+    return pageTexts.join("\n");
+  };
+
+  const extractNomeFromText = (text: string): string | null => {
+    const lines = text
+      .replace(/\r/g, "\n")
+      .replace(/\f/g, " ")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    for (const rawLine of lines) {
+      const line = rawLine.replace(/\s+/g, " ");
+      const match = line.match(
+        /([A-ZÀ-ÚÃÕÂÊÔÁÉÍÓÚÇ][A-ZÀ-ÚÃÕÂÊÔÁÉÍÓÚÇ\s.'-]{2,})\s+(\d{10})\b/u
+      );
+
+      if (!match) continue;
+
+      let nome = match[1].trim();
+      nome = nome
+        .replace(/^(NOME|FUNCION[ÁA]RIO|COLABORADOR)\s*[:\-]?/i, "")
+        .trim()
+        .replace(/\s{2,}/g, " ");
+
+      if (nome.split(/\s+/).length >= 2) {
+        return nome;
+      }
+    }
+
+    return null;
+  };
+
+  const extractCpfFromText = (text: string): string | null => {
+    const cpfMatch = text.match(/CPF\s*[:\-]?\s*(\d{3}\.\d{3}\.\d{3}-\d{2})/i);
+    return cpfMatch ? cpfMatch[1] : null;
+  };
+
   const extractDataFromPdfFile = async (
     file: File,
     docType: "contracheque" | "folha_ponto"
   ): Promise<{ data: ExtractedData | null; text: string } | null> => {
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const pdfDoc = await PDFDocument.load(arrayBuffer);
-      const numPages = pdfDoc.getPageCount();
-      if (numPages === 0) return null;
+      const text = await extractPdfTextFromFile(file);
+      const nome = extractNomeFromText(text);
+      const cpf = extractCpfFromText(text);
+      const periodo = extractPeriodoFromText(text, docType);
+      const cnpj = extractCNPJFromText(text);
 
-      const page = pdfDoc.getPage(0);
-      // Note: pdf-lib doesn't have getTextContent, this is a placeholder for the logic
-      // In a real app, you'd use pdf.js or similar for text extraction
-      const text = ""; // Placeholder for extracted text
-
-      // Extract CNPJs
-      const cnpjMatches = extractCNPJs(text);
       let unidade_id: string | null = null;
-      if (cnpjMatches.length > 0) {
-        for (const cnpj of cnpjMatches) {
-          const cleaned = cleanCNPJ(cnpj);
-          const unidade = unidades.find(
-            (u) => u.cnpj && cleanCNPJ(u.cnpj) === cleaned
-          );
-          if (unidade) {
-            unidade_id = unidade.id;
-            break;
-          }
-        }
+      if (cnpj) {
+        const cleanedCnpj = cleanCNPJ(cnpj);
+        const unidade = unidades.find((u) => u.cnpj && cleanCNPJ(u.cnpj) === cleanedCnpj);
+        unidade_id = unidade?.id ?? null;
       }
 
-      const dateInfo = extractMonthAndYear(text, docType);
-      const mes = dateInfo?.mes ?? null;
-      const ano = dateInfo?.ano ?? null;
-
-      const nomeMatch = text.match(/Nome:\s*([^\n]+)/i);
-      const nome = nomeMatch ? nomeMatch[1].trim() : "";
-      const cpfMatch = text.match(/CPF:\s*([^\n]+)/i);
-      const cpf = cpfMatch ? cleanCNPJ(cpfMatch[1]) : "";
-      const matriculaMatch = text.match(/Matrícula:\s*([^\n]+)/i);
-      const matricula = matriculaMatch ? matriculaMatch[1].trim() : null;
-
       const extractedData: ExtractedData = {
-        nome,
-        cpf,
-        matricula: matricula || "",
+        nome: nome ?? "",
+        cpf: cpf ?? "",
+        matricula: "",
         unidade_id,
-        mes,
-        ano,
+        mes: periodo?.mes ?? null,
+        ano: periodo?.ano ?? null,
       };
 
       return { data: extractedData, text };
@@ -375,15 +388,15 @@ export default function AdminDocumentosPage() {
     text: string,
     unidadesList: Unidade[]
   ): Promise<string | null> => {
-    const cnpjMatches = extractCNPJs(text);
-    for (const cnpj of cnpjMatches) {
-      const cleaned = cleanCNPJ(cnpj);
-      const unidade = unidadesList.find(
-        (u) => u.cnpj && cleanCNPJ(u.cnpj) === cleaned
-      );
-      if (unidade) return unidade.id;
-    }
-    return null;
+    const cnpj = extractCNPJFromText(text);
+    if (!cnpj) return null;
+
+    const cleaned = cleanCNPJ(cnpj);
+    const unidade = unidadesList.find(
+      (u) => u.cnpj && cleanCNPJ(u.cnpj) === cleaned
+    );
+
+    return unidade?.id ?? null;
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -487,12 +500,14 @@ export default function AdminDocumentosPage() {
               <div className="space-y-2">
                 <Label>Dados extraídos:</Label>
                 <div className="space-y-1 text-sm">
-                  <div><strong>Nome:</strong> {currentResult.extractedData.nome}</div>
-                  <div><strong>CPF:</strong> {currentResult.extractedData.cpf}</div>
+                  <div><strong>Nome:</strong> {currentResult.extractedData.nome || "N/A"}</div>
+                  <div><strong>CPF:</strong> {currentResult.extractedData.cpf || "N/A"}</div>
                   <div><strong>Matrícula:</strong> {currentResult.extractedData.matricula || "N/A"}</div>
                   <div>
                     <strong>Mês/Ano:</strong> 
-                    {currentResult.extractedData.mes}/{currentResult.extractedData.ano || "N/A"}
+                    {currentResult.extractedData.mes && currentResult.extractedData.ano
+                      ? `${String(currentResult.extractedData.mes).padStart(2, "0")}/${currentResult.extractedData.ano}`
+                      : "N/A"}
                   </div>
                   <div>
                     <strong>Unidade (do CNPJ):</strong> 
