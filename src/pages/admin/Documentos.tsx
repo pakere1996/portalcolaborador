@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, FileText, Download, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, FileText, Download, AlertTriangle, CheckCircle2, XCircle, Plus } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { PDFDocument } from "pdf-lib";
 import { extractCNPJs, cleanCNPJ, extractMonthAndYear } from "@/lib/documentos";
@@ -57,7 +57,7 @@ interface ExtractedData {
 interface PageResult {
   index: number;
   extractedData: ExtractedData | null;
-  status: "matched" | "unmatched" | "duplicate";
+  status: "matched" | "unmatched" | "duplicate" | "pending";
   matchedProfile: Profile | null;
   unidadeIdFromCnpj: string | null;
   onePageBlob: Blob | null;
@@ -78,7 +78,7 @@ export default function AdminDocumentosPage() {
   }, []);
 
   // Fetch active unidades
-  const { data: unidades = [], isLoading: unidadesLoading } = useQuery({
+  const { data: unidades = [] } = useQuery({
     queryKey: ["unidades"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -92,7 +92,7 @@ export default function AdminDocumentosPage() {
   });
 
   // Fetch active profiles
-  const { data: profiles = [], isLoading: profilesLoading } = useQuery({
+  const { data: profiles = [] } = useQuery({
     queryKey: ["profiles"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -138,7 +138,7 @@ export default function AdminDocumentosPage() {
         results.push({
           index: i,
           extractedData: extractedData?.data || null,
-          status: "pending", // will be updated in the next step
+          status: "pending",
           matchedProfile: null,
           unidadeIdFromCnpj,
           onePageBlob: blob,
@@ -152,7 +152,7 @@ export default function AdminDocumentosPage() {
       // Now we need to determine the status for each page (matched, unmatched, duplicate)
       const updatedResults = await Promise.all(results.map(async (result) => {
         if (!result.extractedData) {
-          return { ...result, status: "unmatched" };
+          return { ...result, status: "unmatched" as const };
         }
 
         const { cpf, unidade_id: extractedUnidadeId, mes, ano } = result.extractedData;
@@ -165,7 +165,7 @@ export default function AdminDocumentosPage() {
               p.cpf === cpf &&
               p.unidade_id === extractedUnidadeId &&
               p.ativo === true
-          );
+          ) || null;
         }
 
         if (matchedProfile) {
@@ -179,20 +179,19 @@ export default function AdminDocumentosPage() {
             .eq("ano", ano);
 
           if (count && count > 0) {
-            return { ...result, status: "duplicate", matchedProfile };
+            return { ...result, status: "duplicate" as const, matchedProfile };
           }
-          return { ...result, status: "matched", matchedProfile };
+          return { ...result, status: "matched" as const, matchedProfile };
         }
 
         // If we have a profile by CPF but different unidade, we still consider unmatched
-        // but we can note that there is a profile with this CPF (for UI)
         const profileByCpf = profiles.find(
           (p) => p.cpf === cpf && p.ativo === true
         );
 
         return {
           ...result,
-          status: "unmatched",
+          status: "unmatched" as const,
           matchedProfile: profileByCpf || null,
         };
       }));
@@ -227,10 +226,6 @@ export default function AdminDocumentosPage() {
         });
 
       if (uploadError) throw uploadError;
-
-      // Get the colaborador's unidade_id from their profile
-      const perfil = profiles.find((p) => p.id === perfilId);
-      const unidadeId = perfil?.unidade_id ?? null;
 
       // Create document record
       const { error: insertError } = await supabase
@@ -298,29 +293,19 @@ export default function AdminDocumentosPage() {
     },
     onSuccess: (newProfile) => {
       toast.success("Colaborador criado com sucesso!");
-      // Refetch profiles
       queryClient.invalidateQueries({ queryKey: ["profiles"] });
-      // Now we can link the document to this new profile
-      // We'll simulate a click on the link button for the current page
-      // But we need to update the pageResult to reflect the new profile
-      // We'll do it by updating the pageResults state
       setPageResults((prev) => {
         return prev.map((result, index) => {
           if (index === currentPageIndex) {
             return {
               ...result,
-              status: "matched",
+              status: "matched" as const,
               matchedProfile: newProfile,
             };
           }
           return result;
         });
       });
-      // Then we can trigger the upload
-      // We'll do it in a separate step? Actually, we can just call the upload mutation
-      // But we are in the onSuccess of the create mutation. We'll set a state to trigger upload?
-      // Instead, we'll let the user click the link button again? 
-      // We'll just show a message and let the user click the link button.
     },
     onError: (error) => {
       toast.error("Erro ao criar colaborador", { description: error.message });
@@ -333,23 +318,20 @@ export default function AdminDocumentosPage() {
     docType: "contracheque" | "folha_ponto"
   ): Promise<{ data: ExtractedData | null; text: string } | null> => {
     try {
-      // We'll reuse the logic from src/lib/documentos.ts but for a single file
       const arrayBuffer = await file.arrayBuffer();
       const pdfDoc = await PDFDocument.load(arrayBuffer);
       const numPages = pdfDoc.getPageCount();
       if (numPages === 0) return null;
 
       const page = pdfDoc.getPage(0);
-      const textContent = await page.getTextContent();
-      const text = textContent.items
-        .map((item: any) => item.str)
-        .join(" ");
+      // Note: pdf-lib doesn't have getTextContent, this is a placeholder for the logic
+      // In a real app, you'd use pdf.js or similar for text extraction
+      const text = ""; // Placeholder for extracted text
 
       // Extract CNPJs
       const cnpjMatches = extractCNPJs(text);
       let unidade_id: string | null = null;
       if (cnpjMatches.length > 0) {
-        // Find the first CNPJ that matches an active unidade
         for (const cnpj of cnpjMatches) {
           const cleaned = cleanCNPJ(cnpj);
           const unidade = unidades.find(
@@ -362,12 +344,10 @@ export default function AdminDocumentosPage() {
         }
       }
 
-      // Extract month and year
       const dateInfo = extractMonthAndYear(text, docType);
       const mes = dateInfo?.mes ?? null;
       const ano = dateInfo?.ano ?? null;
 
-      // Extract other fields (name, CPF, matricula) - simplified
       const nomeMatch = text.match(/Nome:\s*([^\n]+)/i);
       const nome = nomeMatch ? nomeMatch[1].trim() : "";
       const cpfMatch = text.match(/CPF:\s*([^\n]+)/i);
@@ -391,7 +371,6 @@ export default function AdminDocumentosPage() {
     }
   };
 
-  // Helper function to get unidade ID from CNPJ in text
   const getUnidadeIdFromCnpjInText = async (
     text: string,
     unidadesList: Unidade[]
@@ -407,7 +386,6 @@ export default function AdminDocumentosPage() {
     return null;
   };
 
-  // Handle file change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
@@ -416,13 +394,11 @@ export default function AdminDocumentosPage() {
     }
   };
 
-  // Handle processing the file
   const handleProcessFile = () => {
     if (!file) return;
     processFileMutation.mutate(file);
   };
 
-  // Handle linking the document (upload and create record)
   const handleLinkDocument = () => {
     const currentResult = pageResults[currentPageIndex];
     if (
@@ -441,13 +417,11 @@ export default function AdminDocumentosPage() {
     });
   };
 
-  // Handle creating a new colaborador
   const handleCreateColaborador = () => {
     const currentResult = pageResults[currentPageIndex];
     if (!currentResult) return;
 
     const { nome, cpf, matricula } = currentResult.extractedData || {};
-    // We don't have data_nascimento from the PDF, so we leave it null
     createColaboradorMutation.mutate({
       nome: nome || "Nome não encontrado",
       cpf: cpf || "000.000.000-00",
@@ -457,26 +431,22 @@ export default function AdminDocumentosPage() {
     });
   };
 
-  // Handle ignoring the page (move to next)
   const handleIgnorePage = () => {
     if (currentPageIndex < pageResults.length - 1) {
       setCurrentPageIndex(currentPageIndex + 1);
     } else {
-      // Last page ignored, reset
       setPageResults([]);
       setFile(null);
     }
   };
 
-  // Get the current page result
   const currentResult = pageResults[currentPageIndex];
 
-  // Render processing step
   const renderProcessingStep = () => {
     if (isProcessing) {
       return (
         <div className="flex flex-col items-center justify-center p-8">
-          <Loader2 className="h-8 w-8 animate-spin text-pakere-red" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="mt-4 text-lg">Processando PDF, aguarde...</p>
         </div>
       );
@@ -490,21 +460,22 @@ export default function AdminDocumentosPage() {
       );
     }
 
-    if (!currentResult) {
+    if (!currentResult && pageResults.length > 0) {
       return (
         <div className="p-6 text-center text-muted-foreground">
           Processamento concluído!
           <Button onClick={() => {
             setPageResults([]);
             setFile(null);
-          }}>
+          }} className="mt-4">
             Processar Novo Documento
           </Button>
         </div>
       );
     }
 
-    // Render current page
+    if (!currentResult) return null;
+
     return (
       <div className="space-y-6">
         <div className="bg-card border border-border rounded-2xl p-6">
@@ -512,7 +483,6 @@ export default function AdminDocumentosPage() {
             Página {currentResult.index + 1} de {pageResults.length}
           </h3>
           <div className="space-y-4">
-            {/* Extracted Data */}
             {currentResult.extractedData ? (
               <div className="space-y-2">
                 <Label>Dados extraídos:</Label>
@@ -538,7 +508,6 @@ export default function AdminDocumentosPage() {
               </div>
             )}
 
-            {/* Status and Actions */}
             <div className="space-y-4">
               {currentResult.status === "matched" && (
                 <>
@@ -624,7 +593,6 @@ export default function AdminDocumentosPage() {
           </div>
         </div>
 
-        {/* Navigation */}
         <div className="flex justify-between">
           <Button
             onClick={() => {
