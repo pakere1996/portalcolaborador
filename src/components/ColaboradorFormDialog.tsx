@@ -36,7 +36,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { maskCNPJ } from "@/lib/utils"; // Import maskCNPJ
+import { maskCNPJ } from "@/lib/utils";
 
 const formSchema = z.object({
   nome: z.string().min(2, { message: "O nome deve ter pelo menos 2 caracteres." }),
@@ -47,7 +47,7 @@ const formSchema = z.object({
   data_admissao: z.date().optional().nullable(),
   data_nascimento: z.date().optional().nullable(),
   folga_fixa_semana: z.string().optional().nullable(),
-  unidade_id: z.string().uuid({ message: "A unidade é obrigatória." }), // Made mandatory
+  unidade_id: z.string().uuid({ message: "A unidade é obrigatória." }),
   endereco: z.string().optional().nullable(),
   email_contato: z.string().email("Email inválido.").optional().nullable(),
   whatsapp: z.string().optional().nullable(),
@@ -87,10 +87,6 @@ const upsertProfile = async (values: ProfileFormValues, profileId?: string) => {
       .eq("id", profileId);
     if (error) throw error;
   } else {
-    // This path is usually for admin creating a profile linked to an existing auth.user
-    // For simplicity here, we assume the profile already exists or is being created via a different flow (like signup)
-    // Since this component is used in Admin/Colaboradores, we'll assume we are updating an existing profile or creating a placeholder.
-    // However, the current schema requires an auth.user ID. We'll keep the update logic for now.
     throw new Error("Criação de novo colaborador via formulário não suportada diretamente. Use o fluxo de aprovação.");
   }
 };
@@ -117,7 +113,7 @@ export function ColaboradorFormDialog({
     data_admissao: profile?.data_admissao ? new Date(profile.data_admissao) : null,
     data_nascimento: profile?.data_nascimento ? new Date(profile.data_nascimento) : null,
     folga_fixa_semana: profile?.folga_fixa_semana?.toString() || "",
-    unidade_id: profile?.unidade_id || "", // Initialize with existing or empty string
+    unidade_id: profile?.unidade_id || "",
     endereco: profile?.endereco || "",
     email_contato: profile?.email_contato || "",
     whatsapp: profile?.whatsapp || "",
