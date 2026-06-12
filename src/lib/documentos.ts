@@ -69,7 +69,7 @@ export function extractCNPJs(text: string): string[] {
   return text.match(regex) || [];
 }
 
-export function extractMonthAndYear(text: string, docType: "contracheque" | "folha_ponto"): { mes: number; ano: number } | null {
+export function extractPeriodoFromText(text: string, docType: "contracheque" | "folha_ponto"): { mes: number; ano: number } | null {
   const meses: Record<string, number> = {
     janeiro: 1,
     fevereiro: 2,
@@ -85,7 +85,7 @@ export function extractMonthAndYear(text: string, docType: "contracheque" | "fol
     dezembro: 12,
   };
 
-  // Try to match "Período de referência: de XX/XX/XXXX" format
+  // Try to match "Período de referência: de XX/XX/XXXX" format (common in folha de ponto)
   const matchPonto = text.match(/Per[íi]odo de refer[êe]ncia:\s*de\s*(\d{2})\/(\d{2})\/(\d{4})/i);
   if (matchPonto) {
     return { mes: parseInt(matchPonto[2]), ano: parseInt(matchPonto[3]) };
@@ -96,6 +96,12 @@ export function extractMonthAndYear(text: string, docType: "contracheque" | "fol
   if (matchContracheque) {
     const mes = meses[matchContracheque[1].toLowerCase()];
     if (mes) return { mes, ano: parseInt(matchContracheque[2]) };
+  }
+
+  // Try to match "Competência: MM/YYYY" or similar
+  const matchCompetencia = text.match(/Compet[eê]ncia:?\s*(\d{2})\/(\d{4})/i);
+  if (matchCompetencia) {
+    return { mes: parseInt(matchCompetencia[1]), ano: parseInt(matchCompetencia[2]) };
   }
 
   return null;
