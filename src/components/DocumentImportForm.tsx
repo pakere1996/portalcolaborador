@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +12,6 @@ interface DocumentImportFormProps {
 }
 
 export function DocumentImportForm({ onSuccess }: DocumentImportFormProps) {
-  const { toast } = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -28,19 +27,15 @@ export function DocumentImportForm({ onSuccess }: DocumentImportFormProps) {
         "text/plain",
       ];
       if (!allowedTypes.includes(selectedFile.type)) {
-        toast({
-          title: "Tipo de arquivo inválido",
+        toast.error("Tipo de arquivo inválido", {
           description: "Por favor, selecione um arquivo PDF, DOC, DOCX ou TXT.",
-          variant: "destructive",
         });
         return;
       }
       // Validate file size (max 10MB)
       if (selectedFile.size > 10 * 1024 * 1024) {
-        toast({
-          title: "Arquivo muito grande",
+        toast.error("Arquivo muito grande", {
           description: "O arquivo deve ter no máximo 10MB.",
-          variant: "destructive",
         });
         return;
       }
@@ -68,27 +63,22 @@ export function DocumentImportForm({ onSuccess }: DocumentImportFormProps) {
 
       if (response.ok) {
         setImportResult({ success: true, message: data.message || "Documento importado com sucesso!" });
-        toast({
-          title: "Sucesso",
+        toast.success("Sucesso", {
           description: data.message || "Documento importado com sucesso!",
         });
         onSuccess?.();
         setFile(null);
       } else {
         setImportResult({ success: false, message: data.error || "Erro ao importar documento" });
-        toast({
-          title: "Erro",
+        toast.error("Erro", {
           description: data.error || "Erro ao importar documento",
-          variant: "destructive",
         });
       }
     } catch (error) {
       console.error("Import error:", error);
       setImportResult({ success: false, message: "Erro de conexão. Tente novamente." });
-      toast({
-        title: "Erro",
+      toast.error("Erro", {
         description: "Erro de conexão. Tente novamente.",
-        variant: "destructive",
       });
     } finally {
       setIsImporting(false);
