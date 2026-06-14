@@ -1,8 +1,10 @@
 import * as pdfjs from 'pdfjs-dist';
 
-// Configuração do Worker do PDF.js
-// Utilizamos o CDN para garantir compatibilidade imediata no ambiente do navegador
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+// Configuração do Worker utilizando o recurso de URL do Vite para carregar o arquivo localmente
+// @ts-ignore - O sufixo ?url é uma funcionalidade do Vite
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker?url';
+
+pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 export interface PageText {
   pageNumber: number;
@@ -25,11 +27,12 @@ export async function extractTextFromPDF(file: File): Promise<PageText[]> {
     // Une os fragmentos de texto da página em uma única string
     const text = textContent.items
       .map((item: any) => item.str)
-      .join(' ');
+      .join(' ')
+      .trim();
     
     results.push({
       pageNumber: i,
-      text: text.trim()
+      text: text
     });
   }
 

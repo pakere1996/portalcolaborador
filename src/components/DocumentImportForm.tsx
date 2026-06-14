@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Upload, FileText, X, Loader2, Bug, FileSearch } from "lucide-react";
+import { Upload, FileText, X, Loader2, FileSearch } from "lucide-react";
 import { extractTextFromPDF } from "@/lib/pdf-utils";
 
 export function DocumentImportForm() {
@@ -23,21 +23,25 @@ export function DocumentImportForm() {
       // FASE 1: Comprovação de Leitura de PDF
       if (file.type === "application/pdf") {
         setIsExtracting(true);
-        console.log(`%c[Fase 1] Iniciando extração de texto: ${file.name}`, "color: #e30f27; font-weight: bold;");
+        console.log(`%c[Fase1] Iniciando leitura do arquivo: ${file.name}`, "color: #e30f27; font-weight: bold;");
         
         try {
           const pages = await extractTextFromPDF(file);
-          console.log(`%c[Fase 1] Extração concluída. Total de páginas: ${pages.length}`, "color: #34A853; font-weight: bold;");
+          console.log(`[Fase1] Total de páginas: ${pages.length}`);
           
           pages.forEach(p => {
-            console.log(`Página ${p.pageNumber}: ${p.text.length} caracteres extraídos.`);
-            // Log de amostra dos primeiros 100 caracteres para conferência
-            console.debug(`Amostra pág ${p.pageNumber}: ${p.text.substring(0, 100)}...`);
+            if (!p.text) {
+              console.warn(`[Fase1] Nenhum texto encontrado na página ${p.pageNumber}`);
+            } else {
+              console.log(`%cPágina ${p.pageNumber}:`, "font-weight: bold;");
+              console.log(`- Quantidade de caracteres: ${p.text.length}`);
+              console.log(`- Primeiros 300 caracteres: ${p.text.substring(0, 300)}...`);
+            }
           });
           
           toast.info(`PDF lido com sucesso: ${pages.length} páginas processadas.`);
         } catch (err) {
-          console.error("[Fase 1] Erro na extração de texto do PDF:", err);
+          console.error("[Fase1] Erro na extração de texto do PDF:", err);
           toast.error("Erro ao ler conteúdo do PDF. Verifique o console.");
         } finally {
           setIsExtracting(false);
@@ -51,7 +55,6 @@ export function DocumentImportForm() {
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (file) {
-      // Dispara o mesmo fluxo do input manual
       const mockEvent = { target: { files: [file] } } as any;
       handleFileChange(mockEvent);
     }
