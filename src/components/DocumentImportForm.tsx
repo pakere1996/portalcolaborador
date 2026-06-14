@@ -5,9 +5,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Upload, FileText, X, Loader2, FileSearch, SearchCode } from "lucide-react";
+import { Upload, FileText, X, Loader2, FileSearch, SearchCode, ClipboardCheck } from "lucide-react";
 import { extractTextFromPDF } from "@/lib/pdf-utils";
-import { extractCNPJFromText, extractPeriodoFromText } from "@/lib/documentos";
 
 export function DocumentImportForm() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -23,42 +22,74 @@ export function DocumentImportForm() {
       
       if (file.type === "application/pdf") {
         setIsExtracting(true);
-        console.log(`%c[Fase1] Iniciando leitura do arquivo: ${file.name}`, "color: #e30f27; font-weight: bold;");
+        console.log(`%c[Diagnóstico] Iniciando análise de qualidade: ${file.name}`, "color: #e30f27; font-weight: bold; font-size: 14px;");
         
         try {
           const pages = await extractTextFromPDF(file);
-          console.log(`[Fase1] Total de páginas: ${pages.length}`);
+          const diagnosticData: any[] = [];
           
+          let namesFound = 0;
+          let matriculasFound = 0;
+          let cnpjsFound = 0;
+          let periodsFound = 0;
+
           pages.forEach(p => {
-            // Logs da Fase 1
-            if (!p.text) {
-              console.warn(`[Fase1] Nenhum texto encontrado na página ${p.pageNumber}`);
-            } else {
-              console.log(`%cPágina ${p.pageNumber}:`, "font-weight: bold;");
-              console.log(`- Quantidade de caracteres: ${p.text.length}`);
-              console.log(`- Primeiros 300 caracteres: ${p.text.substring(0, 300)}...`);
+            const text = p.text;
 
-              // FASE 2: Validação de Extração
-              console.log(`%c[Fase2] Processando extração da Página ${p.pageNumber}`, "color: #4285F4; font-weight: bold;");
-              
-              const periodo = extractPeriodoFromText(p.text, "folha_ponto");
-              const cnpj = extractCNPJFromText(p.text);
+            // 1. Regex para CNPJ
+            const cnpjMatch = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
+            const cnpj = cnpjMatch ? cnpjMatch[0] : null;
 
-              console.log(`Período identificado: ${periodo ? `${String(periodo.mes).padStart(2, '0')}/${periodo.ano}` : "Não identificado"}`);
-              console.log(`CNPJ identificado: ${cnpj || "Não identificado"}`);
+            // 2. Regex para Matrícula (Padrão 10 dígitos, ex: 0000000148)
+            const matriculaMatch = text.match(/\b\d{10}\b/);
+            const matricula = matriculaMatch ? matriculaMatch[0] : null;
 
-              // Log especial para período bruto (padrão comum em folhas de ponto)
-              const rawPeriodMatch = p.text.match(/de\s+(\d{2}\/\d{2}\/\d{4})\s+(?:a|à)\s+(\d{2}\/\d{2}\/\d{4})/i);
-              if (rawPeriodMatch) {
-                console.log(`%c[Fase2] Período bruto encontrado: ${rawPeriodMatch[1]} -> ${rawPeriodMatch[2]}`, "color: #FBBC05; font-weight: bold;");
-              }
-            }
+            // 3. Regex para Nome (Entre data de admissão e matrícula)
+            // Assume formato: DD/MM/AAAA NOME MATRICULA
+            const nameMatch = text.match(/\d{2}\/\d{2}\/\d{4}\s+([A-Z\s]{3,})\s+\d{10}/);
+            const nome = nameMatch ? nameMatch[1].trim() : null;
+
+            // 4. Regex para Período de Referência
+            const periodMatch = text.match(/Período de referência:\s*de\s*(\d{2}\/\d{2}\/\d{4})\s+(?:a|à)\s+(\d{2}\/\d{2}\/\d{4})/i);
+            const periodo = periodMatch ? `${periodMatch[1]} -> ${periodMatch[2]}` : null;
+
+            // Contabilização
+            if (nome) namesFound++;
+            if (matricula) matriculasFound++;
+            if (cnpj) cnpjsFound++;
+            if (periodo) periodsFound++;
+
+            diagnosticData.push({
+              "Página": p.pageNumber,
+              "Nome": nome || "❌ Não encontrado",
+              "Matrícula": matricula || "❌ Não encontrada",
+              "CNPJ": cnpj || "❌ Não encontrado",
+              "Período": periodo || "❌ Não identificado",
+              "Caracteres": text.length
+            });
           });
+
+          // Exibição da Tabela
+          console.table(diagnosticData);
+
+          // Resumo Final
+          console.log(`%c[Resumo do Diagnóstico]`, "font-weight: bold; font-size: 12px;");
+          console.log(`- Total de páginas: ${pages.length}`);
+          console.log(`- Nomes encontrados: ${namesFound}`);
+          console.log(`- Matrículas encontradas: ${matriculasFound}`);
+          console.log(`- CNPJs encontrados: ${cnpjsFound}`);
+          console.log(`- Períodos encontrados: ${periodsFound}`);
+
+          if (namesFound === pages.length && matriculasFound === pages.length) {
+            console.log("%c✅ Qualidade de extração excelente (100% de identificação)", "color: #34A853; font-weight: bold;");
+          } else {
+            console.warn("%c⚠️ Qualidade de extração parcial. Verifique as falhas na tabela acima.", "color: #FBBC05; font-weight: bold;");
+          }
           
-          toast.info(`PDF processado: ${pages.length} páginas analisadas. Verifique o console.`);
+          toast.info(`Diagnóstico concluído: ${pages.length} páginas analisadas. Verifique o console.`);
         } catch (err) {
-          console.error("[Fase1/2] Erro no processamento do PDF:", err);
-          toast.error("Erro ao analisar PDF. Verifique o console.");
+          console.error("[Diagnóstico] Erro crítico:", err);
+          toast.error("Erro ao executar diagnóstico. Verifique o console.");
         } finally {
           setIsExtracting(false);
         }
@@ -142,7 +173,7 @@ export function DocumentImportForm() {
               <Upload className="size-8 text-muted-foreground" />
             )}
             <p className="text-sm text-muted-foreground">
-              {isExtracting ? "Analisando conteúdo..." : "Arraste um arquivo ou clique para selecionar"}
+              {isExtracting ? "Executando diagnóstico..." : "Arraste um arquivo ou clique para selecionar"}
             </p>
             <p className="text-xs text-muted-foreground">
               PDF, DOC, DOCX, JPG, PNG
@@ -193,11 +224,8 @@ export function DocumentImportForm() {
       </Button>
 
       <div className="pt-2 flex flex-col gap-1">
-        <div className="flex items-center gap-2 text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
-          <FileSearch className="size-3" /> Fase 1: Extração de Texto Ativa
-        </div>
-        <div className="flex items-center gap-2 text-[10px] text-blue-500 uppercase font-bold tracking-widest">
-          <SearchCode className="size-3" /> Fase 2: Validação de Inteligência Ativa
+        <div className="flex items-center gap-2 text-[10px] text-emerald-600 uppercase font-bold tracking-widest">
+          <ClipboardCheck className="size-3" /> Diagnóstico de Qualidade Ativo
         </div>
       </div>
     </div>
