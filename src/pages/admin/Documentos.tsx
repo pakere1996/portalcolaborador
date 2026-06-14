@@ -333,7 +333,7 @@ export default function AdminDocumentosPage() {
 
       let nome = match[1].trim();
       nome = nome
-        .replace(/^(NOME|FUNCION[ÁA]RIO|COLABORADOR)\s*[:\-]?/i, "")
+        .replace(/^(NOME|FUNCIONÁRIO|COLABORADOR)\s*[:\-]?/i, "")
         .trim()
         .replace(/\s{2,}/g, " ");
 
