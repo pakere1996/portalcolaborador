@@ -85,7 +85,6 @@ export function extractPeriodoFromText(text: string, docType: "contracheque" | "
     dezembro: 12,
   };
 
-  // Normalize text for better matching
   const normalizedText = text
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -93,44 +92,37 @@ export function extractPeriodoFromText(text: string, docType: "contracheque" | "
     .replace(/\f/g, " ")
     .replace(/\s+/g, " ");
 
-  // Pattern 1: "Período de referência: de XX/XX/XXXX" (common in folha de ponto)
   const matchPonto1 = normalizedText.match(/Periodo de referencia:\s*de\s*(\d{2})\/(\d{2})\/(\d{4})/i);
   if (matchPonto1) {
     return { mes: parseInt(matchPonto1[1]), ano: parseInt(matchPonto1[3]) };
   }
 
-  // Pattern 2: "Mês de XXXX" format (common in contracheques)
   const matchContracheque = normalizedText.match(/(\w+)\s+de\s+(\d{4})/i);
   if (matchContracheque) {
     const mes = meses[matchContracheque[1].toLowerCase()];
     if (mes) return { mes, ano: parseInt(matchContracheque[2]) };
   }
 
-  // Pattern 3: "Competência: MM/YYYY" or similar
   const matchCompetencia = normalizedText.match(/Competencia:\s*(\d{2})\/(\d{4})/i);
   if (matchCompetencia) {
     return { mes: parseInt(matchCompetencia[1]), ano: parseInt(matchCompetencia[2]) };
   }
 
-  // Pattern 4: "Referência: MM/YYYY" 
   const matchReferencia = normalizedText.match(/Referencia:\s*(\d{2})\/(\d{4})/i);
   if (matchReferencia) {
     return { mes: parseInt(matchReferencia[1]), ano: parseInt(matchReferencia[2]) };
   }
 
-  // Pattern 5: "Periodo: MM/YYYY"
   const matchPeriodo = normalizedText.match(/Periodo:\s*(\d{2})\/(\d{4})/i);
   if (matchPeriodo) {
     return { mes: parseInt(matchPeriodo[1]), ano: parseInt(matchPeriodo[2]) };
   }
 
-  // Pattern 6: "MM/YYYY" at the beginning or after keywords
   const matchDatePattern = normalizedText.match(/(?:Referencia|Competencia|Periodo|Mes)[^\d]*(\d{2})\/(\d{4})/i);
   if (matchDatePattern) {
     return { mes: parseInt(matchDatePattern[1]), ano: parseInt(matchDatePattern[2]) };
   }
 
-  // Pattern 7: Try to find any MM/YYYY pattern as fallback
   const matchAnyDate = normalizedText.match(/\b(0[1-9]|1[0-2])\/(\d{4})\b/);
   if (matchAnyDate) {
     return { mes: parseInt(matchAnyDate[1]), ano: parseInt(matchAnyDate[2]) };
