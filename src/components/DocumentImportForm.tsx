@@ -1,18 +1,17 @@
 import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Upload, FileText, X, Loader2 } from "lucide-react";
-
-const IMPORT_FUNCTION_URL = "https://pjogistzpszkcjucktrv.supabase.co/functions/v1/import-documentos";
+import { Upload, FileText, X, Loader2, Bug } from "lucide-react";
 
 export function DocumentImportForm() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const { session } = useAuth();
+  const { user } = useAuth();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -42,10 +41,17 @@ export function DocumentImportForm() {
 
   const handleUpload = async () => {
     if (!selectedFile) return;
-    if (!session?.access_token) {
-      toast.error("Sessão expirada. Faça login novamente.");
-      return;
-    }
+
+    // LOG DIAGNÓSTICO: Antes da chamada
+    console.log("[Diagnostic] Iniciando upload via Edge Function", {
+      functionName: "import-documentos",
+      payload: {
+        fileName: selectedFile.name,
+        fileSize: selectedFile.size,
+        fileType: selectedFile.type
+      },
+      authenticatedUser: user?.email || "Não identificado"
+    });
 
     setIsUploading(true);
 
@@ -53,25 +59,37 @@ export function DocumentImportForm() {
     formData.append("file", selectedFile);
 
     try {
-      const response = await fetch(IMPORT_FUNCTION_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
+      // Usando o método recomendado invoke
+      const { data, error } = await supabase.functions.invoke("import-documentos", {
         body: formData,
       });
 
-      const result = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(result.error || "Erro ao importar documento");
+      if (error) {
+        // LOG DIAGNÓSTICO: Erro retornado pela função
+        console.error("[Diagnostic] Erro retornado pela Edge Function:", {
+          message: error.message,
+          name: error.name,
+          stack: error.stack,
+          status: (error as any).status || "N/A"
+        });
+        throw error;
       }
 
-      toast.success(result.message || "Documento importado com sucesso!");
+      // LOG DIAGNÓSTICO: Sucesso
+      console.log("[Diagnostic] Resposta de sucesso recebida:", data);
+      
+      toast.success(data.message || "Documento importado com sucesso!");
       setSelectedFile(null);
-    } catch (error) {
+    } catch (error: any) {
+      // LOG DIAGNÓSTICO: Exceção capturada (Network error ou outros)
+      console.error("[Diagnostic] Exceção capturada no frontend:", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
+
       toast.error("Erro ao importar documento", {
-        description: (error as Error).message,
+        description: error.message || "Falha na comunicação com o servidor. Verifique o console para detalhes.",
       });
     } finally {
       setIsUploading(false);
@@ -141,7 +159,7 @@ export function DocumentImportForm() {
         {isUploading ? (
           <>
             <Loader2 className="size-4 mr-2 animate-spin" />
-            Importando...
+            Processando...
           </>
         ) : (
           <>
@@ -150,6 +168,10 @@ export function DocumentImportForm() {
           </>
         )}
       </Button>
+
+      <div className="pt-2 flex items-center gap-2 text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+        <Bug className="size-3" /> Modo de Diagnóstico Ativo
+      </div>
     </div>
   );
 }
