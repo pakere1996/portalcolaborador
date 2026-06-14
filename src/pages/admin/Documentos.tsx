@@ -6,11 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, FileText, Plus } from "lucide-react";
+import { Loader2, FileText, Plus, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { PDFDocument } from "pdf-lib";
-import { getDocument } from "pdfjs-dist";
+import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import { extractCNPJFromText, cleanCNPJ, extractPeriodoFromText } from "@/lib/documentos";
+
+// Configure PDF.js worker
+GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${"4.8.69"}/pdf.worker.min.mjs`;
 
 const DOCUMENT_TYPE_MAP: Record<string, "contracheque" | "folha_ponto"> = {
   "/admin/documentos": "contracheque",
@@ -113,28 +116,40 @@ export default function AdminDocumentosPage() {
       const results: PageResult[] = [];
 
       for (let i = 0; i < numPages; i++) {
-        const singlePagePdf = await PDFDocument.create();
-        const [copiedPage] = await singlePagePdf.copyPages(pdfDoc, [i]);
-        singlePagePdf.addPage(copiedPage);
-        const singlePagePdfBytes = await singlePagePdf.save();
-        const blob = new Blob([singlePagePdfBytes], { type: "application/pdf" });
-        const singlePageFile = new File([blob], `page_${i}.pdf`, { type: "application/pdf" });
+        try {
+          const singlePagePdf = await PDFDocument.create();
+          const [copiedPage] = await singlePagePdf.copyPages(pdfDoc, [i]);
+          singlePagePdf.addPage(copiedPage);
+          const singlePagePdfBytes = await singlePagePdf.save();
+          const blob = new Blob([singlePagePdfBytes], { type: "application/pdf" });
+          const singlePageFile = new File([blob], `page_${i}.pdf`, { type: "application/pdf" });
 
-        const extractedData = await extractDataFromPdfFile(singlePageFile, documentType);
+          const extractedData = await extractDataFromPdfFile(singlePageFile, documentType);
 
-        const unidadeIdFromCnpj = await getUnidadeIdFromCnpjInText(
-          extractedData?.text || "",
-          unidades
-        );
+          const unidadeIdFromCnpj = await getUnidadeIdFromCnpjInText(
+            extractedData?.text || "",
+            unidades
+          );
 
-        results.push({
-          index: i,
-          extractedData: extractedData?.data || null,
-          status: "pending",
-          matchedProfile: null,
-          unidadeIdFromCnpj,
-          onePageBlob: blob,
-        });
+          results.push({
+            index: i,
+            extractedData: extractedData?.data || null,
+            status: "pending",
+            matchedProfile: null,
+            unidadeIdFromCnpj,
+            onePageBlob: blob,
+          });
+        } catch (pageError) {
+          console.error(`Error processing page ${i}:`, pageError);
+          results.push({
+            index: i,
+            extractedData: null,
+            status: "unmatched",
+            matchedProfile: null,
+            unidadeIdFromCnpj: null,
+            onePageBlob: null,
+          });
+        }
       }
 
       setIsProcessing(false);
@@ -189,6 +204,7 @@ export default function AdminDocumentosPage() {
     },
     onError: (error) => {
       setIsProcessing(false);
+      console.error("PDF processing error:", error);
       toast.error("Erro ao processar o arquivo", { description: error.message });
     },
   });
@@ -240,6 +256,7 @@ export default function AdminDocumentosPage() {
     },
     onError: (error) => {
       setIsUploading(false);
+      console.error("Upload error:", error);
       toast.error("Erro ao vincular documento", { description: error.message });
     },
   });
@@ -291,28 +308,34 @@ export default function AdminDocumentosPage() {
       });
     },
     onError: (error) => {
+      console.error("Create collaborator error:", error);
       toast.error("Erro ao criar colaborador", { description: error.message });
     },
   });
 
   const extractPdfTextFromFile = async (file: File): Promise<string> => {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await getDocument({ data: arrayBuffer }).promise;
-    const pageTexts: string[] = [];
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await getDocument({ data: arrayBuffer }).promise;
+      const pageTexts: string[] = [];
 
-    for (let i = 0; i < pdf.numPages; i++) {
-      const page = await pdf.getPage(i + 1);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item: any) => ("str" in item ? item.str : ""))
-        .join(" ");
+      for (let i = 0; i < pdf.numPages; i++) {
+        const page = await pdf.getPage(i + 1);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item: any) => ("str" in item ? item.str : ""))
+          .join(" ");
 
-      if (pageText.trim()) {
-        pageTexts.push(pageText);
+        if (pageText.trim()) {
+          pageTexts.push(pageText);
+        }
       }
-    }
 
-    return pageTexts.join("\n");
+      return pageTexts.join("\n");
+    } catch (error) {
+      console.error("PDF text extraction error:", error);
+      throw new Error("Falha ao extrair texto do PDF");
+    }
   };
 
   const extractNomeFromText = (text: string): string | null => {
@@ -492,14 +515,29 @@ export default function AdminDocumentosPage() {
     return (
       <div className="space-y-6">
         <div className="bg-card border border-border rounded-2xl p-6">
-          <h3 className="text-lg font-semibold">
-            Página {currentResult.index + 1} de {pageResults.length}
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">
+              Página {currentResult.index + 1} de {pageResults.length}
+            </h3>
+            <span className={cn(
+              "text-xs font-bold px-2 py-1 rounded-full",
+              currentResult.status === "matched" && "bg-green-100 text-green-800",
+              currentResult.status === "unmatched" && "bg-yellow-100 text-yellow-800",
+              currentResult.status === "duplicate" && "bg-red-100 text-red-800",
+              currentResult.status === "pending" && "bg-gray-100 text-gray-800",
+            )}>
+              {currentResult.status === "matched" && "Encontrado"}
+              {currentResult.status === "unmatched" && "Não Encontrado"}
+              {currentResult.status === "duplicate" && "Duplicado"}
+              {currentResult.status === "pending" && "Processando"}
+            </span>
+          </div>
+          
           <div className="space-y-4">
             {currentResult.extractedData ? (
               <div className="space-y-2">
                 <Label>Dados extraídos:</Label>
-                <div className="space-y-1 text-sm">
+                <div className="grid grid-cols-2 gap-2 text-sm">
                   <div><strong>Nome:</strong> {currentResult.extractedData.nome || "N/A"}</div>
                   <div><strong>CPF:</strong> {currentResult.extractedData.cpf || "N/A"}</div>
                   <div><strong>Matrícula:</strong> {currentResult.extractedData.matricula || "N/A"}</div>
@@ -523,12 +561,13 @@ export default function AdminDocumentosPage() {
               </div>
             )}
 
-            <div className="space-y-4">
+            <div className="space-y-4 pt-4 border-t">
               {currentResult.status === "matched" && (
                 <>
                   <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                     <Label>Status:</Label>
-                    <p className="text-green-600 font-semibold">
+                    <p className="text-green-600 font-semibold flex items-center gap-2">
+                      <CheckCircle2 className="size-4" />
                       Colaborador encontrado: {currentResult.matchedProfile?.nome}
                     </p>
                   </div>
@@ -551,7 +590,8 @@ export default function AdminDocumentosPage() {
                 <>
                   <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                     <Label>Status:</Label>
-                    <p className="text-yellow-600 font-semibold">
+                    <p className="text-yellow-600 font-semibold flex items-center gap-2">
+                      <AlertCircle className="size-4" />
                       Colaborador não encontrado automaticamente
                     </p>
                     {currentResult.matchedProfile && (
@@ -591,7 +631,8 @@ export default function AdminDocumentosPage() {
                 <>
                   <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
                     <Label>Status:</Label>
-                    <p className="text-red-600 font-semibold">
+                    <p className="text-red-600 font-semibold flex items-center gap-2">
+                      <AlertCircle className="size-4" />
                       Documento já existe para este colaborador, mês e ano
                     </p>
                   </div>
