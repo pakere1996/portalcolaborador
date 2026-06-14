@@ -5,24 +5,56 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Upload, FileText, X, Loader2, Bug } from "lucide-react";
+import { Upload, FileText, X, Loader2, Bug, FileSearch } from "lucide-react";
+import { extractTextFromPDF } from "@/lib/pdf-utils";
 
 export function DocumentImportForm() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
   const { user } = useAuth();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) setSelectedFile(file);
+    if (file) {
+      setSelectedFile(file);
+      
+      // FASE 1: Comprovação de Leitura de PDF
+      if (file.type === "application/pdf") {
+        setIsExtracting(true);
+        console.log(`%c[Fase 1] Iniciando extração de texto: ${file.name}`, "color: #e30f27; font-weight: bold;");
+        
+        try {
+          const pages = await extractTextFromPDF(file);
+          console.log(`%c[Fase 1] Extração concluída. Total de páginas: ${pages.length}`, "color: #34A853; font-weight: bold;");
+          
+          pages.forEach(p => {
+            console.log(`Página ${p.pageNumber}: ${p.text.length} caracteres extraídos.`);
+            // Log de amostra dos primeiros 100 caracteres para conferência
+            console.debug(`Amostra pág ${p.pageNumber}: ${p.text.substring(0, 100)}...`);
+          });
+          
+          toast.info(`PDF lido com sucesso: ${pages.length} páginas processadas.`);
+        } catch (err) {
+          console.error("[Fase 1] Erro na extração de texto do PDF:", err);
+          toast.error("Erro ao ler conteúdo do PDF. Verifique o console.");
+        } finally {
+          setIsExtracting(false);
+        }
+      }
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) setSelectedFile(file);
+    if (file) {
+      // Dispara o mesmo fluxo do input manual
+      const mockEvent = { target: { files: [file] } } as any;
+      handleFileChange(mockEvent);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -42,54 +74,22 @@ export function DocumentImportForm() {
   const handleUpload = async () => {
     if (!selectedFile) return;
 
-    // LOG DIAGNÓSTICO: Antes da chamada
-    console.log("[Diagnostic] Iniciando upload via Edge Function", {
-      functionName: "import-documentos",
-      payload: {
-        fileName: selectedFile.name,
-        fileSize: selectedFile.size,
-        fileType: selectedFile.type
-      },
-      authenticatedUser: user?.email || "Não identificado"
-    });
-
     setIsUploading(true);
-
     const formData = new FormData();
     formData.append("file", selectedFile);
 
     try {
-      // Usando o método recomendado invoke
       const { data, error } = await supabase.functions.invoke("import-documentos", {
         body: formData,
       });
 
-      if (error) {
-        // LOG DIAGNÓSTICO: Erro retornado pela função
-        console.error("[Diagnostic] Erro retornado pela Edge Function:", {
-          message: error.message,
-          name: error.name,
-          stack: error.stack,
-          status: (error as any).status || "N/A"
-        });
-        throw error;
-      }
-
-      // LOG DIAGNÓSTICO: Sucesso
-      console.log("[Diagnostic] Resposta de sucesso recebida:", data);
+      if (error) throw error;
       
       toast.success(data.message || "Documento importado com sucesso!");
       setSelectedFile(null);
     } catch (error: any) {
-      // LOG DIAGNÓSTICO: Exceção capturada (Network error ou outros)
-      console.error("[Diagnostic] Exceção capturada no frontend:", {
-        message: error.message,
-        name: error.name,
-        stack: error.stack
-      });
-
       toast.error("Erro ao importar documento", {
-        description: error.message || "Falha na comunicação com o servidor. Verifique o console para detalhes.",
+        description: error.message || "Falha na comunicação com o servidor.",
       });
     } finally {
       setIsUploading(false);
@@ -117,9 +117,13 @@ export function DocumentImportForm() {
             className="hidden"
           />
           <div className="flex flex-col items-center gap-2">
-            <Upload className="size-8 text-muted-foreground" />
+            {isExtracting ? (
+              <Loader2 className="size-8 text-primary animate-spin" />
+            ) : (
+              <Upload className="size-8 text-muted-foreground" />
+            )}
             <p className="text-sm text-muted-foreground">
-              Arraste um arquivo ou clique para selecionar
+              {isExtracting ? "Lendo conteúdo do PDF..." : "Arraste um arquivo ou clique para selecionar"}
             </p>
             <p className="text-xs text-muted-foreground">
               PDF, DOC, DOCX, JPG, PNG
@@ -144,7 +148,7 @@ export function DocumentImportForm() {
             size="sm"
             onClick={removeFile}
             type="button"
-            disabled={isUploading}
+            disabled={isUploading || isExtracting}
           >
             <X className="size-4" />
           </Button>
@@ -153,13 +157,13 @@ export function DocumentImportForm() {
 
       <Button
         onClick={() => void handleUpload()}
-        disabled={!selectedFile || isUploading}
+        disabled={!selectedFile || isUploading || isExtracting}
         className="w-full"
       >
         {isUploading ? (
           <>
             <Loader2 className="size-4 mr-2 animate-spin" />
-            Processando...
+            Enviando...
           </>
         ) : (
           <>
@@ -170,7 +174,7 @@ export function DocumentImportForm() {
       </Button>
 
       <div className="pt-2 flex items-center gap-2 text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
-        <Bug className="size-3" /> Modo de Diagnóstico Ativo
+        <FileSearch className="size-3" /> Fase 1: Extração de Texto Ativa
       </div>
     </div>
   );
