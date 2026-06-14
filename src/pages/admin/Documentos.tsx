@@ -1,3 +1,4 @@
+import { FileText } from "lucide-react";
 import { DocumentImportForm } from "@/components/DocumentImportForm";
 
 export default function DocumentosAdminPage() {
