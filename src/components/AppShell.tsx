@@ -17,8 +17,8 @@ import {
   FileText,
   FileWarning,
   Home,
-  Briefcase, // Using Briefcase for Cargos
-  Building2, // Using Building2 for Unidades
+  Briefcase,
+  Building2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [folgasOpen, setFolgasOpen] = useState(true);
   const [docsOpen, setDocsOpen] = useState(false);
-  const [cadastroOpen, setCadastroOpen] = useState(false); // New state for Cadastro menu
+  const [cadastroOpen, setCadastroOpen] = useState(false);
 
   useEffect(() => {
     setOpen(false);
@@ -45,7 +45,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (path.startsWith("/documentos") || path.startsWith("/admin/documentos")) {
       setDocsOpen(true);
     }
-    // Open Cadastro menu if any of its routes are active
     if (path.startsWith("/admin/colaboradores") || path.startsWith("/admin/cargos") || path.startsWith("/admin/unidades")) {
       setCadastroOpen(true);
     }
@@ -89,7 +88,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const folgaNav = isAdmin ? adminFolgaNav : employeeFolgaNav;
   const docsNav = isAdmin ? adminDocsNav : employeeDocsNav;
   
-  // A home agora é a rota principal
   const homePath = isAdmin ? "/admin/home" : "/home";
 
   const isDocsActive = path.startsWith("/documentos") || path.startsWith("/admin/documentos");
@@ -131,7 +129,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-180px)]">
-          {/* Link para a Home/Dashboard principal */}
           <Link
             to={homePath}
             className={cn(
@@ -145,7 +142,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span>Início</span>
           </Link>
 
-          {/* Menu Cadastro (Colaborador ou Admin) */}
           {isAdmin ? (
             <div className="space-y-1">
               <button
