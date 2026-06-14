@@ -1,188 +1,142 @@
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { importDocumentos } from "@/routes/api/admin/documentos/import";
+import { getSupabaseClient } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Upload, FileText, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { Upload, FileText, X } from "lucide-react";
 
-interface DocumentImportFormProps {
-  onSuccess?: () => void;
-}
+export function DocumentImportForm() {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
-export function DocumentImportForm({ onSuccess }: DocumentImportFormProps) {
-  const [file, setFile] = useState<File | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
+  const mutation = useMutation({
+    mutationFn: async (file: File) => {
+      const supabase = getSupabaseClient();
+      
+      // Upload to storage first
+      const fileName = file.name;
+      const fileExt = fileName.split('.').pop() || 'pdf';
+      const storagePath = `documentos/importados/${Date.now()}-${fileName}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documentos')
+        .upload(storagePath, file, {
+          contentType: file.type,
+          upsert: false
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // Then register in database
+      return importDocumentos({
+        fileName,
+        fileSize: file.size,
+        filePath: uploadData.path,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Documento importado com sucesso!");
+      setSelectedFile(null);
+    },
+    onError: (error: Error) => {
+      toast.error(`Erro ao importar documento: ${error.message}`);
+    },
+  });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      // Validate file type
-      const allowedTypes = [
-        "application/pdf",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "text/plain",
-      ];
-      if (!allowedTypes.includes(selectedFile.type)) {
-        toast.error("Tipo de arquivo inválido", {
-          description: "Por favor, selecione um arquivo PDF, DOC, DOCX ou TXT.",
-        });
-        return;
-      }
-      // Validate file size (max 10MB)
-      if (selectedFile.size > 10 * 1024 * 1024) {
-        toast.error("Arquivo muito grande", {
-          description: "O arquivo deve ter no máximo 10MB.",
-        });
-        return;
-      }
-      setFile(selectedFile);
-      setImportResult(null);
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
     }
   };
 
-  const handleImport = async () => {
-    if (!file) return;
-
-    setIsImporting(true);
-    setImportResult(null);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const response = await fetch("/api/admin/documentos/import", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setImportResult({ success: true, message: data.message || "Documento importado com sucesso!" });
-        toast.success("Sucesso", {
-          description: data.message || "Documento importado com sucesso!",
-        });
-        onSuccess?.();
-        setFile(null);
-      } else {
-        setImportResult({ success: false, message: data.error || "Erro ao importar documento" });
-        toast.error("Erro", {
-          description: data.error || "Erro ao importar documento",
-        });
-      }
-    } catch (error) {
-      console.error("Import error:", error);
-      setImportResult({ success: false, message: "Erro de conexão. Tente novamente." });
-      toast.error("Erro", {
-        description: "Erro de conexão. Tente novamente.",
-      });
-    } finally {
-      setIsImporting(false);
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      setSelectedFile(file);
     }
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const removeFile = () => {
+    setSelectedFile(null);
   };
 
   return (
-    <Card className="w-full max-w-2xl">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Upload className="h-5 w-5" />
-          Importar Documento
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="document-file" className="text-sm font-medium">
-            Selecionar arquivo
-          </Label>
-          <div className="relative">
-            <input
-              id="document-file"
-              type="file"
-              accept=".pdf,.doc,.docx,.txt"
-              onChange={handleFileChange}
-              disabled={isImporting}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            />
-            <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center transition-colors hover:border-primary/50">
-              {file ? (
-                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <FileText className="h-6 w-6 text-primary" />
-                    <div>
-                      <p className="font-medium text-sm">{file.name}</p>
-                      <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFile(null)}
-                    className="text-muted-foreground hover:text-destructive transition-colors"
-                  >
-                    <AlertCircle className="h-5 w-5" />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-2">
-                  <Upload className="h-10 w-10 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    Clique ou arraste um arquivo aqui
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    PDF, DOC, DOCX, TXT • Máx. 10MB
-                  </p>
-                </div>
-              )}
-            </div>
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label>Arquivo do documento</Label>
+        <div
+          className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+            isDragging ? 'border-primary bg-muted/50' : 'border-muted'
+          }`}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onClick={() => document.getElementById('file-input')?.click()}
+        >
+          <Input
+            id="file-input"
+            type="file"
+            accept=".pdf,.doc,.docx,.jpg,.png"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+          <div className="flex flex-col items-center gap-2">
+            <Upload className="h-8 w-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              Arraste um arquivo ou clique para selecionar
+            </p>
+            <p className="text-xs text-muted-foreground">
+              PDF, DOC, DOCX, JPG, PNG
+            </p>
           </div>
         </div>
+      </div>
 
-        {importResult && (
-          <Alert className={importResult.success ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950" : "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950"}>
-            <AlertDescription className="flex items-center gap-2">
-              {importResult.success ? (
-                <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-              ) : (
-                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-              )}
-              {importResult.message}
-            </AlertDescription>
-          </Alert>
-        )}
+      {selectedFile && (
+        <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            <span className="text-sm font-medium">{selectedFile.name}</span>
+            <span className="text-xs text-muted-foreground">
+              ({(selectedFile.size / 1024).toFixed(1)} KB)
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={removeFile}
+            type="button"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
 
-        <Button
-          onClick={handleImport}
-          disabled={!file || isImporting}
-          className="w-full"
-          size="lg"
-        >
-          {isImporting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Importando...
-            </>
-          ) : (
-            <>
-              <Upload className="mr-2 h-4 w-4" />
-              Importar Documento
-            </>
-          )}
-        </Button>
-
-        <p className="text-xs text-muted-foreground text-center">
-          Os documentos importados serão processados e associados aos colaboradores
-          correspondentes com base no conteúdo do arquivo.
-        </p>
-      </CardContent>
-    </Card>
+      <Button
+        onClick={() => selectedFile && mutation.mutate(selectedFile)}
+        disabled={!selectedFile || mutation.isPending}
+        className="w-full"
+      >
+        {mutation.isPending ? "Importando..." : "Importar Documento"}
+      </Button>
+    </div>
   );
 }
