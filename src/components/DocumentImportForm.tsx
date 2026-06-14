@@ -5,8 +5,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Upload, FileText, X, Loader2, FileSearch } from "lucide-react";
+import { Upload, FileText, X, Loader2, FileSearch, SearchCode } from "lucide-react";
 import { extractTextFromPDF } from "@/lib/pdf-utils";
+import { extractCNPJFromText, extractPeriodoFromText } from "@/lib/documentos";
 
 export function DocumentImportForm() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -20,7 +21,6 @@ export function DocumentImportForm() {
     if (file) {
       setSelectedFile(file);
       
-      // FASE 1: Comprovação de Leitura de PDF
       if (file.type === "application/pdf") {
         setIsExtracting(true);
         console.log(`%c[Fase1] Iniciando leitura do arquivo: ${file.name}`, "color: #e30f27; font-weight: bold;");
@@ -30,19 +30,35 @@ export function DocumentImportForm() {
           console.log(`[Fase1] Total de páginas: ${pages.length}`);
           
           pages.forEach(p => {
+            // Logs da Fase 1
             if (!p.text) {
               console.warn(`[Fase1] Nenhum texto encontrado na página ${p.pageNumber}`);
             } else {
               console.log(`%cPágina ${p.pageNumber}:`, "font-weight: bold;");
               console.log(`- Quantidade de caracteres: ${p.text.length}`);
               console.log(`- Primeiros 300 caracteres: ${p.text.substring(0, 300)}...`);
+
+              // FASE 2: Validação de Extração
+              console.log(`%c[Fase2] Processando extração da Página ${p.pageNumber}`, "color: #4285F4; font-weight: bold;");
+              
+              const periodo = extractPeriodoFromText(p.text, "folha_ponto");
+              const cnpj = extractCNPJFromText(p.text);
+
+              console.log(`Período identificado: ${periodo ? `${String(periodo.mes).padStart(2, '0')}/${periodo.ano}` : "Não identificado"}`);
+              console.log(`CNPJ identificado: ${cnpj || "Não identificado"}`);
+
+              // Log especial para período bruto (padrão comum em folhas de ponto)
+              const rawPeriodMatch = p.text.match(/de\s+(\d{2}\/\d{2}\/\d{4})\s+(?:a|à)\s+(\d{2}\/\d{2}\/\d{4})/i);
+              if (rawPeriodMatch) {
+                console.log(`%c[Fase2] Período bruto encontrado: ${rawPeriodMatch[1]} -> ${rawPeriodMatch[2]}`, "color: #FBBC05; font-weight: bold;");
+              }
             }
           });
           
-          toast.info(`PDF lido com sucesso: ${pages.length} páginas processadas.`);
+          toast.info(`PDF processado: ${pages.length} páginas analisadas. Verifique o console.`);
         } catch (err) {
-          console.error("[Fase1] Erro na extração de texto do PDF:", err);
-          toast.error("Erro ao ler conteúdo do PDF. Verifique o console.");
+          console.error("[Fase1/2] Erro no processamento do PDF:", err);
+          toast.error("Erro ao analisar PDF. Verifique o console.");
         } finally {
           setIsExtracting(false);
         }
@@ -126,7 +142,7 @@ export function DocumentImportForm() {
               <Upload className="size-8 text-muted-foreground" />
             )}
             <p className="text-sm text-muted-foreground">
-              {isExtracting ? "Lendo conteúdo do PDF..." : "Arraste um arquivo ou clique para selecionar"}
+              {isExtracting ? "Analisando conteúdo..." : "Arraste um arquivo ou clique para selecionar"}
             </p>
             <p className="text-xs text-muted-foreground">
               PDF, DOC, DOCX, JPG, PNG
@@ -176,8 +192,13 @@ export function DocumentImportForm() {
         )}
       </Button>
 
-      <div className="pt-2 flex items-center gap-2 text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
-        <FileSearch className="size-3" /> Fase 1: Extração de Texto Ativa
+      <div className="pt-2 flex flex-col gap-1">
+        <div className="flex items-center gap-2 text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+          <FileSearch className="size-3" /> Fase 1: Extração de Texto Ativa
+        </div>
+        <div className="flex items-center gap-2 text-[10px] text-blue-500 uppercase font-bold tracking-widest">
+          <SearchCode className="size-3" /> Fase 2: Validação de Inteligência Ativa
+        </div>
       </div>
     </div>
   );
