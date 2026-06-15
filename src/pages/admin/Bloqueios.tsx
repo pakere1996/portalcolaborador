@@ -284,12 +284,26 @@ export default function BloqueiosPage() {
                   </div>
                   <div className="flex gap-2">
                     <Button variant="ghost" size="icon" className="size-8" onClick={() => openRegraDialog(r)}><Filter className="size-4" /></Button>
-                    <AlertDialog open={false} onOpenChange={}>
+                    <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="size-8 text-destructive hover:bg-destructive/10" onClick={() => { if(confirm("Excluir esta regra?")) deleteRegra(r.id); }}>
+                        <Button variant="ghost" size="icon" className="size-8 text-destructive hover:bg-destructive/10">
                           <Trash2 className="size-4" />
                         </Button>
                       </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Excluir esta regra?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Esta ação não pode ser desfeita. A regra será removida permanentemente.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => deleteRegra(r.id)} className="bg-red-600 text-white hover:bg-red-700">
+                            Excluir
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
                     </AlertDialog>
                   </div>
                 </div>
