@@ -43,3 +43,13 @@ export function maskCNPJ(cnpj: string | null | undefined): string {
   
   return formatCNPJ(cleaned);
 }
+
+/**
+ * Formats a phone number to (XX) XXXXX-XXXX format
+ */
+export function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+}
