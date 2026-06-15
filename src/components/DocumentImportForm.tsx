@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
@@ -7,56 +7,80 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Upload, FileText, X, Loader2, FileSearch, SearchCode, ClipboardCheck } from "lucide-react";
 import { extractTextFromPDF } from "@/lib/pdf-utils";
+import { extractCPF, findBestProfileMatch, type ProfileForMatching } from "@/lib/documentos-matching";
+
+const statusLabel: Record<"automatico" | "sugerido" | "revisao", string> = {
+  automatico: "automático",
+  sugerido: "sugerido",
+  revisao: "revisão",
+};
 
 export function DocumentImportForm() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [profiles, setProfiles] = useState<ProfileForMatching[]>([]);
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user) return;
+
+    supabase
+      .from("profiles")
+      .select("id, nome, cpf, matricula")
+      .eq("ativo", true)
+      .order("nome")
+      .then(({ data, error }) => {
+        if (error) {
+          toast.error("Erro ao carregar perfis para matching", { description: error.message });
+          return;
+        }
+
+        setProfiles((data ?? []) as ProfileForMatching[]);
+      });
+  }, [user?.id]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      
+
       if (file.type === "application/pdf") {
         setIsExtracting(true);
         console.log(`%c[Diagnóstico] Iniciando análise de qualidade: ${file.name}`, "color: #e30f27; font-weight: bold; font-size: 14px;");
-        
+
         try {
           const pages = await extractTextFromPDF(file);
           const diagnosticData: any[] = [];
-          
+
           let namesFound = 0;
+          let cpfsFound = 0;
           let matriculasFound = 0;
           let cnpjsFound = 0;
           let periodsFound = 0;
+          let automaticMatches = 0;
+          let suggestedMatches = 0;
+          let reviewMatches = 0;
 
-          pages.forEach(p => {
+          pages.forEach((p) => {
             const text = p.text;
 
-            // 1. CNPJ: Formato XX.XXX.XXX/XXXX-XX
+            const cpf = extractCPF(text);
             const cnpjMatch = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
             const cnpj = cnpjMatch ? cnpjMatch[0] : null;
 
-            // 2. Matrícula: Padrão com zeros à esquerda (ex: 0000000148)
             const matriculaMatch = text.match(/\b0+\d+\b/);
             const matricula = matriculaMatch ? matriculaMatch[0] : null;
 
-            // 3. Nome: Padrão DD/MM/AAAA NOME_COMPLETO MATRICULA CARGO
-            // Regex: Data -> Captura Nome (letras/acentos/espaços) -> Espaços -> Dígitos (Matrícula) -> Espaços -> Letra (Início Cargo)
-            const nameMatch = text.match(/\d{2}\/\d{2}\/\d{4}\s+([A-ZÀ-Ú\s]+?)\s+\d+\s+[A-Z]/);
+            const nameMatch = text.match(/\d{2}\/\d{2}\/\d{4}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+?)\s+\d+\s+[A-Z]/);
             let nome = null;
             if (nameMatch && nameMatch[1]) {
-              // Normalização: trim e colapso de espaços múltiplos
-              nome = nameMatch[1].trim().replace(/\s+/g, ' ');
+              nome = nameMatch[1].trim().replace(/\s+/g, " ");
             }
 
-            // 4. Período: Principal + Fallback
-            // Principal: "Período de referência: de DD/MM/AAAA à DD/MM/AAAA"
             const periodMatch = text.match(/Per[ií]odo de refer[eê]ncia:\s*de\s*(\d{2}\/\d{2}\/\d{4})\s+(?:a|à)\s+(\d{2}\/\d{2}\/\d{4})/i);
-            
+
             let dataInicial = null;
             let dataFinal = null;
             let periodoIdentificado = false;
@@ -66,7 +90,6 @@ export function DocumentImportForm() {
               dataFinal = periodMatch[2];
               periodoIdentificado = true;
             } else {
-              // Fallback: Duas datas DD/MM/AAAA próximas no texto
               const fallbackMatch = text.match(/(\d{2}\/\d{2}\/\d{4}).*?(\d{2}\/\d{2}\/\d{4})/);
               if (fallbackMatch) {
                 dataInicial = fallbackMatch[1];
@@ -75,48 +98,81 @@ export function DocumentImportForm() {
               }
             }
 
-            // Contabilização
+            const match = findBestProfileMatch(nome, cpf, profiles);
+
             if (nome) namesFound++;
+            if (cpf) cpfsFound++;
             if (matricula) matriculasFound++;
             if (cnpj) cnpjsFound++;
             if (periodoIdentificado) periodsFound++;
+            if (match.status === "automatico") automaticMatches++;
+            if (match.status === "sugerido") suggestedMatches++;
+            if (match.status === "revisao") reviewMatches++;
 
             diagnosticData.push({
-              "Página": p.pageNumber,
-              "Nome": nome || "❌ Não encontrado",
-              "Matrícula": matricula || "❌ Não encontrada",
+              Página: p.pageNumber,
+              "Nome PDF": nome || "❌ Não encontrado",
+              "CPF PDF": cpf || "❌ Não encontrado",
+              "Matrícula (complementar)": matricula || "—",
               "CNPJ": cnpj || "❌ Não encontrado",
               "Data Inicial": dataInicial || "❌",
               "Data Final": dataFinal || "❌",
-              "Caracteres": text.length
+              "Nome Perfil Encontrado": match.profile?.nome ?? "❌ Não encontrado",
+              "MatchBy": match.matchBy ?? "—",
+              "Confidence": `${Math.round(match.confidence * 100)}%`,
+              "Status": statusLabel[match.status],
+              "Caracteres": text.length,
             });
           });
 
-          // Exibição da Tabela Consolidada
           console.table(diagnosticData);
 
-          // Métricas de Sucesso
-          const total = pages.length;
-          const pctNome = total > 0 ? ((namesFound / total) * 100).toFixed(1) : 0;
-          const pctMatricula = total > 0 ? ((matriculasFound / total) * 100).toFixed(1) : 0;
-          const pctCnpj = total > 0 ? ((cnpjsFound / total) * 100).toFixed(1) : 0;
-          const pctPeriodo = total > 0 ? ((periodsFound / total) * 100).toFixed(1) : 0;
+          const matchingSummary = pages.map((p) => {
+            const text = p.text;
+            const nome = text.match(/\d{2}\/\d{2}\/\d{4}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+?)\s+\d+\s+[A-Z]/)?.[1]?.trim();
+            const cpf = extractCPF(text);
+            const match = findBestProfileMatch(nome, cpf, profiles);
 
-          console.log(`%c[Resumo do Diagnóstico - ${file.name}]`, "font-weight: bold; font-size: 12px;");
+            return {
+              Página: p.pageNumber,
+              "Nome PDF": nome || "Não encontrado",
+              "CPF PDF": cpf || "Não encontrado",
+              "Nome Perfil Encontrado": match.profile?.nome ?? "Não encontrado",
+              "MatchBy": match.matchBy ?? "—",
+              "Confidence": `${Math.round(match.confidence * 100)}%`,
+              "Status": statusLabel[match.status],
+            };
+          });
+
+          const total = pages.length;
+          const pctNome = total > 0 ? ((namesFound / total) * 100).toFixed(1) : "0";
+          const pctCPF = total > 0 ? ((cpfsFound / total) * 100).toFixed(1) : "0";
+          const pctMatricula = total > 0 ? ((matriculasFound / total) * 100).toFixed(1) : "0";
+          const pctCnpj = total > 0 ? ((cnpjsFound / total) * 100).toFixed(1) : "0";
+          const pctPeriodo = total > 0 ? ((periodsFound / total) * 100).toFixed(1) : "0";
+
+          console.log("%c[Resumo do Diagnóstico]", "font-weight: bold; font-size: 12px;");
           console.log(`- Total de páginas: ${total}`);
           console.log(`- Nomes identificados: ${namesFound}/${total} (${pctNome}%)`);
-          console.log(`- Matrículas identificadas: ${matriculasFound}/${total} (${pctMatricula}%)`);
+          console.log(`- CPFs identificados: ${cpfsFound}/${total} (${pctCPF}%)`);
+          console.log(`- Matrículas identificadas: ${matriculasFound}/${total} (${pctMatricula}%) - campo complementar, não usado no matching`);
           console.log(`- CNPJs identificados: ${cnpjsFound}/${total} (${pctCnpj}%)`);
           console.log(`- Períodos identificados: ${periodsFound}/${total} (${pctPeriodo}%)`);
+          console.log(`- Matches automáticos: ${automaticMatches}`);
+          console.log(`- Matches sugeridos: ${suggestedMatches}`);
+          console.log(`- Revisão manual: ${reviewMatches}`);
 
-          const allCritical = namesFound === total && matriculasFound === total;
+          console.log("%c[Resumo do Matching]", "font-weight: bold; font-size: 12px;");
+          console.table(matchingSummary);
+
+          const allCritical = namesFound === total && cpfsFound === total;
           if (allCritical) {
-            console.log("%c✅ EXCELENTE: Identificação 100% nos campos críticos (Nome + Matrícula). Pronto para Matching.", "color: #34A853; font-weight: bold;");
+            console.log("%c✅ EXCELENTE: Nome + CPF identificados em todas as páginas. Matching prioritário por CPF.", "color: #34A853; font-weight: bold;");
           } else {
-            console.warn("%c⚠️ ATENÇÃO: Falhas na identificação de campos críticos. Ajuste regex ou verifique qualidade do PDF.", "color: #FBBC05; font-weight: bold;");
+            console.warn("%c⚠️ ATENÇÃO: Verifique páginas com CPF ausente ou baixa similaridade de nome.", "color: #FBBC05; font-weight: bold;");
           }
-          
-          toast.info(`Diagnóstico concluído: ${total} páginas. Verifique console para métricas.`);
+
+          toast.info(`Diagnóstico concluído: ${total} páginas. Matching por CPF/nome atualizado.`);
         } catch (err) {
           console.error("[Diagnóstico] Erro crítico:", err);
           toast.error("Erro ao executar diagnóstico. Verifique o console.");
@@ -164,7 +220,7 @@ export function DocumentImportForm() {
       });
 
       if (error) throw error;
-      
+
       toast.success(data.message || "Documento importado com sucesso!");
       setSelectedFile(null);
     } catch (error: any) {
@@ -256,6 +312,15 @@ export function DocumentImportForm() {
       <div className="pt-2 flex flex-col gap-1">
         <div className="flex items-center gap-2 text-[10px] text-emerald-600 uppercase font-bold tracking-widest">
           <ClipboardCheck className="size-3" /> Diagnóstico de Qualidade Ativo
+        </div>
+        <div className="flex items-center gap-2 text-[10px] text-primary/70 uppercase font-bold tracking-widest">
+          <SearchCode className="size-3" /> Matching por CPF e Nome
+        </div>
+        <div className="flex items-center gap-2 text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+          <FileSearch className="size-3" /> Matrícula apenas complementar
+        </div>
+        <div className="text-xs text-muted-foreground">
+          Perfis carregados para matching: {profiles.length}
         </div>
       </div>
     </div>
