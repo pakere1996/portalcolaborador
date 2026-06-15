@@ -36,57 +36,87 @@ export function DocumentImportForm() {
           pages.forEach(p => {
             const text = p.text;
 
-            // 1. Regex para CNPJ
+            // 1. CNPJ: Formato XX.XXX.XXX/XXXX-XX
             const cnpjMatch = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
             const cnpj = cnpjMatch ? cnpjMatch[0] : null;
 
-            // 2. Regex para Matrícula (Padrão 10 dígitos, ex: 0000000148)
-            const matriculaMatch = text.match(/\b\d{10}\b/);
+            // 2. Matrícula: Padrão com zeros à esquerda (ex: 0000000148)
+            const matriculaMatch = text.match(/\b0+\d+\b/);
             const matricula = matriculaMatch ? matriculaMatch[0] : null;
 
-            // 3. Regex para Nome (Entre data de admissão e matrícula)
-            // Assume formato: DD/MM/AAAA NOME MATRICULA
-            const nameMatch = text.match(/\d{2}\/\d{2}\/\d{4}\s+([A-Z\s]{3,})\s+\d{10}/);
-            const nome = nameMatch ? nameMatch[1].trim() : null;
+            // 3. Nome: Padrão DD/MM/AAAA NOME_COMPLETO MATRICULA CARGO
+            // Regex: Data -> Captura Nome (letras/acentos/espaços) -> Espaços -> Dígitos (Matrícula) -> Espaços -> Letra (Início Cargo)
+            const nameMatch = text.match(/\d{2}\/\d{2}\/\d{4}\s+([A-ZÀ-Ú\s]+?)\s+\d+\s+[A-Z]/);
+            let nome = null;
+            if (nameMatch && nameMatch[1]) {
+              // Normalização: trim e colapso de espaços múltiplos
+              nome = nameMatch[1].trim().replace(/\s+/g, ' ');
+            }
 
-            // 4. Regex para Período de Referência
-            const periodMatch = text.match(/Período de referência:\s*de\s*(\d{2}\/\d{2}\/\d{4})\s+(?:a|à)\s+(\d{2}\/\d{2}\/\d{4})/i);
-            const periodo = periodMatch ? `${periodMatch[1]} -> ${periodMatch[2]}` : null;
+            // 4. Período: Principal + Fallback
+            // Principal: "Período de referência: de DD/MM/AAAA à DD/MM/AAAA"
+            const periodMatch = text.match(/Per[ií]odo de refer[eê]ncia:\s*de\s*(\d{2}\/\d{2}\/\d{4})\s+(?:a|à)\s+(\d{2}\/\d{2}\/\d{4})/i);
+            
+            let dataInicial = null;
+            let dataFinal = null;
+            let periodoIdentificado = false;
+
+            if (periodMatch) {
+              dataInicial = periodMatch[1];
+              dataFinal = periodMatch[2];
+              periodoIdentificado = true;
+            } else {
+              // Fallback: Duas datas DD/MM/AAAA próximas no texto
+              const fallbackMatch = text.match(/(\d{2}\/\d{2}\/\d{4}).*?(\d{2}\/\d{2}\/\d{4})/);
+              if (fallbackMatch) {
+                dataInicial = fallbackMatch[1];
+                dataFinal = fallbackMatch[2];
+                periodoIdentificado = true;
+              }
+            }
 
             // Contabilização
             if (nome) namesFound++;
             if (matricula) matriculasFound++;
             if (cnpj) cnpjsFound++;
-            if (periodo) periodsFound++;
+            if (periodoIdentificado) periodsFound++;
 
             diagnosticData.push({
               "Página": p.pageNumber,
               "Nome": nome || "❌ Não encontrado",
               "Matrícula": matricula || "❌ Não encontrada",
               "CNPJ": cnpj || "❌ Não encontrado",
-              "Período": periodo || "❌ Não identificado",
+              "Data Inicial": dataInicial || "❌",
+              "Data Final": dataFinal || "❌",
               "Caracteres": text.length
             });
           });
 
-          // Exibição da Tabela
+          // Exibição da Tabela Consolidada
           console.table(diagnosticData);
 
-          // Resumo Final
-          console.log(`%c[Resumo do Diagnóstico]`, "font-weight: bold; font-size: 12px;");
-          console.log(`- Total de páginas: ${pages.length}`);
-          console.log(`- Nomes encontrados: ${namesFound}`);
-          console.log(`- Matrículas encontradas: ${matriculasFound}`);
-          console.log(`- CNPJs encontrados: ${cnpjsFound}`);
-          console.log(`- Períodos encontrados: ${periodsFound}`);
+          // Métricas de Sucesso
+          const total = pages.length;
+          const pctNome = total > 0 ? ((namesFound / total) * 100).toFixed(1) : 0;
+          const pctMatricula = total > 0 ? ((matriculasFound / total) * 100).toFixed(1) : 0;
+          const pctCnpj = total > 0 ? ((cnpjsFound / total) * 100).toFixed(1) : 0;
+          const pctPeriodo = total > 0 ? ((periodsFound / total) * 100).toFixed(1) : 0;
 
-          if (namesFound === pages.length && matriculasFound === pages.length) {
-            console.log("%c✅ Qualidade de extração excelente (100% de identificação)", "color: #34A853; font-weight: bold;");
+          console.log(`%c[Resumo do Diagnóstico - ${file.name}]`, "font-weight: bold; font-size: 12px;");
+          console.log(`- Total de páginas: ${total}`);
+          console.log(`- Nomes identificados: ${namesFound}/${total} (${pctNome}%)`);
+          console.log(`- Matrículas identificadas: ${matriculasFound}/${total} (${pctMatricula}%)`);
+          console.log(`- CNPJs identificados: ${cnpjsFound}/${total} (${pctCnpj}%)`);
+          console.log(`- Períodos identificados: ${periodsFound}/${total} (${pctPeriodo}%)`);
+
+          const allCritical = namesFound === total && matriculasFound === total;
+          if (allCritical) {
+            console.log("%c✅ EXCELENTE: Identificação 100% nos campos críticos (Nome + Matrícula). Pronto para Matching.", "color: #34A853; font-weight: bold;");
           } else {
-            console.warn("%c⚠️ Qualidade de extração parcial. Verifique as falhas na tabela acima.", "color: #FBBC05; font-weight: bold;");
+            console.warn("%c⚠️ ATENÇÃO: Falhas na identificação de campos críticos. Ajuste regex ou verifique qualidade do PDF.", "color: #FBBC05; font-weight: bold;");
           }
           
-          toast.info(`Diagnóstico concluído: ${pages.length} páginas analisadas. Verifique o console.`);
+          toast.info(`Diagnóstico concluído: ${total} páginas. Verifique console para métricas.`);
         } catch (err) {
           console.error("[Diagnóstico] Erro crítico:", err);
           toast.error("Erro ao executar diagnóstico. Verifique o console.");
