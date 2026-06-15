@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Plus, Users, Shield, UserCheck, Mail, Phone, Calendar, CalendarDays, CalendarX, CalendarCheck, Filter, Calendar as CalendarIcon } from "lucide-react";
-import { Calendar } from "lucide-react";
 import { formatCPF, onlyDigits, isValidCPFLength } from "@/lib/cpf";
 import { formatPhone, cleanCNPJ, formatCNPJ } from "@/lib/utils";
 import { ColaboradorForm } from "@/components/ColaboradorForm";
