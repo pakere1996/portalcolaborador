@@ -1,26 +1,23 @@
-"use client";
-
-import { useAuth } from "@/lib/auth-context";
-import { NavigationCard } from "@/components/NavigationCard";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
 import {
-  Users,
-  Shield,
-  Calendar,
-  ClipboardList,
-  UserCheck,
-  ArrowLeftRight,
-  Ban,
-  FileText,
-  FileWarning,
-  ShieldAlert,
-} from "lucide-react";
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
+import { Calendar as CalIcon, Shield, Users, Briefcase, Building2, Trash2, Edit } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const adminModules = [
   {
     title: "Gestão de Equipe",
     description: "Gerencie perfis, cargos e status de colaboradores.",
     icon: Users,
-    to: "/admin/funcionarios",
+    to: "/admin/colaboradores",
     category: "Geral",
   },
   {
@@ -32,7 +29,7 @@ const adminModules = [
   },
   {
     title: "Calendário Geral",
-    description: "Visualize todas as folgas, fixas e solicitadas, da equipe.",
+    description: "Visão consolidada de todas as folgas da equipe.",
     icon: Calendar,
     to: "/admin/calendario",
     category: "Folgas",
@@ -96,40 +93,5 @@ const adminModules = [
 ];
 
 export default function AdminHomeAdminPage() {
-  const { profile } = useAuth();
-  const firstName = profile?.nome?.split(" ")[0] ?? "Administrador";
-
-  const groupedModules = adminModules.reduce((acc, module) => {
-    if (!acc[module.category]) {
-      acc[module.category] = [];
-    }
-    acc[module.category].push(module);
-    return acc;
-  }, {} as Record<string, typeof adminModules>);
-
-  return (
-    <div className="max-w-7xl mx-auto space-y-8">
-      <div className="p-6 bg-red-600 text-white rounded-xl shadow-lg">
-        <h1 className="text-3xl font-bold">Olá, {firstName}!</h1>
-        <p className="mt-1 text-red-100">Painel de Administração Pakerê.</p>
-      </div>
-
-      {Object.entries(groupedModules).map(([category, modules]) => (
-        <div key={category} className="space-y-4">
-          <h2 className="text-xl font-semibold border-b border-yellow-500 pb-1 text-red-600">{category}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {modules.map((module) => (
-              <NavigationCard
-                key={module.to}
-                to={module.to}
-                title={module.title}
-                description={module.description}
-                icon={module.icon}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+  // ... existing component code ...
 }
