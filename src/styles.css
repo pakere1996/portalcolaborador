@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Hide the Lovable badge in production */
 .lovable-badge {
   display: none !important;
