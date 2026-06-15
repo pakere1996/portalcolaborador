@@ -51,7 +51,7 @@ function AuthenticatedRoutes() {
 
         {/* Employee Home */}
         <Route path="/home" element={<Home />} />
-        <Route path="/" element={<Navigate to="/home" replace />} />
+        <Route path="/" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
 
         {/* Admin Routes */}
         {isAdmin ? (
@@ -85,7 +85,7 @@ function AuthenticatedRoutes() {
         )}
 
         {/* Fallback for authenticated users */}
-        <Route path="*" element={<Navigate to="/home" replace />} />
+        <Route path="*" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
       </Routes>
     </AppShell>
   );
