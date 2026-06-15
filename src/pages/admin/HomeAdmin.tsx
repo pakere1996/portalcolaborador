@@ -2,15 +2,20 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Shield, Users, Briefcase, Building2, Trash2, Edit } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Plus, Users, Shield, UserCheck, Mail, Phone, Calendar, CalendarDays, CalendarX, CalendarCheck, Filter, Calendar as CalendarIcon } from "lucide-react";
+import { formatCPF, onlyDigits, isValidCPFLength } from "@/lib/cpf";
+import { formatPhone, cleanCNPJ, formatCNPJ } from "@/lib/utils";
+import { ColaboradorForm } from "@/components/ColaboradorForm";
+import { ColaboradorFormDialog } from "@/components/ColaboradorFormDialog";
+import { Tables } from "@/integrations/supabase/types";
+import { adminApi } from "@/lib/admin-api";
 
 const adminModules = [
   {
