@@ -47,7 +47,7 @@ function AuthenticatedRoutes() {
         <Route path="/historico" element={<Historico />} />
         <Route path="/documentos" element={<Documentos />} />
         <Route path="/documentos/atestados" element={<DocumentosAtestados />} />
-        <Route path="/documentos/ponto" element={<Documentos />} /> {/* Reusing Documentos for Ponto */}
+        <Route path="/documentos/ponto" element={<Documentos />} />
 
         {/* Employee Home */}
         <Route path="/home" element={<Home />} />
