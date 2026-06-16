@@ -33,6 +33,7 @@ interface ColaboradorFormDialogProps {
   cargos: { id: string; nome: string }[];
   busy: boolean;
   isEdit?: boolean;
+  onSave?: () => Promise<void> | void;
 }
 
 export function ColaboradorFormDialog({
@@ -44,6 +45,7 @@ export function ColaboradorFormDialog({
   cargos,
   busy,
   isEdit = false,
+  onSave,
 }: ColaboradorFormDialogProps) {
 
   const handleFormChange = (id: string, value: string | boolean) => {
@@ -67,6 +69,12 @@ export function ColaboradorFormDialog({
 
       return { ...prev, [id]: newValue };
     });
+  };
+
+  const handleSubmit = async () => {
+    if (onSave) {
+      await onSave();
+    }
   };
 
   return (
@@ -244,7 +252,7 @@ export function ColaboradorFormDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancelar
           </Button>
-          <Button onClick={() => onOpenChange(false)} disabled={busy}>
+          <Button onClick={handleSubmit} disabled={busy}>
             {isEdit ? "Salvar" : "Cadastrar"}
           </Button>
         </DialogFooter>
