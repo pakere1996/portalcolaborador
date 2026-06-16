@@ -108,13 +108,16 @@ export function DocumentImportForm() {
         const nameMatch = text.match(/\d{2}\/\d{2}\/\d{4}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+?)\s+\d+\s+[A-Z]/);
         const nome = nameMatch ? nameMatch[1].trim().replace(/\s+/g, " ") : null;
 
-        // Extrai cargo
-        const cargoMatch = text.match(/(?:cargo|fun[çc][ãa]o):\s*([^\n\r]+)/i);
+        // Extrai cargo (máximo 30 caracteres para evitar capturar texto longo)
+        const cargoMatch = text.match(/(?:cargo|fun[çc][ãa]o):\s*([A-Za-zÀ-ÿ\s]{2,30}?)(?:\s{2,}|\n|\r|$)/i);
         const cargo = cargoMatch ? cargoMatch[1].trim() : null;
 
-        // Extrai data de admissão
-        const admissaoMatch = text.match(/admiss[ãa]o[:\s]+(\d{2}\/\d{2}\/\d{4})/i);
-        const dataAdmissao = admissaoMatch ? admissaoMatch[1] : null;
+        // Extrai data de admissão (formato: Admissão DD/MM/AAAA ou Admissão: DD/MM/AAAA)
+        const admissaoMatch = text.match(/admiss[ãa]o[:\s]*(\d{2}\/\d{2}\/\d{4})/i);
+        // Converte de DD/MM/AAAA para AAAA-MM-DD para o campo date do HTML
+        const dataAdmissao = admissaoMatch
+          ? admissaoMatch[1].split("/").reverse().join("-")
+          : null;
 
         // Extrai CPF
         const cpf = extractCPF(text);
