@@ -72,6 +72,12 @@ export function DocumentImportForm() {
   });
   const [showNovoColab, setShowNovoColab] = useState(false);
   const { user } = useAuth();
+  // Trava de segurança: Se selecionar um colaborador na lista, fecha o form de novo cadastro
+useEffect(() => {
+  if (manualProfileId) {
+    setShowNovoColab(false);
+  }
+}, [manualProfileId]);
 
   const documentType = window.location.pathname.includes("ponto") ? "ponto" : "contracheque";
 
