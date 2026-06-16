@@ -108,32 +108,50 @@ export function DocumentImportForm() {
         const nameMatch = text.match(/\d{2}\/\d{2}\/\d{4}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+?)\s+\d+\s+[A-Z]/);
         const nome = nameMatch ? nameMatch[1].trim().replace(/\s+/g, " ") : null;
 
-       // ==========================================
-// SUPER FILTRO: EXTRAÇÃO RESILIENTE DE CARGO
-// ==========================================
-// Procura a palavra "cargo", pula qualquer símbolo estranho e pega as letras seguintes
-let cargo = null;
-const cargoMatch = text.match(/(?:cargo|fun[çc][ãa]o)[^A-Za-zÀ-ÿ]*([A-Za-zÀ-ÿ\s]+?)(?=\s{2,}|setor|depart|\n|\r|$)/i);
+        // =================================================================
+        // SUPER FILTRO: EXTRAÇÃO RESILIENTE DE CARGO (ANTI-MISTURA DE LAYOUT)
+        // =================================================================
+        let cargo = null;
+        // Captura um bloco de até 100 caracteres logo após a palavra Cargo/Função
+        const blocoCargoMatch = text.match(/(?:cargo|fun[çc][ãa]o)[\s\S]{1,100}/i);
 
-if (cargoMatch) {
-  cargo = cargoMatch[1].trim().replace(/\s+/g, " ");
-} else {
-  // Estratégia de socorro: Se a de cima falhar, pega a primeira palavra em MAIÚSCULO após "Cargo"
-  const cargoSocorro = text.match(/(?:cargo|fun[çc][ãa]o)[:\s]+([A-ZÀ-Ú]+)/i);
-  cargo = cargoSocorro ? cargoSocorro[1].trim() : null;
-}
+        if (blocoCargoMatch) {
+          let bloco = blocoCargoMatch[0];
+          
+          // Remove do bloco todas as labels vizinhas que o PDF costuma misturar
+          bloco = bloco.replace(/(?:cargo|fun[çc][ãa]o|s[eé]rie|registro|ctps|setor|depart|dep\.|c\.\s*de\s*custo|custo)[:\s]*/gi, " ");
+          
+          // Limpa quebras de linha e espaços extras
+          bloco = bloco.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+          
+          if (bloco) {
+            // Divide o que sobrou em palavras para isolar o cargo real (ex: "ATENDENTE")
+            const partes = bloco.split(" ");
+            let palavrasCargo = [];
+            for (let palavra of partes) {
+              // Se esbarrar em números (como CPFs/PIS) ou textos longos de outros campos, para de ler
+              if (/^\d+$/.test(palavra) || palavra.length > 20 || /^[0-9./-]+$/.test(palavra)) {
+                break;
+              }
+              palavrasCargo.push(palavra);
+              if (palavrasCargo.length >= 3) break; // Limita o nome do cargo a no máximo 3 palavras
+            }
+            cargo = palavrasCargo.join(" ").toUpperCase().trim();
+          }
+        }
 
-// ==========================================
-// SUPER FILTRO: EXTRAÇÃO RESILIENTE DE DATA
-// ==========================================
-// Procura "admis", ignora qualquer texto bagunçado no meio e captura a primeira data DD/MM/AAAA que aparecer
-const admissaoMatch = text.match(/admis[^0-9]*(\d{2})\/(\d{2})\/(\d{4})/i);
-let dataAdmissao = null;
+        // =================================================================
+        // SUPER FILTRO: EXTRAÇÃO RESILIENTE DE DATA (PROCURA CURTA MULTILINHA)
+        // =================================================================
+        // Varre um raio de até 100 caracteres após "admis" procurando a primeira data válida.
+        // O `[\s\S]{0,100}?` permite que o leitor pule quebras de linha ou espaços que o PDF gerou.
+        const admissaoMatch = text.match(/(?:admiss|adm)[\s\S]{0,100}?(\d{2})\/(\d{2})\/(\d{4})/i);
+        let dataAdmissao = null;
 
-if (admissaoMatch) {
-  // Organiza no formato AAAA-MM-DD que o formulário exige
-  dataAdmissao = `${admissaoMatch[3]}-${admissaoMatch[2]}-${admissaoMatch[1]}`;
-}
+        if (admissaoMatch) {
+          // Organiza no formato AAAA-MM-DD que o formulário exige
+          dataAdmissao = `${admissaoMatch[3]}-${admissaoMatch[2]}-${admissaoMatch[1]}`;
+        }
 
         // Extrai CPF
         const cpf = extractCPF(text);
