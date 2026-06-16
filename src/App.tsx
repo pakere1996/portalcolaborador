@@ -65,7 +65,7 @@ function AuthenticatedRoutes() {
             <Route path="/admin/unidades" element={<Unidades />} />
 
             {/* Folgas Group */}
-            <Route path="/admin/calendario" element={<CalendarioAdmin />} />
+            <Route path="/admin/folgas" element={<FolgasDashboard />} />
             <Route path="/admin/solicitacoes" element={<Solicitacoes />} />
             <Route path="/admin/aprovacoes" element={<Aprovacoes />} />
             <Route path="/admin/trocas" element={<TrocasAdmin />} />
