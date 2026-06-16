@@ -28,10 +28,10 @@ const adminModules = [
     category: "Geral",
   },
   {
-    title: "Dashboard Folgas",
+     title: "Dashboard Folgas",
     description: "Visão geral e estatísticas do sistema de folgas.",
     icon: Shield,
-    to: "/admin",
+    to: "/admin/folgas",
     category: "Folgas",
   },
   {
