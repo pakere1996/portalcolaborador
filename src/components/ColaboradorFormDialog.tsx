@@ -130,10 +130,22 @@ export function ColaboradorFormDialog({
   });
 
   // Reset form when dialog opens/profile changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  React.useEffect(() => {
+ React.useEffect(() => {
     if (open) {
-      form.reset(defaultValues);
+      form.reset({
+        nome: profile?.nome || "",
+        cpf: profile?.cpf || "",
+        cargo: profile?.cargo || "",
+        matricula: profile?.matricula || "",
+        ativo: profile?.ativo ?? true,
+        data_admissao: profile?.data_admissao ? new Date(profile.data_admissao) : null,
+        data_nascimento: profile?.data_nascimento ? new Date(profile.data_nascimento) : null,
+        folga_fixa_semana: profile?.folga_fixa_semana?.toString() || "",
+        unidade_id: profile?.unidade_id || "",
+        endereco: profile?.endereco || "",
+        email_contato: profile?.email_contato || "",
+        whatsapp: profile?.whatsapp || "",
+      });
     }
   }, [open, profile]);
 
