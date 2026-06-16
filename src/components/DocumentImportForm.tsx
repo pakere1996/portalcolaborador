@@ -451,6 +451,7 @@ toast.success(
 );
 
 // limpa estados pendentes
+setSuggestedProfile(null);
 setNovoColabForm(null);
 setShowNovoColab(false);
 
