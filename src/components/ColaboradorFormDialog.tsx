@@ -29,11 +29,9 @@ interface ColaboradorFormDialogProps {
   onOpenChange: (open: boolean) => void;
   form: ColaboradorForm;
   setForm: React.Dispatch<React.SetStateAction<ColaboradorForm>>;
-  busy: boolean;
-  onSave: () => void;
   unidades: { id: string; nome: string; cnpj: string | null }[];
   cargos: { id: string; nome: string }[];
-  title?: string;
+  busy: boolean;
   isEdit?: boolean;
 }
 
@@ -42,45 +40,70 @@ export function ColaboradorFormDialog({
   onOpenChange,
   form,
   setForm,
-  busy,
-  onSave,
   unidades,
   cargos,
-  title = "Novo Colaborador",
+  busy,
   isEdit = false,
 }: ColaboradorFormDialogProps) {
+
+  const handleFormChange = (id: string, value: string | boolean) => {
+    setForm((prev) => {
+      let newValue = value;
+      
+      if (id === 'cpf' && typeof value === 'string') {
+        const rawValue = value.replace(/\D/g, "");
+        if (rawValue.length > 11) return prev;
+        // Format CPF
+        if (rawValue.length <= 3) newValue = rawValue;
+        else if (rawValue.length <= 6) newValue = `${rawValue.slice(0, 3)}.${rawValue.slice(3)}`;
+        else if (rawValue.length <= 9) newValue = `${rawValue.slice(0, 3)}.${rawValue.slice(3, 6)}.${rawValue.slice(6)}`;
+        else newValue = `${rawValue.slice(0, 3)}.${rawValue.slice(3, 6)}.${rawValue.slice(6, 9)}-${rawValue.slice(9)}`;
+      } else if (id === 'whatsapp' && typeof value === 'string') {
+        const digits = value.replace(/\D/g, "");
+        if (digits.length <= 2) newValue = digits;
+        else if (digits.length <= 7) newValue = `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+        else newValue = `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+      }
+
+      return { ...prev, [id]: newValue };
+    });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle>{isEdit ? "Editar Colaborador" : "Novo Colaborador"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label>Nome Completo *</Label>
+            <Label htmlFor="nome">Nome Completo *</Label>
             <Input
+              id="nome"
               value={form.nome}
-              onChange={(e) => setForm(prev => ({ ...prev, nome: e.target.value }))}
+              onChange={(e) => handleFormChange('nome', e.target.value)}
               placeholder="Ex: João Silva"
               disabled={busy}
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>CPF *</Label>
+              <Label htmlFor="cpf">CPF *</Label>
               <Input
+                id="cpf"
                 value={form.cpf}
-                onChange={(e) => setForm(prev => ({ ...prev, cpf: e.target.value }))}
+                onChange={(e) => handleFormChange('cpf', e.target.value)}
                 placeholder="000.000.000-00"
                 maxLength={14}
                 disabled={busy || isEdit}
               />
             </div>
             <div className="space-y-2">
-              <Label>Matrícula</Label>
+              <Label htmlFor="matricula">Matrícula</Label>
               <Input
+                id="matricula"
                 value={form.matricula}
-                onChange={(e) => setForm(prev => ({ ...prev, matricula: e.target.value }))}
+                onChange={(e) => handleFormChange('matricula', e.target.value)}
                 placeholder="Ex: 12345"
                 disabled={busy}
               />
@@ -88,13 +111,37 @@ export function ColaboradorFormDialog({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Cargo *</Label>
+              <Label htmlFor="email">E-mail</Label>
+              <Input
+                id="email"
+                type="email"
+                value={form.email}
+                onChange={(e) => handleFormChange('email', e.target.value)}
+                placeholder="email@empresa.com (Opcional)"
+                disabled={busy}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="whatsapp">Telefone (WhatsApp)</Label>
+              <Input
+                id="whatsapp"
+                value={form.whatsapp}
+                onChange={(e) => handleFormChange('whatsapp', e.target.value)}
+                placeholder="(99) 99999-9999"
+                maxLength={15}
+                disabled={busy}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="cargo">Cargo *</Label>
               <Select
                 value={form.cargo}
-                onValueChange={(value) => setForm(prev => ({ ...prev, cargo: value }))}
+                onValueChange={(value) => handleFormChange('cargo', value)}
                 disabled={busy}
               >
-                <SelectTrigger>
+                <SelectTrigger id="cargo">
                   <SelectValue placeholder="Selecione o Cargo" />
                 </SelectTrigger>
                 <SelectContent>
@@ -105,17 +152,17 @@ export function ColaboradorFormDialog({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Unidade *</Label>
+              <Label htmlFor="unidade_id">Unidade *</Label>
               <Select
                 value={form.unidadeId}
-                onValueChange={(value) => setForm(prev => ({ ...prev, unidadeId: value }))}
+                onValueChange={(value) => handleFormChange('unidadeId', value)}
                 disabled={busy}
               >
-                <SelectTrigger>
+                <SelectTrigger id="unidade_id">
                   <SelectValue placeholder="Selecione a Unidade" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Sem Unidade</SelectItem>
+                  <SelectItem value="none">Sem Unidade</SelectItem>
                   {unidades.map(u => (
                     <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
                   ))}
@@ -125,37 +172,39 @@ export function ColaboradorFormDialog({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Data de Nascimento *</Label>
+              <Label htmlFor="data_nascimento">Data de Nascimento *</Label>
               <Input
+                id="data_nascimento"
                 type="date"
                 value={form.dataNascimento}
-                onChange={(e) => setForm(prev => ({ ...prev, dataNascimento: e.target.value }))}
+                onChange={(e) => handleFormChange('dataNascimento', e.target.value)}
                 disabled={busy}
               />
             </div>
             <div className="space-y-2">
-              <Label>Data de Admissão *</Label>
+              <Label htmlFor="data_admissao">Data de Admissão *</Label>
               <Input
+                id="data_admissao"
                 type="date"
                 value={form.dataAdmissao}
-                onChange={(e) => setForm(prev => ({ ...prev, dataAdmissao: e.target.value }))}
+                onChange={(e) => handleFormChange('dataAdmissao', e.target.value)}
                 disabled={busy}
               />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Folga Fixa Semanal</Label>
+              <Label htmlFor="folga_fixa_semana">Folga Fixa Semanal *</Label>
               <Select
                 value={form.folgaFixa}
-                onValueChange={(value) => setForm(prev => ({ ...prev, folgaFixa: value }))}
+                onValueChange={(value) => handleFormChange('folgaFixa', value)}
                 disabled={busy}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Nenhuma" />
+                <SelectTrigger id="folga_fixa_semana">
+                  <SelectValue placeholder="Nenhuma Folga Fixa" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhuma</SelectItem>
+                  <SelectItem value="none">Nenhuma Folga Fixa</SelectItem>
                   {WEEKDAYS.map((d, i) => (
                     <SelectItem key={i} value={String(i)}>{d}</SelectItem>
                   ))}
@@ -163,14 +212,14 @@ export function ColaboradorFormDialog({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Perfil de Acesso *</Label>
+              <Label htmlFor="perfil_acesso">Perfil de Acesso *</Label>
               <Select
                 value={form.perfil_acesso}
-                onValueChange={(value) => setForm(prev => ({ ...prev, perfil_acesso: value }))}
+                onValueChange={(value) => handleFormChange('perfil_acesso', value)}
                 disabled={busy}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Colaborador" />
+                <SelectTrigger id="perfil_acesso">
+                  <SelectValue placeholder="Colaborador (Padrão)" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="colaborador">Colaborador</SelectItem>
@@ -179,34 +228,13 @@ export function ColaboradorFormDialog({
               </Select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>E-mail</Label>
-              <Input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm(prev => ({ ...prev, email: e.target.value }))}
-                placeholder="email@empresa.com"
-                disabled={busy}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>WhatsApp</Label>
-              <Input
-                value={form.whatsapp}
-                onChange={(e) => setForm(prev => ({ ...prev, whatsapp: e.target.value }))}
-                placeholder="(99) 99999-9999"
-                maxLength={15}
-                disabled={busy}
-              />
-            </div>
-          </div>
           <div className="space-y-2">
-            <Label>Senha Inicial *</Label>
+            <Label htmlFor="senha">Senha Inicial *</Label>
             <Input
+              id="senha"
               type="password"
               value={form.senha}
-              onChange={(e) => setForm(prev => ({ ...prev, senha: e.target.value }))}
+              onChange={(e) => handleFormChange('senha', e.target.value)}
               placeholder="Mínimo 6 caracteres"
               disabled={busy}
             />
@@ -216,8 +244,8 @@ export function ColaboradorFormDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancelar
           </Button>
-          <Button onClick={onSave} disabled={busy}>
-            {busy ? "Salvando..." : isEdit ? "Atualizar" : "Cadastrar"}
+          <Button onClick={() => onOpenChange(false)} disabled={busy}>
+            {isEdit ? "Salvar" : "Cadastrar"}
           </Button>
         </DialogFooter>
       </DialogContent>
