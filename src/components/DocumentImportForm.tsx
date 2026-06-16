@@ -270,9 +270,37 @@ console.log("================================");
 
       setPageResults(results);
 
+// Vinculação automática dos matches perfeitos
+for (const result of results) {
+  if (
+    result.matchedProfile &&
+    result.confidence === 1 &&
+    result.mes &&
+    result.ano
+  ) {
+    await handleVinculoAutomatico(
+      result.matchedProfile.id,
+      result
+    );
+  }
+}
+
+// Atualiza visualmente os vinculados automáticos
+setPageResults(prev =>
+  prev.map(r =>
+    r.matchedProfile &&
+    r.confidence === 1
+      ? {
+          ...r,
+          vinculado: true
+        }
+      : r
+  )
+);
+
 const primeiroPendente = results.findIndex(
   r =>
-    r.matchStatus !== "automatico" &&
+    r.confidence < 1 &&
     !r.vinculado &&
     !r.ignorado
 );
@@ -283,7 +311,13 @@ if (primeiroPendente >= 0) {
   setCurrentPage(0);
 }
 
-toast.success(`${pages.length} páginas processadas!`);
+const qtdAuto = results.filter(
+  r => r.confidence === 1
+).length;
+
+toast.success(
+  `${pages.length} páginas processadas (${qtdAuto} vinculadas automaticamente)`
+);
     } catch (err) {
       toast.error("Erro ao processar PDF", { description: (err as Error).message });
     } finally {
