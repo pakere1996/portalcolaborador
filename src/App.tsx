@@ -60,7 +60,6 @@ function AuthenticatedRoutes() {
           <>
             <Route path="/admin" element={<Navigate to="/admin/home" replace />} />
             <Route path="/admin/home" element={<HomeAdmin />} />
-            <Route path="/admin/folgas" element={<FolgasDashboard />} />
             
             {/* Cadastro Group */}
             <Route path="/admin/colaboradores" element={<Colaboradores />} />
