@@ -424,32 +424,90 @@ export async function createMergedPdf(file: File, pageNumbers: number[]): Promis
 }
 
 // Encontra melhor correspondência de perfil
-export function findBestProfileMatch(pageText: string, profiles: Profile[]): { profile: Profile; score: number; matchedText: string } | null {
+export function findBestProfileMatch(
+  pageText: string,
+  profiles: Profile[]
+): { profile: Profile; score: number; matchedText: string } | null {
+
   const page = normalizeText(pageText);
-  let bestMatch: { profile: Profile; score: number; matchedText: string } | null = null;
-  
-  for (const profile of profiles) {
-    if (!profile.nome) continue;
-    
-    const profileName = normalizeText(profile.nome);
-    let score = similarity(page, profileName);
-    
-    // Verifica se todos os tokens significativos do nome estão no texto
-    const tokens = profileName.split(" ").filter(t => t.length > 2);
-    if (tokens.length >= 2 && tokens.every(t => page.includes(t))) {
-      score = Math.max(score, 0.92);
-    }
-    
-    // Se o nome completo está no texto, dá score máximo
-    if (page.includes(profileName)) {
-      score = 1;
-    }
-    
-    if (score > 0.82 && (!bestMatch || score > bestMatch.score)) {
-      bestMatch = { profile, score, matchedText: profile.nome };
+
+  // ==================================================
+  // ETAPA 1 - CPF (100% confiável)
+  // ==================================================
+
+  const cpfMatch = page.match(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/);
+
+  if (cpfMatch) {
+    const cpf = cpfMatch[0].replace(/\D/g, "");
+
+    const profile = profiles.find(
+      p => p.cpf?.replace(/\D/g, "") === cpf
+    );
+
+    if (profile) {
+      return {
+        profile,
+        score: 1,
+        matchedText: cpf,
+      };
     }
   }
-  
+
+  // ==================================================
+  // ETAPA 2 - NOME COMPLETO
+  // ==================================================
+
+  let bestMatch: {
+    profile: Profile;
+    score: number;
+    matchedText: string;
+  } | null = null;
+
+  for (const profile of profiles) {
+
+    if (!profile.nome) continue;
+
+    const profileName = normalizeText(profile.nome);
+
+    // nome completo encontrado
+    if (page.includes(profileName)) {
+
+      return {
+        profile,
+        score: 0.99,
+        matchedText: profile.nome,
+      };
+    }
+
+    const tokens = profileName
+      .split(" ")
+      .filter(t => t.length >= 3);
+
+    const matchedTokens = tokens.filter(
+      token => page.includes(token)
+    );
+
+    const tokenScore =
+      matchedTokens.length / tokens.length;
+
+    // Exigir pelo menos 80% dos tokens
+    if (tokenScore >= 0.8) {
+
+      const score = tokenScore;
+
+      if (
+        !bestMatch ||
+        score > bestMatch.score
+      ) {
+        bestMatch = {
+          profile,
+          score,
+          matchedText: matchedTokens.join(" "),
+        };
+      }
+    }
+  }
+
   return bestMatch;
 }
 
