@@ -453,7 +453,7 @@ toast.success(
 // limpa estados pendentes
 setSuggestedProfile(null);
 setNovoColabForm(null);
-setNovoColaboradorData(null);
+setNovoColabForm(null);
 setShowNovoColaborador(false);
 
 toast.success("Documento vinculado com sucesso!");
