@@ -427,12 +427,16 @@ export async function createMergedPdf(file: File, pageNumbers: number[]): Promis
 export function findBestProfileMatch(
   pageText: string,
   profiles: Profile[]
-): { profile: Profile; score: number; matchedText: string } | null {
+): {
+  profile: Profile;
+  score: number;
+  matchedText: string;
+} | null {
 
   const page = normalizeText(pageText);
 
   // ==================================================
-  // ETAPA 1 - CPF (100% confiável)
+  // ETAPA 1 - CPF (PRIORIDADE ABSOLUTA)
   // ==================================================
 
   const cpfMatch = page.match(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/);
@@ -444,20 +448,17 @@ export function findBestProfileMatch(
       p => p.cpf?.replace(/\D/g, "") === cpf
     );
 
-    // CPF encontrado
-if (profile) {
-   return {
-      profile,
-      score: 1,
-      matchedText: cpf
-   };
-}
-
-// CPF não encontrado
-return null;
+    if (profile) {
+      return {
+        profile,
+        score: 1,
+        matchedText: cpf,
+      };
+    }
+  }
 
   // ==================================================
-  // ETAPA 2 - NOME COMPLETO
+  // ETAPA 2 - NOME
   // ==================================================
 
   let bestMatch: {
@@ -472,19 +473,27 @@ return null;
 
     const profileName = normalizeText(profile.nome);
 
-    // nome completo encontrado
-    if (page.includes(profileName)) {
+    // ------------------------------
+    // Nome completo encontrado
+    // ------------------------------
 
+    if (page.includes(profileName)) {
       return {
         profile,
-        score: 0.99,
+        score: 0.95,
         matchedText: profile.nome,
       };
     }
 
+    // ------------------------------
+    // Busca por tokens do nome
+    // ------------------------------
+
     const tokens = profileName
       .split(" ")
-      .filter(t => t.length >= 3);
+      .filter(token => token.length >= 3);
+
+    if (tokens.length < 2) continue;
 
     const matchedTokens = tokens.filter(
       token => page.includes(token)
@@ -493,10 +502,19 @@ return null;
     const tokenScore =
       matchedTokens.length / tokens.length;
 
-    // Exigir pelo menos 80% dos tokens
-    if (tokenScore >= 0.8) {
+    // Regras:
+    // - Pelo menos 75% dos tokens
+    // - Pelo menos 2 tokens encontrados
 
-      const score = tokenScore;
+    if (
+      tokenScore >= 0.75 &&
+      matchedTokens.length >= 2
+    ) {
+
+      const score =
+        matchedTokens.length === tokens.length
+          ? 0.90
+          : 0.85;
 
       if (
         !bestMatch ||
