@@ -454,7 +454,7 @@ toast.success(
 setSuggestedProfile(null);
 setNovoColabForm(null);
 setNovoColabForm(null);
-setShowNovoColaborador(false);
+setShowNovoColab(false);
 
 toast.success("Documento vinculado com sucesso!");
 setManualProfileId("");
