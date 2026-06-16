@@ -165,7 +165,7 @@ export default function Colaboradores() {
         nome: editForm.nome.trim(),
         cpf: cleanCpf,
         matricula: editForm.matricula.trim() || null,
-        email: editForm.email.trim() || null,
+        email_contato: editForm.email.trim() || null,
         whatsapp: editForm.whatsapp.trim() || null,
         cargo: editForm.cargo,
         unidade_id: editForm.unidadeId === "none" ? null : editForm.unidadeId,
