@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Perfil from "./pages/Perfil";
 import Calendario from "./pages/Calendario";
+import CalendarioAdmin from "./pages/admin/Calendario";
 import Trocas from "./pages/Trocas";
 import Historico from "./pages/Historico";
 import Documentos from "./pages/Documentos";
