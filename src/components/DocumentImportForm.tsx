@@ -453,7 +453,7 @@ export function DocumentImportForm() {
                   </div>
                 </div>
               ) : (
-                <Button variant="outline" className="w-full" onClick={() => { setShowNovoColab(true); setNovoColabForm({ nome: result.nome ?? "", cpf: result.cpf ?? "", cargo: "" }); }}>
+                <Button variant="outline" className="w-full" onClick={() => { setShowNovoColab(true); setNovoColabForm({ nome: result.nome ?? "", cpf: result.cpf ?? "", cargo: "", unidadeId: result.unidadeId ?? "", senha: "", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", whatsapp: "", perfil_acesso: "colaborador" }); }}>
                   <UserPlus className="size-4 mr-2" /> Cadastrar Novo Colaborador
                 </Button>
               )}
