@@ -19,7 +19,8 @@ import {
   formatPhone,
   cleanCNPJ,
   formatCNPJ
-} from "@/lib/utils";import { ColaboradorForm } from "@/components/ColaboradorForm";
+} from "@/lib/utils";
+import { ColaboradorForm } from "@/components/ColaboradorForm";
 import { ColaboradorFormDialog } from "@/components/ColaboradorFormDialog";
 import { Tables } from "@/integrations/supabase/types";
 import { adminApi } from "@/lib/admin-api";
