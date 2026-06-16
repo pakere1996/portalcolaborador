@@ -452,7 +452,7 @@ toast.success(
 
 // limpa estados pendentes
 setSuggestedProfile(null);
-setNovoColaborador(null);
+setNovoColabForm(null);
 setNovoColaboradorData(null);
 setShowNovoColaborador(false);
 
