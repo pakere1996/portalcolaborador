@@ -529,16 +529,34 @@ export function DocumentImportForm() {
                     <div className="col-span-2 grid grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <Label className="text-xs">Cargo *</Label>
-                        <Select value={novoColabForm.cargo} onValueChange={(v) => setNovoColabForm(f => ({ ...f, cargo: v }))}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione o cargo" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {listaCargos.map((cargoObj) => (
-                              <SelectItem key={cargoObj.id} value={cargoObj.id}>{cargoObj.nome}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="flex gap-1.5">
+                          <Select value={novoColabForm.cargo} onValueChange={(v) => setNovoColabForm(f => ({ ...f, cargo: v }))}>
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="Selecione o cargo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {listaCargos.map((cargoObj) => (
+                                <SelectItem key={cargoObj.id} value={cargoObj.id}>{cargoObj.nome}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="shrink-0 h-10 w-10 border-dashed hover:border-primary hover:text-primary"
+                            title="Cadastrar novo cargo na base"
+                            onClick={async () => {
+                              const nomeNovoCargo = prompt("Digite o nome do novo cargo que deseja cadastrar:");
+                              if (nomeNovoCargo && nomeNovoCargo.trim() !== "") {
+                                await handleCadastrarCargoRapido(nomeNovoCargo.trim());
+                              }
+                            }}
+                          >
+                            +
+                          </Button>
+                        </div>
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs">Matrícula (Opcional)</Label>
