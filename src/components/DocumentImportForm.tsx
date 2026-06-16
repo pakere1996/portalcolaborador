@@ -403,7 +403,9 @@ setManualProfileId("");
       setProfiles(prev => [...prev, newProfile]);
       setShowNovoColab(false);
       setNovoColabForm({ nome: "", cpf: "", cargo: "", unidadeId: "", senha: "", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", whatsapp: "", perfil_acesso: "colaborador", matricula: "" });
-      toast.success("Colaborador criado! Agora vincule o documento.");
+      toast.success(
+  "Colaborador criado com sucesso! Clique em 'Vincular' para finalizar."
+);
       setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, matchedProfile: newProfile, matchStatus: "automatico" } : r));
     } catch (err) {
       toast.error("Erro ao criar colaborador", { description: (err as Error).message });
