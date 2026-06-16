@@ -20,11 +20,13 @@ interface PageResult {
   mes: number | null;
   ano: number | null;
   unidadeId: string | null;
-  cargo: string | null;
+  cargo: string | null; // Armazena o ID do cargo oficial
   dataAdmissao: string | null;
   matchStatus: "automatico" | "sugerido" | "revisao";
   matchedProfile: ProfileForMatching | null;
   confidence: number;
+  isNewCargo: boolean;
+  suggestedCargoName: string | null;
   vinculado: boolean;
   ignorado: boolean;
 }
@@ -35,6 +37,12 @@ interface Unidade {
   cnpj: string | null;
 }
 
+interface Cargo {
+  id: string;
+  nome: string;
+  descricao?: string | null;
+}
+
 export function DocumentImportForm() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -43,31 +51,38 @@ export function DocumentImportForm() {
   const [currentPage, setCurrentPage] = useState(0);
   const [profiles, setProfiles] = useState<ProfileForMatching[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
+  const [listaCargos, setListaCargos] = useState<Cargo[]>([]); // 🌟 Base oficial sincronizada com o banco
   const [isUploading, setIsUploading] = useState(false);
   const [manualProfileId, setManualProfileId] = useState<string>("");
+  
   const [novoColabForm, setNovoColabForm] = useState({
     nome: "", cpf: "", cargo: "", unidadeId: "", senha: "",
     folgaFixa: "none", dataAdmissao: "", dataNascimento: "",
-    whatsapp: "", perfil_acesso: "colaborador",
+    whatsapp: "", perfil_acesso: "colaborador", matricula: ""
   });
   const [showNovoColab, setShowNovoColab] = useState(false);
   const { user } = useAuth();
 
-  // Determina o tipo de documento pela URL
   const documentType = window.location.pathname.includes("ponto") ? "ponto" : "contracheque";
 
+  // Carrega todas as bases sincronizadas do Supabase
   useEffect(() => {
     if (!user) return;
+    
     supabase.from("profiles").select("id, nome, cpf, matricula").eq("ativo", true).order("nome")
       .then(({ data }) => setProfiles((data ?? []) as ProfileForMatching[]));
+      
     supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome")
       .then(({ data }) => setUnidades(data ?? []));
+
+    // 🌟 Busca a lista real da sua tela de cadastro de cargos
+    supabase.from("cargos").select("id, nome, descricao").order("nome")
+      .then(({ data }) => setListaCargos(data ?? []));
   }, [user?.id]);
 
   const cleanCNPJ = (cnpj: string) => cnpj.replace(/\D/g, "");
 
   const extractPeriodo = (text: string): { mes: number; ano: number } | null => {
-    // Folha de ponto
     const regexPonto = /Per[ií]odo de refer[eê]ncia:\s*de\s*(\d{2}\/\d{2}\/\d{4})\s+(?:a|à)\s+(\d{2}\/\d{2}\/\d{4})/i;
     const matchPonto = text.match(regexPonto);
     if (matchPonto) {
@@ -75,7 +90,6 @@ export function DocumentImportForm() {
       const [, mes, ano] = dataInicio.split("/");
       return { mes: parseInt(mes), ano: parseInt(ano) };
     }
-    // Contracheque
     const meses: Record<string, number> = {
       janeiro: 1, fevereiro: 2, março: 3, abril: 4, maio: 5, junho: 6,
       julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
@@ -96,7 +110,7 @@ export function DocumentImportForm() {
     setCurrentPage(0);
   };
 
-const handleProcessar = async () => {
+  const handleProcessar = async () => {
     if (!selectedFile) return;
     setIsProcessing(true);
     try {
@@ -104,13 +118,12 @@ const handleProcessar = async () => {
       const results: PageResult[] = pages.map((p) => {
         const text = p.text;
 
-        // 1. Extrai nome e busca o perfil vinculado (A sua Flag)
         const nameMatch = text.match(/\d{2}\/\d{2}\/\d{4}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+?)\s+\d+\s+[A-Z]/);
         const nome = nameMatch ? nameMatch[1].trim().replace(/\s+/g, " ") : null;
         const cpf = extractCPF(text);
         
         const match = findBestProfileMatch(nome, cpf, profiles);
-        const perfilVinculado = match.profile; // Esse é o objeto da sua flag
+        const perfilVinculado = match.profile;
 
         // =================================================================
         // TRADUTOR DE CARGO: CONVERTE DADOS DO PDF/FLAG PARA A BASE OFICIAL
@@ -119,7 +132,6 @@ const handleProcessar = async () => {
         let isNewCargo = false;
         let suggestedCargoName = null;
 
-        // Passo A: Tenta extrair o texto do PDF
         const cargoMatch = text.match(/(?:cargo|fun[çc][ãa]o)[:\s]*([A-Za-zÀ-ÿÇç\u00a0\s-]+)/i);
         let cargoTexto = cargoMatch ? cargoMatch[1].replace(/\u00a0/g, " ").trim() : null;
         
@@ -127,8 +139,6 @@ const handleProcessar = async () => {
           cargoTexto = cargoTexto.split(/(?:setor|dep|unidade|c\.|registro|s[eé]rie|hor[aá]rio|escala|cbo|pis|ctps|\s{2,})/i)[0].trim();
         }
 
-        // Passo B: Se o PDF não tiver o cargo, pegamos o cargo que veio na flag (mesmo que seja o nome antigo/legado)
-        // Note: mude '.cargo' para a propriedade real de texto do cargo dentro do seu perfil (ex: .cargoNome, .funcao)
         const cargoOrigem = cargoTexto || perfilVinculado?.cargo;
 
         if (cargoOrigem) {
@@ -136,20 +146,16 @@ const handleProcessar = async () => {
           const toTitleCase = (s: string) => s.toLowerCase().replace(/(?:^|\s)\S/g, l => l.toUpperCase());
           suggestedCargoName = toTitleCase(cargoOrigem.toString());
 
-          // Passo C: Cruzamos o texto (seja do PDF ou da Flag) com a LISTA OFICIAL de cargos cadastrados
           if (listaCargos && listaCargos.length > 0) {
             const cargoOficialEncontrado = listaCargos.find(c => 
               (c.nome && c.nome.toLowerCase().trim() === cargoLower) || 
-              (c.descricao && c.descricao.toLowerCase().trim() === cargoLower) ||
-              (c.id?.toString() === cargoOrigem.toString()) // Caso o ID por acaso já fosse coincidente
+              (c.id?.toString() === cargoOrigem.toString())
             );
 
             if (cargoOficialEncontrado) {
-              // SUCESSO: Encontrou o correspondente na tabela nova. Mapeia o ID correto para o Select preencher
-              cargoFinalId = cargoOficialEncontrado.id;
+              cargoFinalId = cargoOficialEncontrado.id; // Guarda o ID oficial do banco
               isNewCargo = false;
             } else {
-              // O cargo existe no PDF/Flag, mas NÃO EXISTE na sua nova base de cargos cadastrados
               isNewCargo = true;
             }
           } else {
@@ -157,9 +163,7 @@ const handleProcessar = async () => {
           }
         }
 
-        // =================================================================
-        // EXTRAÇÃO DE DATA DE ADMISSÃO (Mantida funcional)
-        // =================================================================
+        // EXTRAÇÃO DE DATA DE ADMISSÃO
         let dataAdmissao = null;
         const admissaoDireto = text.match(/(?:admiss[ãa]o|admissao|adm)[:\s]*[^0-9/]{0,20}(\d{2})\/(\d{2})\/(\d{4})/i);
         
@@ -190,7 +194,6 @@ const handleProcessar = async () => {
           }
         }
 
-        // Outras extrações padrão do seu script
         const cnpjMatch = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
         const cnpj = cnpjMatch ? cnpjMatch[0] : null;
         const unidade = cnpj ? unidades.find(u => u.cnpj && cleanCNPJ(u.cnpj) === cleanCNPJ(cnpj)) : null;
@@ -208,7 +211,7 @@ const handleProcessar = async () => {
           matchStatus: match.status,
           matchedProfile: perfilVinculado,
           confidence: match.confidence,
-          cargo: cargoFinalId, // Vincula estritamente o ID válido da tabela nova!
+          cargo: cargoFinalId, 
           isNewCargo: isNewCargo, 
           suggestedCargoName: suggestedCargoName,
           dataAdmissao: dataAdmissao,
@@ -227,6 +230,33 @@ const handleProcessar = async () => {
     }
   };
 
+  // 🌟 FUNÇÃO INÉDITA: Faz o INSERT real do novo cargo na sua tabela oficial do Supabase
+  const handleCadastrarCargoRapido = async (nomeCargo: string) => {
+    if (!nomeCargo) return;
+    try {
+      const { data, error } = await supabase
+        .from("cargos")
+        .insert({ nome: nomeCargo })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // 1. Atualiza a lista oficial do estado na tela
+      setListaCargos(prev => [...prev, data]);
+      
+      // 2. Preenche automaticamente o formulário de cadastro com o ID recém criado
+      setNovoColabForm(f => ({ ...f, cargo: data.id }));
+      
+      // 3. Atualiza o resultado da página atual para não constar mais como pendente
+      setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, cargo: data.id, isNewCargo: false } : r));
+      
+      toast.success(`Cargo "${nomeCargo}" adicionado à base de dados!`);
+    } catch (err) {
+      toast.error("Erro ao cadastrar cargo no banco", { description: (err as Error).message });
+    }
+  };
+
   const handleVincular = async (profileId: string) => {
     const result = pageResults[currentPage];
     if (!result || !result.mes || !result.ano) {
@@ -235,7 +265,6 @@ const handleProcessar = async () => {
     }
     setIsUploading(true);
     try {
-      // Verifica duplicata
       const { count } = await supabase.from("documentos")
         .select("id", { count: "exact", head: true })
         .eq("colaborador_id", profileId)
@@ -249,13 +278,11 @@ const handleProcessar = async () => {
         return;
       }
 
-      // Faz upload do PDF completo por ora (página individual requer pdf-lib)
       const storagePath = `documentos/${documentType}/${profileId}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}.pdf`;
       const { error: uploadError } = await supabase.storage.from("documentos")
         .upload(storagePath, selectedFile!, { contentType: "application/pdf", upsert: false });
       if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
 
-      // Cria registro
       const { error: insertError } = await supabase.from("documentos").insert({
         colaborador_id: profileId,
         tipo: documentType,
@@ -267,12 +294,10 @@ const handleProcessar = async () => {
       });
       if (insertError) throw insertError;
 
-      // Atualiza estado
       setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, vinculado: true, matchedProfile: profiles.find(p => p.id === profileId) ?? r.matchedProfile } : r));
       toast.success("Documento vinculado com sucesso!");
       setManualProfileId("");
 
-      // Avança para próxima página não processada
       const next = pageResults.findIndex((r, i) => i > currentPage && !r.vinculado && !r.ignorado);
       if (next !== -1) setCurrentPage(next);
     } catch (err) {
@@ -301,22 +326,24 @@ const handleProcessar = async () => {
         cpf: cleanCpf,
         email: `${cleanCpf}@pakere.com.br`,
         senha: novoColabForm.senha || cleanCpf.slice(-6),
-        cargo: novoColabForm.cargo,
+        cargo: novoColabForm.cargo, // Envia o ID correto do cargo selecionado
         dataAdmissao: novoColabForm.dataAdmissao || null,
         dataNascimento: novoColabForm.dataNascimento || null,
         folgaFixaSemana: novoColabForm.folgaFixa === "none" ? null : Number(novoColabForm.folgaFixa),
         role: novoColabForm.perfil_acesso,
       });
+      
       const { error: profErr } = await supabase.from("profiles").update({
         unidade_id: novoColabForm.unidadeId,
         whatsapp: novoColabForm.whatsapp || null,
+        matricula: novoColabForm.matricula || null
       }).eq("id", authUser.userId);
       if (profErr) throw profErr;
 
-      const newProfile: ProfileForMatching = { id: authUser.userId, nome: novoColabForm.nome, cpf: cleanCpf, matricula: null };
+      const newProfile: ProfileForMatching = { id: authUser.userId, nome: novoColabForm.nome, cpf: cleanCpf, matricula: novoColabForm.matricula || null };
       setProfiles(prev => [...prev, newProfile]);
       setShowNovoColab(false);
-      setNovoColabForm({ nome: "", cpf: "", cargo: "", unidadeId: "", senha: "", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", whatsapp: "", perfil_acesso: "colaborador" });
+      setNovoColabForm({ nome: "", cpf: "", cargo: "", unidadeId: "", senha: "", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", whatsapp: "", perfil_acesso: "colaborador", matricula: "" });
       toast.success("Colaborador criado! Agora vincule o documento.");
       setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, matchedProfile: newProfile, matchStatus: "automatico" } : r));
     } catch (err) {
@@ -371,7 +398,6 @@ const handleProcessar = async () => {
 
   return (
     <div className="space-y-4">
-      {/* Progresso */}
       <div className="flex items-center justify-between text-sm">
         <span className="font-semibold">{selectedFile?.name}</span>
         <span className="text-muted-foreground">{vinculados} vinculados · {ignorados} ignorados · {totalPages - vinculados - ignorados} pendentes</span>
@@ -380,7 +406,6 @@ const handleProcessar = async () => {
         <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${((vinculados + ignorados) / totalPages) * 100}%` }} />
       </div>
 
-      {/* Navegação de páginas */}
       <div className="flex items-center justify-between">
         <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(0, p - 1))} disabled={currentPage === 0}>
           <ChevronLeft className="size-4" />
@@ -391,11 +416,9 @@ const handleProcessar = async () => {
         </Button>
       </div>
 
-      {/* Card da página atual */}
       {result && (
         <div className={`rounded-2xl border-2 p-5 space-y-4 ${result.vinculado ? "border-green-300 bg-green-50" : result.ignorado ? "border-gray-200 bg-gray-50 opacity-60" : result.matchStatus === "automatico" ? "border-green-200 bg-green-50/50" : result.matchStatus === "sugerido" ? "border-yellow-200 bg-yellow-50/50" : "border-red-200 bg-red-50/50"}`}>
           
-          {/* Status badge */}
           <div className="flex items-center gap-2">
             {result.vinculado ? <CheckCircle2 className="size-5 text-green-600" /> : result.ignorado ? <XCircle className="size-5 text-gray-400" /> : result.matchStatus === "automatico" ? <CheckCircle2 className="size-5 text-green-600" /> : result.matchStatus === "sugerido" ? <AlertTriangle className="size-5 text-yellow-600" /> : <XCircle className="size-5 text-red-500" />}
             <span className="font-semibold text-sm">
@@ -406,7 +429,6 @@ const handleProcessar = async () => {
             )}
           </div>
 
-          {/* Dados extraídos */}
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div><span className="text-muted-foreground">Nome PDF:</span><div className="font-medium">{result.nome ?? "Não identificado"}</div></div>
             <div><span className="text-muted-foreground">CPF:</span><div className="font-medium">{result.cpf ?? "Não identificado"}</div></div>
@@ -414,7 +436,6 @@ const handleProcessar = async () => {
             <div><span className="text-muted-foreground">Unidade:</span><div className="font-medium">{result.unidadeId ? unidades.find(u => u.id === result.unidadeId)?.nome : "Não identificada"}</div></div>
           </div>
 
-          {/* Colaborador encontrado */}
           {result.matchedProfile && (
             <div className="p-3 bg-white rounded-xl border border-border">
               <div className="text-xs text-muted-foreground mb-1">Colaborador identificado:</div>
@@ -423,10 +444,8 @@ const handleProcessar = async () => {
             </div>
           )}
 
-          {/* Ações */}
           {!result.vinculado && !result.ignorado && (
             <div className="space-y-3">
-              {/* Vincular automaticamente */}
               {result.matchedProfile && (
                 <Button className="w-full" onClick={() => handleVincular(result.matchedProfile!.id)} disabled={isUploading}>
                   {isUploading ? <Loader2 className="size-4 mr-2 animate-spin" /> : <CheckCircle2 className="size-4 mr-2" />}
@@ -434,7 +453,6 @@ const handleProcessar = async () => {
                 </Button>
               )}
 
-              {/* Vincular manualmente */}
               <div className="space-y-2">
                 <Label className="text-xs">Vincular manualmente a outro colaborador:</Label>
                 <div className="flex gap-2">
@@ -454,184 +472,159 @@ const handleProcessar = async () => {
                 </div>
               </div>
 
-{/* Criar novo colaborador */}
-{showNovoColab ? (
-  (() => {
-    // 1. Carrega os cargos salvos no seu navegador (ou usa os padrões se for a primeira vez)
-    const salvos = localStorage.getItem("sistema_lista_cargos");
-    let listaCargos = salvos ? JSON.parse(salvos) : ["Atendente", "Gerente", "Supervisor", "Operador", "Auxiliar"];
+              {showNovoColab ? (
+                <div className="space-y-3 p-4 bg-white rounded-xl border border-border">
+                  <div className="font-semibold text-sm">Cadastrar Novo Colaborador</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Nome Completo *</Label>
+                      <Input placeholder="Nome completo" value={novoColabForm.nome} onChange={e => setNovoColabForm(f => ({ ...f, nome: e.target.value }))} />
+                    </div>
+                    
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">CPF *</Label>
+                      <Input placeholder="000.000.000-00" value={novoColabForm.cpf} onChange={e => setNovoColabForm(f => ({ ...f, cpf: e.target.value }))} />
+                    </div>
 
-    // 2. Limpa o texto do cargo que veio do PDF para comparar certinho
-    const cargoDoPdf = result.cargo ? result.cargo.trim() : "";
+                    {/* 🌟 BALÃO DE ALERTA DO BANCO DE DADOS REAL */}
+                    {result.isNewCargo && !novoColabForm.cargo && result.suggestedCargoName && (
+                      <div className="col-span-2 bg-amber-50 border border-amber-200 p-2 rounded-lg text-xs text-amber-800 flex items-center justify-between gap-2 animate-in fade-in duration-200">
+                        <span>✨ O cargo <strong>"{result.suggestedCargoName}"</strong> foi lido no PDF mas não existe na base oficial.</span>
+                        <Button 
+                          type="button"
+                          size="sm"
+                          variant="default"
+                          className="bg-amber-600 text-white hover:bg-amber-700 h-7 text-[11px] shrink-0"
+                          onClick={() => handleCadastrarCargoRapido(result.suggestedCargoName!)}
+                        >
+                          + Cadastrar na Base
+                        </Button>
+                      </div>
+                    )}
 
-    // 3. Se o formulário já tem um cargo temporário, garante que ele apareça no menu para não quebrar a tela
-    let listaExibicao = [...listaCargos];
-    if (novoColabForm.cargo && !listaExibicao.includes(novoColabForm.cargo)) {
-      listaExibicao.push(novoColabForm.cargo);
-    }
+                    {/* SELEÇÃO DO CARGO UTILIZANDO A BASE DE DADOS OFICIAL */}
+                    <div className="col-span-2 grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Cargo *</Label>
+                        <Select value={novoColabForm.cargo} onValueChange={(v) => setNovoColabForm(f => ({ ...f, cargo: v }))}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o cargo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {listaCargos.map((cargoObj) => (
+                              <SelectItem key={cargoObj.id} value={cargoObj.id}>{cargoObj.nome}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Matrícula (Opcional)</Label>
+                        <Input value={novoColabForm.matricula} onChange={e => setNovoColabForm(f => ({ ...f, matricula: e.target.value }))} placeholder="Matrícula" />
+                      </div>
+                    </div>
 
-    // 4. Descobre se o cargo vindo do PDF é realmente novo
-    const ehCargoNovo = cargoDoPdf && !listaCargos.some(c => c.toLowerCase() === cargoDoPdf.toLowerCase());
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Unidade *</Label>
+                      <Select value={novoColabForm.unidadeId} onValueChange={v => setNovoColabForm(f => ({ ...f, unidadeId: v }))}>
+                        <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
+                        <SelectContent>
+                          {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-    return (
-      <div className="space-y-3 p-4 bg-white rounded-xl border border-border">
-        <div className="font-semibold text-sm">Cadastrar Novo Colaborador</div>
-        <div className="grid grid-cols-2 gap-2">
-          
-          <div className="col-span-2 space-y-1">
-            <Label className="text-xs">Nome Completo *</Label>
-            <Input placeholder="Nome completo" value={novoColabForm.nome} onChange={e => setNovoColabForm(f => ({ ...f, nome: e.target.value }))} />
-          </div>
-          
-          <div className="col-span-2 space-y-1">
-            <Label className="text-xs">CPF *</Label>
-            <Input placeholder="000.000.000-00" value={novoColabForm.cpf} onChange={e => setNovoColabForm(f => ({ ...f, cpf: e.target.value }))} />
-          </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Data de Admissão</Label>
+                      <Input type="date" value={novoColabForm.dataAdmissao} onChange={e => setNovoColabForm(f => ({ ...f, dataAdmissao: e.target.value }))} />
+                    </div>
 
-          {/* BALÃO DE ALERTA: SÓ APARECE SE O PDF TRAZER UM CARGO QUE NÃO ESTÁ NA LISTA */}
-          {ehCargoNovo && (
-            <div className="col-span-2 bg-blue-50 border border-blue-200 p-2 rounded-lg text-xs text-blue-800 flex items-center justify-between gap-2 animate-in fade-in duration-200">
-              <span>✨ O PDF trouxe o cargo <strong className="underline">{cargoDoPdf}</strong> que não existe na sua lista.</span>
-              <button 
-                type="button"
-                className="bg-blue-600 text-white font-medium px-2 py-1 rounded hover:bg-blue-700 transition-colors text-[11px] shrink-0 shadow-sm"
-                onClick={() => {
-                  const novaLista = [...listaCargos, cargoDoPdf];
-                  localStorage.setItem("sistema_lista_cargos", JSON.stringify(novaLista));
-                  // Atualiza o formulário para salvar e selecionar o cargo novo na hora
-                  setNovoColabForm(f => ({ ...f, cargo: cargoDoPdf }));
-                }}
-              >
-                + Incluir na Lista
-              </button>
-            </div>
-          )}
+                    <div className="space-y-1">
+                      <Label className="text-xs">Data de Nascimento</Label>
+                      <Input type="date" value={novoColabForm.dataNascimento} onChange={e => setNovoColabForm(f => ({ ...f, dataNascimento: e.target.value }))} />
+                    </div>
 
-          {/* COMPONENTE DE CARGO EM LISTA + MATRÍCULA */}
-          <div className="col-span-2 grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label className="text-xs">Cargo *</Label>
-              <Select value={novoColabForm.cargo} onValueChange={(v) => setNovoColabForm(f => ({ ...f, cargo: v }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o cargo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {listaExibicao.map((cargoNome, idx) => (
-                    <SelectItem key={idx} value={cargoNome}>{cargoNome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Matrícula (Opcional)</Label>
-              <Input value={novoColabForm.matricula || ""} onChange={e => setNovoColabForm(f => ({ ...f, matricula: e.target.value }))} placeholder="Matrícula" />
-            </div>
-          </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Folga Fixa Semanal</Label>
+                      <Select value={novoColabForm.folgaFixa} onValueChange={v => setNovoColabForm(f => ({ ...f, folgaFixa: v }))}>
+                        <SelectTrigger><SelectValue placeholder="Nenhuma" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhuma</SelectItem>
+                          <SelectItem value="0">Domingo</SelectItem>
+                          <SelectItem value="1">Segunda-feira</SelectItem>
+                          <SelectItem value="2">Terça-feira</SelectItem>
+                          <SelectItem value="3">Quarta-feira</SelectItem>
+                          <SelectItem value="4">Quinta-feira</SelectItem>
+                          <SelectItem value="5">Sexta-feira</SelectItem>
+                          <SelectItem value="6">Sábado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-          <div className="col-span-2 space-y-1">
-            <Label className="text-xs">Unidade *</Label>
-            <Select value={novoColabForm.unidadeId} onValueChange={v => setNovoColabForm(f => ({ ...f, unidadeId: v }))}>
-              <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
-              <SelectContent>
-                {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Perfil de Acesso</Label>
+                      <Select value={novoColabForm.perfil_acesso} onValueChange={v => setNovoColabForm(f => ({ ...f, perfil_acesso: v }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="colaborador">Colaborador</SelectItem>
+                          <SelectItem value="admin">Administrador</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-          <div className="space-y-1">
-            <Label className="text-xs">Data de Admissão</Label>
-            <Input type="date" value={novoColabForm.dataAdmissao} onChange={e => setNovoColabForm(f => ({ ...f, dataAdmissao: e.target.value }))} />
-          </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">WhatsApp</Label>
+                      <Input placeholder="(00) 00000-0000" value={novoColabForm.whatsapp} onChange={e => setNovoColabForm(f => ({ ...f, whatsapp: e.target.value }))} />
+                    </div>
 
-          <div className="space-y-1">
-            <Label className="text-xs">Data de Nascimento</Label>
-            <Input type="date" value={novoColabForm.dataNascimento} onChange={e => setNovoColabForm(f => ({ ...f, dataNascimento: e.target.value }))} />
-          </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Senha Inicial</Label>
+                      <Input type="password" placeholder="Padrão: 6 últimos dígitos CPF" value={novoColabForm.senha} onChange={e => setNovoColabForm(f => ({ ...f, senha: e.target.value }))} />
+                    </div>
 
-          <div className="space-y-1">
-            <Label className="text-xs">Folga Fixa Semanal</Label>
-            <Select value={novoColabForm.folgaFixa} onValueChange={v => setNovoColabForm(f => ({ ...f, folgaFixa: v }))}>
-              <SelectTrigger><SelectValue placeholder="Nenhuma" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Nenhuma</SelectItem>
-                <SelectItem value="0">Domingo</SelectItem>
-                <SelectItem value="1">Segunda-feira</SelectItem>
-                <SelectItem value="2">Terça-feira</SelectItem>
-                <SelectItem value="3">Quarta-feira</SelectItem>
-                <SelectItem value="4">Quinta-feira</SelectItem>
-                <SelectItem value="5">Sexta-feira</SelectItem>
-                <SelectItem value="6">Sábado</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button className="flex-1" onClick={handleCriarColab} disabled={isUploading}>
+                      {isUploading ? <Loader2 className="size-4 mr-2 animate-spin" /> : <UserPlus className="size-4 mr-2" />} Criar Colaborador
+                    </Button>
+                    <Button variant="outline" onClick={() => setShowNovoColab(false)}>Cancelar</Button>
+                  </div>
+                </div>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  className="w-full" 
+                  onClick={() => { 
+                    let dataCorreta = "";
+                    if (result.dataAdmissao && result.dataAdmissao.includes("/")) {
+                      const partes = result.dataAdmissao.split("/");
+                      if (partes.length === 3) {
+                        dataCorreta = `${partes[2]}-${partes[1]}-${partes[0]}`;
+                      }
+                    } else {
+                      dataCorreta = result.dataAdmissao ?? "";
+                    }
 
-          <div className="space-y-1">
-            <Label className="text-xs">Perfil de Acesso</Label>
-            <Select value={novoColabForm.perfil_acesso} onValueChange={v => setNovoColabForm(f => ({ ...f, perfil_acesso: v }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="colaborador">Colaborador</SelectItem>
-                <SelectItem value="admin">Administrador</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+                    setShowNovoColab(true); 
+                    setNovoColabForm({ 
+                      nome: result.nome ?? "", 
+                      cpf: result.cpf ?? "", 
+                      cargo: result.cargo ?? "", // Injeta o ID oficial do cargo pré-mapeado
+                      unidadeId: result.unidadeId ?? "", 
+                      senha: result.cpf ? result.cpf.replace(/\D/g, "").slice(-6) : "", 
+                      folgaFixa: "none", 
+                      dataAdmissao: dataCorreta, 
+                      dataNascimento: "", 
+                      whatsapp: "", 
+                      perfil_acesso: "colaborador",
+                      matricula: "" 
+                    }); 
+                  }}
+                >
+                  <UserPlus className="size-4 mr-2" /> Cadastrar Novo Colaborador
+                </Button>
+              )}
 
-          <div className="space-y-1">
-            <Label className="text-xs">WhatsApp</Label>
-            <Input placeholder="(00) 00000-0000" value={novoColabForm.whatsapp} onChange={e => setNovoColabForm(f => ({ ...f, whatsapp: e.target.value }))} />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">Senha Inicial</Label>
-            <Input type="password" placeholder="Padrão: 6 últimos dígitos CPF" value={novoColabForm.senha} onChange={e => setNovoColabForm(f => ({ ...f, senha: e.target.value }))} />
-          </div>
-
-        </div>
-        <div className="flex gap-2 pt-2">
-          <Button className="flex-1" onClick={handleCriarColab} disabled={isUploading}>
-            {isUploading ? <Loader2 className="size-4 mr-2 animate-spin" /> : <UserPlus className="size-4 mr-2" />} Criar Colaborador
-          </Button>
-          <Button variant="outline" onClick={() => setShowNovoColab(false)}>Cancelar</Button>
-        </div>
-      </div>
-    );
-  })()
-) : (
-  <Button 
-    variant="outline" 
-    className="w-full" 
-    onClick={() => { 
-      let dataCorreta = "";
-      if (result.dataAdmissao && result.dataAdmissao.includes("/")) {
-        const partes = result.dataAdmissao.split("/");
-        if (partes.length === 3) {
-          dataCorreta = `${partes[2]}-${partes[1]}-${partes[0]}`;
-        }
-      } else {
-        dataCorreta = result.dataAdmissao ?? "";
-      }
-
-      setShowNovoColab(true); 
-      setNovoColabForm({ 
-        nome: result.nome ?? "", 
-        cpf: result.cpf ?? "", 
-        cargo: result.cargo ?? "", 
-        unidadeId: result.unidadeId ?? "", 
-        senha: result.cpf ? result.cpf.replace(/\D/g, "").slice(-6) : "", 
-        folgaFixa: "none", 
-        dataAdmissao: dataCorreta, 
-        dataNascimento: "", 
-        whatsapp: "", 
-        perfil_acesso: "colaborador",
-        matricula: "" 
-      }); 
-    }}
-  >
-    <UserPlus className="size-4 mr-2" /> Cadastrar Novo Colaborador
-  </Button>
-)}
-
-              {/* Ignorar */}
               <Button variant="ghost" className="w-full text-muted-foreground" onClick={handleIgnorar}>
                 <XCircle className="size-4 mr-2" /> Ignorar esta página
               </Button>
@@ -640,7 +633,6 @@ const handleProcessar = async () => {
         </div>
       )}
 
-      {/* Lista resumo de todas as páginas */}
       <div className="space-y-1">
         <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Todas as páginas</div>
         {pageResults.map((r, i) => (
@@ -651,7 +643,6 @@ const handleProcessar = async () => {
         ))}
       </div>
 
-      {/* Botão reiniciar */}
       {vinculados + ignorados === totalPages && (
         <Button className="w-full" onClick={() => { setPageResults([]); setSelectedFile(null); setCurrentPage(0); }}>
           Processar Novo Documento
