@@ -338,9 +338,9 @@ export default function AdminHomeAdminPage() {
           <h2 className="text-xl font-semibold border-b border-yellow-500 pb-1 text-red-600">{category}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {modules.map((module) => (
-              <a
+                <Link
                 key={module.to}
-                href={module.to}
+                to={module.to}
                 className="block h-full"
               >
                 <div className="bg-card border border-border rounded-2xl p-5 shadow-sm hover:shadow-lg hover:border-primary/50 border-2 transition-all duration-200">
