@@ -216,7 +216,7 @@ export function DocumentImportForm() {
     setIsUploading(true);
     try {
       const cleanCpf = novoColabForm.cpf.replace(/\D/g, "");
-      const { data: authUser, error: authErr } = await adminApi.createUser({
+      const authUser = await adminApi.createUser({
         nome: novoColabForm.nome.trim(),
         cpf: cleanCpf,
         email: `${cleanCpf}@pakere.com.br`,
