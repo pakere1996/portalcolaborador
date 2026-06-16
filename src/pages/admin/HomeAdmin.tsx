@@ -350,7 +350,7 @@ export default function AdminHomeAdminPage() {
                   </div>
                   <p className="text-sm text-muted-foreground">{module.description}</p>
                 </div>
-              </a>
+              </Link>
             ))}
           </div>
         </div>
