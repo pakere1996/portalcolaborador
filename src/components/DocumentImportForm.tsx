@@ -108,16 +108,32 @@ export function DocumentImportForm() {
         const nameMatch = text.match(/\d{2}\/\d{2}\/\d{4}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+?)\s+\d+\s+[A-Z]/);
         const nome = nameMatch ? nameMatch[1].trim().replace(/\s+/g, " ") : null;
 
-        // Extrai cargo (Adaptado para o formato exato da imagem, parando antes do 'Setor')
-        const cargoMatch = text.match(/(?:cargo|fun[çc][ãa]o):\s*([A-Za-zÀ-ÿ\s]+?)(?=\s{2,}|setor|\n|\r|$)/i);
-        const cargo = cargoMatch ? cargoMatch[1].trim().replace(/\s+/g, " ") : null;
+       // ==========================================
+// SUPER FILTRO: EXTRAÇÃO RESILIENTE DE CARGO
+// ==========================================
+// Procura a palavra "cargo", pula qualquer símbolo estranho e pega as letras seguintes
+let cargo = null;
+const cargoMatch = text.match(/(?:cargo|fun[çc][ãa]o)[^A-Za-zÀ-ÿ]*([A-Za-zÀ-ÿ\s]+?)(?=\s{2,}|setor|depart|\n|\r|$)/i);
 
-        // Extrai data de admissão capturando Dia, Mês e Ano separadamente
-        const admissaoMatch = text.match(/admiss[ãa]o[:\s]+(\d{2})\/(\d{2})\/(\d{4})/i);
-        // Converte com segurança para o formato AAAA-MM-DD que o formulário exige
-        const dataAdmissao = admissaoMatch
-        ? `${admissaoMatch[3]}-${admissaoMatch[2]}-${admissaoMatch[1]}`
-       : null;
+if (cargoMatch) {
+  cargo = cargoMatch[1].trim().replace(/\s+/g, " ");
+} else {
+  // Estratégia de socorro: Se a de cima falhar, pega a primeira palavra em MAIÚSCULO após "Cargo"
+  const cargoSocorro = text.match(/(?:cargo|fun[çc][ãa]o)[:\s]+([A-ZÀ-Ú]+)/i);
+  cargo = cargoSocorro ? cargoSocorro[1].trim() : null;
+}
+
+// ==========================================
+// SUPER FILTRO: EXTRAÇÃO RESILIENTE DE DATA
+// ==========================================
+// Procura "admis", ignora qualquer texto bagunçado no meio e captura a primeira data DD/MM/AAAA que aparecer
+const admissaoMatch = text.match(/admis[^0-9]*(\d{2})\/(\d{2})\/(\d{4})/i);
+let dataAdmissao = null;
+
+if (admissaoMatch) {
+  // Organiza no formato AAAA-MM-DD que o formulário exige
+  dataAdmissao = `${admissaoMatch[3]}-${admissaoMatch[2]}-${admissaoMatch[1]}`;
+}
 
         // Extrai CPF
         const cpf = extractCPF(text);
