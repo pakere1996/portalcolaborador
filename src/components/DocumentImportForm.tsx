@@ -478,36 +478,36 @@ export function DocumentImportForm() {
               )}
 
               <div className="space-y-2">
-                <Label className="text-xs">Vincular manualmente a outro colaborador:</Label>
-                <div className="flex gap-2">
-                 <Select 
-  value={manualProfileId} 
-  onValueChange={(value) => {
-    setManualProfileId(value);
-    setShowNovoColab(false); // Fecha o form de novo colab ao escolher um existente
-  }}
->
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder="Selecione o colaborador..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {profiles.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button 
-  variant="outline" 
-  onClick={() => {
-    setShowNovoColab(false); // Fecha o form antes de vincular
-    if (manualProfileId) handleVincular(manualProfileId);
-  }} 
-  disabled={!manualProfileId || isUploading}
->
-  Vincular
-</Button>
-                </div>
-              </div>
+  <Label className="text-xs">Vincular manualmente a outro colaborador:</Label>
+  <div className="flex gap-2">
+    <Select 
+      value={manualProfileId} 
+      onValueChange={(value) => {
+        setManualProfileId(value);
+        setShowNovoColab(false); // <--- Isso força o fechamento do form
+      }}
+    >
+      <SelectTrigger className="flex-1">
+        <SelectValue placeholder="Selecione o colaborador..." />
+      </SelectTrigger>
+      <SelectContent>
+        {profiles.map(p => (
+          <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+    <Button 
+      variant="outline" 
+      onClick={() => {
+        setShowNovoColab(false); // <--- Isso força o fechamento do form
+        if (manualProfileId) handleVincular(manualProfileId);
+      }} 
+      disabled={!manualProfileId || isUploading}
+    >
+      Vincular
+    </Button>
+  </div>
+</div>
 
               {showNovoColab ? (
                 <div className="space-y-3 p-4 bg-white rounded-xl border border-border">
