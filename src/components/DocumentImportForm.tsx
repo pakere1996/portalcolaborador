@@ -600,8 +600,24 @@ export function DocumentImportForm() {
                     </div>
 
                     <div className="space-y-1">
-                      <Label className="text-xs">Senha Inicial</Label>
-                      <Input type="password" placeholder="Padrão: 6 últimos dígitos CPF" value={novoColabForm.senha} onChange={e => setNovoColabForm(f => ({ ...f, senha: e.target.value }))} />
+                      <Label className="text-xs font-medium flex items-center justify-between">
+                        <span>Senha Inicial</span>
+                        {novoColabForm.cpf && (
+                          <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            Sugerida: {novoColabForm.cpf.replace(/\D/g, "").slice(-6)}
+                          </span>
+                        )}
+                      </Label>
+                      <Input 
+                        type="text" 
+                        placeholder="Padrão: 6 últimos dígitos CPF" 
+                        value={novoColabForm.senha} 
+                        onChange={e => setNovoColabForm(f => ({ ...f, senha: e.target.value }))} 
+                        className="font-mono bg-muted/30"
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Informe ao colaborador que a senha padrão são os <strong>6 últimos dígitos do CPF</strong> dele.
+                      </p>
                     </div>
 
                   </div>
