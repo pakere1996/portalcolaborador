@@ -480,7 +480,13 @@ export function DocumentImportForm() {
               <div className="space-y-2">
                 <Label className="text-xs">Vincular manualmente a outro colaborador:</Label>
                 <div className="flex gap-2">
-                  <Select value={manualProfileId} onValueChange={setManualProfileId}>
+                 <Select 
+  value={manualProfileId} 
+  onValueChange={(value) => {
+    setManualProfileId(value);
+    setShowNovoColab(false); // Fecha o form de novo colab ao escolher um existente
+  }}
+>
                     <SelectTrigger className="flex-1">
                       <SelectValue placeholder="Selecione o colaborador..." />
                     </SelectTrigger>
