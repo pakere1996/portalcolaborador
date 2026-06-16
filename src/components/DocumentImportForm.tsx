@@ -255,11 +255,7 @@ export function DocumentImportForm() {
       toast.success(`${pages.length} páginas processadas!`);
     } catch (err) {
       toast.error("Erro ao processar PDF", { description: (err as Error).message });
-    } catch (err) {
-      toast.error("Erro ao processar PDF", { description: (err as Error).message });
     } finally {
-      setIsProcessing(false);
-    }
       setIsProcessing(false);
     }
   };
