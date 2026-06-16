@@ -449,13 +449,19 @@ export function findBestProfileMatch(
     );
 
     if (profile) {
-      return {
-        profile,
-        score: 1,
-        matchedText: cpf,
-      };
-    }
-  }
+
+  console.log("================================");
+  console.log("MATCH POR CPF");
+  console.log("PDF CPF:", cpf);
+  console.log("COLABORADOR:", profile.nome);
+  console.log("================================");
+
+  return {
+    profile,
+    score: 1,
+    matchedText: cpf,
+  };
+}
 
   // ==================================================
   // ETAPA 2 - NOME
