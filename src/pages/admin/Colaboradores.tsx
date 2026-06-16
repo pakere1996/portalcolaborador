@@ -141,7 +141,7 @@ export default function Colaboradores() {
       nome: p.nome,
       cpf: formatCPF(p.cpf),
       matricula: p.matricula ?? "",
-      email: p.email ?? "",
+email: p.email_contato ?? "",
       whatsapp: p.whatsapp ?? "",
       cargo: p.cargo,
       unidadeId: p.unidade_id ?? "none",
