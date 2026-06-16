@@ -496,9 +496,16 @@ export function DocumentImportForm() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button variant="outline" onClick={() => manualProfileId && handleVincular(manualProfileId)} disabled={!manualProfileId || isUploading}>
-                    Vincular
-                  </Button>
+                  <Button 
+  variant="outline" 
+  onClick={() => {
+    setShowNovoColab(false); // Fecha o form antes de vincular
+    if (manualProfileId) handleVincular(manualProfileId);
+  }} 
+  disabled={!manualProfileId || isUploading}
+>
+  Vincular
+</Button>
                 </div>
               </div>
 
