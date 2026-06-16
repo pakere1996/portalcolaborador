@@ -269,8 +269,21 @@ console.log("================================");
       });
 
       setPageResults(results);
-      setCurrentPage(0);
-      toast.success(`${pages.length} páginas processadas!`);
+
+const primeiroPendente = results.findIndex(
+  r =>
+    r.matchStatus !== "automatico" &&
+    !r.vinculado &&
+    !r.ignorado
+);
+
+if (primeiroPendente >= 0) {
+  setCurrentPage(primeiroPendente);
+} else {
+  setCurrentPage(0);
+}
+
+toast.success(`${pages.length} páginas processadas!`);
     } catch (err) {
       toast.error("Erro ao processar PDF", { description: (err as Error).message });
     } finally {
