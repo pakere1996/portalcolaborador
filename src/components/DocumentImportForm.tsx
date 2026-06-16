@@ -43,13 +43,13 @@ interface Cargo {
   descricao?: string | null;
 }
 
-// 🌟 FUNÇÃO AUXILIAR: Remove acentos, espaços, pontuações e caixa alta para garantir o match de strings
+// 🌟 FUNÇÃO AUXILIAR: Remove acentos, espaços, pontuações e caixa alta para garantir o match perfeito de strings
 const normalizeTextForMatch = (str: string): string => {
   return str
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // Remove acentos
-    .replace(/[^a-z0-9]/g, "")       // Remove espaços, pontos, traços e barras
+    .replace(/[^a-z0-9]/g, "")       // Remove espaços, pontos, traços e barras horizontais
     .trim();
 };
 
@@ -134,13 +134,13 @@ export function DocumentImportForm() {
         const perfilVinculado = match.profile;
 
         // =================================================================
-        // PROCESSAMENTO E TRADUÇÃO DE CARGO COM DE-PARA INTELIGENTE
+        // PROCESSAMENTO DE CARGO REFORÇADO COM DUPLA CAMADA DE SEGURANÇA
         // =================================================================
         let cargoFinalId = null;
         let isNewCargo = false;
         let suggestedCargoName = null;
 
-        // Regex aprimorada para capturar variações como "Cargo/Função", pontos ou traços
+        // Camada 1: Proximidade Linear por Regex tradicional
         const cargoMatch = text.match(/(?:cargo|fun[çc][ãa]o|cargo\/fun[çc][ãa]o)[:\s-]*([A-Za-zÀ-ÿÇç\u00a0\s\./-]+)/i);
         let cargoTexto = cargoMatch ? cargoMatch[1].replace(/\u00a0/g, " ").trim() : null;
         
@@ -157,23 +157,39 @@ export function DocumentImportForm() {
           if (listaCargos && listaCargos.length > 0) {
             const normOrigem = normalizeTextForMatch(cargoOrigem.toString());
 
-            // Varre a lista de cargos oficial usando a normalização flexível
             const cargoOficialEncontrado = listaCargos.find(c => {
               if (!c.nome) return false;
               const normOficial = normalizeTextForMatch(c.nome);
-              
-              // Verifica igualdade ou se um termo está contido no outro (evita quebras por sulfixos/prefixos)
               return normOficial === normOrigem || normOficial.includes(normOrigem) || normOrigem.includes(normOficial);
             });
 
             if (cargoOficialEncontrado) {
-              cargoFinalId = cargoOficialEncontrado.id; // Vincula o ID real do banco de dados
+              cargoFinalId = cargoOficialEncontrado.id;
               isNewCargo = false;
             } else {
               isNewCargo = true;
             }
           } else {
             isNewCargo = true;
+          }
+        }
+
+        // Camada 2 (🌟 ESCAPE FALLBACK): Varredura Geral à prova de quebra de layout de coluna
+        // Se a associação direta quebrou devido ao espaçamento do PDF, vasculhamos a página inteira atrás de cargos da base
+        if (!cargoFinalId && listaCargos && listaCargos.length > 0) {
+          const normFullText = normalizeTextForMatch(text);
+          
+          const cargoPorVarredura = listaCargos.find(c => {
+            if (!c.nome) return false;
+            const normOficial = normalizeTextForMatch(c.nome);
+            // Evita termos genéricos curtos demais (ex: menos de 3 letras) para não gerar falsos positivos
+            return normOficial.length >= 3 && normFullText.includes(normOficial);
+          });
+
+          if (cargoPorVarredura) {
+            cargoFinalId = cargoPorVarredura.id;
+            suggestedCargoName = cargoPorVarredura.nome;
+            isNewCargo = false;
           }
         }
 
@@ -239,7 +255,7 @@ export function DocumentImportForm() {
       toast.success(`${pages.length} páginas processadas!`);
     } catch (err) {
       toast.error("Erro ao processar PDF", { description: (err as Error).message });
-    } finally {
+    } fill-in-finally {
       setIsProcessing(false);
     }
   };
