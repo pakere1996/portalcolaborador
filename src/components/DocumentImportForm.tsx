@@ -227,8 +227,6 @@ export function DocumentImportForm() {
         folgaFixaSemana: novoColabForm.folgaFixa === "none" ? null : Number(novoColabForm.folgaFixa),
         role: novoColabForm.perfil_acesso,
       });
-      if (authErr) throw authErr;
-
       const { error: profErr } = await supabase.from("profiles").update({
         unidade_id: novoColabForm.unidadeId,
         whatsapp: novoColabForm.whatsapp || null,
