@@ -15,9 +15,6 @@ import { Plus, Users, Pencil, Trash2, Search, Key, Loader2 } from "lucide-react"
 import { Switch } from "@/components/ui/switch";
 import { formatCPF, onlyDigits, isValidCPFLength } from "@/lib/cpf";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import { ColaboradorFormDialog } from "@/components/ColaboradorFormDialog";
 import { Tables } from "@/integrations/supabase/types";
 import { adminApi } from "@/lib/admin-api";
@@ -45,15 +42,11 @@ export default function Colaboradores() {
   const [filtroStatus, setFiltroStatus] = useState("all");
   const [filtroCargo, setFiltroCargo] = useState("all");
 
-  // New Dialog
   const [openNewDialog, setOpenNewDialog] = useState(false);
   const [newForm, setNewForm] = useState(blankEditForm);
-  // Edit Dialog
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [editForm, setEditForm] = useState(blankEditForm);
-  // Delete Confirmation
   const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
-  // Reset Password
   const [resetPasswordDialog, setResetPasswordDialog] = useState<{ profile: Profile; senha: string; confirmar: string } | null>(null);
 
   const loadData = async () => {
@@ -122,7 +115,6 @@ export default function Colaboradores() {
 
       if (authErr) throw authErr;
 
-      // Update profile with additional fields
       const { error: profErr } = await supabase.from("profiles").update({
         matricula: newForm.matricula.trim() || null,
         whatsapp: newForm.whatsapp.trim() || null,
@@ -169,7 +161,6 @@ export default function Colaboradores() {
       const cleanCpf = onlyDigits(editForm.cpf);
       if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
 
-      // Update profile
       const { error: profErr } = await supabase.from("profiles").update({
         nome: editForm.nome.trim(),
         cpf: cleanCpf,
@@ -187,7 +178,6 @@ export default function Colaboradores() {
 
       if (profErr) throw profErr;
 
-      // Update role if changed
       const currentRole = editingProfile.role;
       const newRole = editForm.perfil_acesso;
       if (currentRole !== newRole) {
@@ -264,11 +254,11 @@ export default function Colaboradores() {
             cargos={cargos}
             busy={busy}
             isEdit={false}
+            onSave={handleCreate}
           />
         </Dialog>
       </div>
 
-      {/* Filtros */}
       <div className="bg-card border border-border rounded-2xl p-4 flex flex-wrap gap-4 items-end">
         <div className="space-y-2 flex-1 min-w-[200px]">
           <Label className="text-xs font-bold uppercase text-muted-foreground">Buscar</Label>
@@ -306,7 +296,6 @@ export default function Colaboradores() {
         </div>
       </div>
 
-      {/* Tabela */}
       <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
         {loading ? (
           <div className="p-12 text-center text-muted-foreground">
@@ -370,7 +359,6 @@ export default function Colaboradores() {
         )}
       </div>
 
-      {/* Edit Dialog */}
       <ColaboradorFormDialog
         open={!!editingProfile}
         onOpenChange={(open) => { if (!open) setEditingProfile(null); }}
@@ -380,9 +368,9 @@ export default function Colaboradores() {
         cargos={cargos}
         busy={busy}
         isEdit={true}
+        onSave={handleUpdate}
       />
 
-      {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -400,7 +388,6 @@ export default function Colaboradores() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Reset Password Dialog */}
       <AlertDialog open={!!resetPasswordDialog} onOpenChange={(o) => !o && setResetPasswordDialog(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -428,264 +415,5 @@ export default function Colaboradores() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  );
-}
-</dyad-content>
-</div>
-
-I see the issue - I didn't properly close the Select components. Let me fix the ColaboradorFormDialog:
-<dyad-write path="src/components/ColaboradorFormDialog.tsx" description="Fixed missing closing tags for Select components">
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
-
-interface ColaboradorForm {
-  nome: string;
-  cpf: string;
-  cargo: string;
-  senha: string;
-  dataAdmissao: string;
-  dataNascimento: string;
-  folgaFixa: string;
-  unidadeId: string;
-  matricula: string;
-  email: string;
-  whatsapp: string;
-  perfil_acesso: string;
-}
-
-interface ColaboradorFormDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  form: ColaboradorForm;
-  setForm: React.Dispatch<React.SetStateAction<ColaboradorForm>>;
-  unidades: { id: string; nome: string; cnpj: string | null }[];
-  cargos: { id: string; nome: string }[];
-  busy: boolean;
-  isEdit?: boolean;
-}
-
-export function ColaboradorFormDialog({
-  open,
-  onOpenChange,
-  form,
-  setForm,
-  unidades,
-  cargos,
-  busy,
-  isEdit = false,
-}: ColaboradorFormDialogProps) {
-
-  const handleFormChange = (id: string, value: string | boolean) => {
-    setForm((prev) => {
-      let newValue = value;
-      
-      if (id === 'cpf' && typeof value === 'string') {
-        const rawValue = value.replace(/\D/g, "");
-        if (rawValue.length > 11) return prev;
-        // Format CPF
-        if (rawValue.length <= 3) newValue = rawValue;
-        else if (rawValue.length <= 6) newValue = `${rawValue.slice(0, 3)}.${rawValue.slice(3)}`;
-        else if (rawValue.length <= 9) newValue = `${rawValue.slice(0, 3)}.${rawValue.slice(3, 6)}.${rawValue.slice(6)}`;
-        else newValue = `${rawValue.slice(0, 3)}.${rawValue.slice(3, 6)}.${rawValue.slice(6, 9)}-${rawValue.slice(9)}`;
-      } else if (id === 'whatsapp' && typeof value === 'string') {
-        const digits = value.replace(/\D/g, "");
-        if (digits.length <= 2) newValue = digits;
-        else if (digits.length <= 7) newValue = `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-        else newValue = `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
-      }
-
-      return { ...prev, [id]: newValue };
-    });
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "Editar Colaborador" : "Novo Colaborador"}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="nome">Nome Completo *</Label>
-            <Input
-              id="nome"
-              value={form.nome}
-              onChange={(e) => handleFormChange('nome', e.target.value)}
-              placeholder="Ex: João Silva"
-              disabled={busy}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="cpf">CPF *</Label>
-              <Input
-                id="cpf"
-                value={form.cpf}
-                onChange={(e) => handleFormChange('cpf', e.target.value)}
-                placeholder="000.000.000-00"
-                maxLength={14}
-                disabled={busy || isEdit}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="matricula">Matrícula</Label>
-              <Input
-                id="matricula"
-                value={form.matricula}
-                onChange={(e) => handleFormChange('matricula', e.target.value)}
-                placeholder="Ex: 12345"
-                disabled={busy}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">E-mail</Label>
-              <Input
-                id="email"
-                type="email"
-                value={form.email}
-                onChange={(e) => handleFormChange('email', e.target.value)}
-                placeholder="email@empresa.com (Opcional)"
-                disabled={busy}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="whatsapp">Telefone (WhatsApp)</Label>
-              <Input
-                id="whatsapp"
-                value={form.whatsapp}
-                onChange={(e) => handleFormChange('whatsapp', e.target.value)}
-                placeholder="(99) 99999-9999"
-                maxLength={15}
-                disabled={busy}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="cargo">Cargo *</Label>
-              <Select
-                value={form.cargo}
-                onValueChange={(value) => handleFormChange('cargo', value)}
-                disabled={busy}
-              >
-                <SelectTrigger id="cargo">
-                  <SelectValue placeholder="Selecione o Cargo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {cargos.map(c => (
-                    <SelectItem key={c.nome} value={c.nome}>{c.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="unidade_id">Unidade *</Label>
-              <Select
-                value={form.unidadeId}
-                onValueChange={(value) => handleFormChange('unidadeId', value)}
-                disabled={busy}
-              >
-                <SelectTrigger id="unidade_id">
-                  <SelectValue placeholder="Selecione a Unidade" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sem Unidade</SelectItem>
-                  {unidades.map(u => (
-                    <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="data_nascimento">Data de Nascimento *</Label>
-              <Input
-                id="data_nascimento"
-                type="date"
-                value={form.dataNascimento}
-                onChange={(e) => handleFormChange('dataNascimento', e.target.value)}
-                disabled={busy}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="data_admissao">Data de Admissão *</Label>
-              <Input
-                id="data_admissao"
-                type="date"
-                value={form.dataAdmissao}
-                onChange={(e) => handleFormChange('dataAdmissao', e.target.value)}
-                disabled={busy}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="folga_fixa_semana">Folga Fixa Semanal *</Label>
-              <Select
-                value={form.folgaFixa}
-                onValueChange={(value) => handleFormChange('folgaFixa', value)}
-                disabled={busy}
-              >
-                <SelectTrigger id="folga_fixa_semana">
-                  <SelectValue placeholder="Nenhuma Folga Fixa" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhuma Folga Fixa</SelectItem>
-                  {WEEKDAYS.map((d, i) => (
-                    <SelectItem key={i} value={String(i)}>{d}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="perfil_acesso">Perfil de Acesso *</Label>
-              <Select
-                value={form.perfil_acesso}
-                onValueChange={(value) => handleFormChange('perfil_acesso', value)}
-                disabled={busy}
-              >
-                <SelectTrigger id="perfil_acesso">
-                  <SelectValue placeholder="Colaborador (Padrão)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="colaborador">Colaborador</SelectItem>
-                  <SelectItem value="admin">Administrador</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="senha">Senha Inicial *</Label>
-            <Input
-              id="senha"
-              type="password"
-              value={form.senha}
-              onChange={(e) => handleFormChange('senha', e.target.value)}
-              placeholder="Mínimo 6 caracteres"
-              disabled={busy}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancelar
-          </Button>
-          <Button onClick={() => onOpenChange(false)} disabled={busy}>
-            {isEdit ? "Salvar" : "Cadastrar"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
