@@ -4,101 +4,79 @@
 
 @layer base {
   :root {
-    /* Pakerê Brand Colors */
-    --pakere-yellow: #fede59;
+    /* Pakerê */
     --pakere-red: #e30f27;
+    --pakere-yellow: #fede59;
 
-    /* Shadcn UI Variables */
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-
-    /* Primary (Red Pakerê - #e30f27) */
-    --primary: 353 88% 47%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 353 88% 47%;
-
+    /* Sistema */
     --radius: 0.5rem;
-
-    /* Custom Status Colors */
-    --available: 142.1 70.6% 45.3%;
-    --unavailable: 0 84.2% 60.2%;
-    --pending: 38 92% 50%;
-    --warning: 48 96% 53%;
   }
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 353 88% 47%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 353 88% 47%;
+  html,
+  body,
+  #root {
+    min-height: 100%;
   }
-}
 
-@layer base {
-  * {
-    @apply border-border;
-  }
   body {
-    @apply bg-background text-foreground;
+    margin: 0;
+    background: #ffffff;
+    color: #111827;
+    font-family:
+      Inter,
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
   }
 }
 
 @layer utilities {
-  /* Custom brand utilities that are not standard in Tailwind */
+  /* Marca Pakerê */
   .text-pakere-red {
     color: var(--pakere-red);
   }
+
   .bg-pakere-red {
     background-color: var(--pakere-red);
   }
+
+  .border-pakere-red {
+    border-color: var(--pakere-red);
+  }
+
   .text-pakere-yellow {
     color: var(--pakere-yellow);
   }
+
   .bg-pakere-yellow {
     background-color: var(--pakere-yellow);
+  }
+
+  /* Compatibilidade */
+  .animate-spin {
+    animation: spin 1s linear infinite;
+  }
+
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
   }
 }
