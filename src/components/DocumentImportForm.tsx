@@ -79,6 +79,11 @@ useEffect(() => {
   }
 }, [manualProfileId]);
 
+useEffect(() => {
+  setShowNovoColab(false);
+  setManualProfileId("");
+}, [currentPage]);
+
   const documentType = window.location.pathname.includes("ponto") ? "ponto" : "contracheque";
 
   useEffect(() => {
