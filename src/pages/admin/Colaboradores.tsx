@@ -104,7 +104,7 @@ export default function Colaboradores() {
       const { data: authUser, error: authErr } = await adminApi.createUser({
         nome: newForm.nome.trim(),
         cpf: cleanCpf,
-        email: newForm.email.trim().toLowerCase() || `${cleanCpf}@pakere.com.br`,
+        email: `${cleanCpf}@pakere.com.br`,
         senha: newForm.senha || cleanCpf.slice(-6),
         cargo: newForm.cargo,
         dataAdmissao: newForm.dataAdmissao,
@@ -141,7 +141,7 @@ export default function Colaboradores() {
       nome: p.nome,
       cpf: formatCPF(p.cpf),
       matricula: p.matricula ?? "",
-email: p.email_contato ?? "",
+      email: p.email_contato ?? "",
       whatsapp: p.whatsapp ?? "",
       cargo: p.cargo,
       unidadeId: p.unidade_id ?? "none",
