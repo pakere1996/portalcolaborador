@@ -64,53 +64,118 @@ function similarity(a: string, b: string): number {
  * Encontra o melhor match de perfil baseado em nome e CPF
  */
 export function findBestProfileMatch(
-  nomePdf: string | null,
-  cpfPdf: string | null,
-  profiles: ProfileForMatching[]
-): MatchResult {
-  // 1. Prioridade absoluta: CPF exato
-  if (cpfPdf) {
-    const cpfMatch = profiles.find(p => p.cpf === cpfPdf);
-    if (cpfMatch) {
-      return {
-        profile: cpfMatch,
-        matchBy: "cpf",
-        confidence: 1.0,
-        status: "automatico"
-      };
-    }
+  nomePDF: string | null,
+  cpfPDF: string | null,
+  profiles: Profile[]
+) {
+  const nomeNormalizado = normalizeText(nomePDF || "");
+  const cpfLimpo = cpfPDF?.replace(/\D/g, "") || "";
+
+  // ==========================================
+  // 1 - CPF EXATO
+  // ==========================================
+
+  const cpfExato = profiles.find(
+    p => p.cpf?.replace(/\D/g, "") === cpfLimpo
+  );
+
+  if (cpfExato) {
+    return {
+      profile: cpfExato,
+      matchBy: "cpf",
+      confidence: 1,
+      status: "automatico"
+    };
   }
 
-  // 2. Match por nome (similaridade alta)
-  if (nomePdf) {
-    let bestMatch: ProfileForMatching | null = null;
-    let bestScore = 0;
+  // ==========================================
+  // 2 - PROCURA CPF PARECIDO
+  // ==========================================
 
-    for (const profile of profiles) {
-      const score = similarity(nomePdf, profile.nome);
-      if (score > bestScore && score > 0.8) {
-        bestScore = score;
-        bestMatch = profile;
+  let melhorCPF: Profile | null = null;
+  let menorDiferenca = 999;
+
+  for (const profile of profiles) {
+    const cpfBanco = profile.cpf?.replace(/\D/g, "");
+
+    if (!cpfBanco || cpfBanco.length !== 11 || cpfLimpo.length !== 11) {
+      continue;
+    }
+
+    let diferencas = 0;
+
+    for (let i = 0; i < 11; i++) {
+      if (cpfBanco[i] !== cpfLimpo[i]) {
+        diferencas++;
       }
     }
 
-    if (bestMatch) {
-      return {
-        profile: bestMatch,
-        matchBy: "nome",
-        confidence: bestScore,
-        status: bestScore >= 0.95 ? "automatico" : "sugerido"
-      };
+    if (diferencas < menorDiferenca) {
+      menorDiferenca = diferencas;
+      melhorCPF = profile;
     }
   }
 
-  // 3. Match por matrícula (se disponível no PDF)
-  // Nota: a matrícula não é extraída automaticamente aqui, mas poderia ser adicionada
+  // ==========================================
+  // 3 - CPF MUITO DIFERENTE
+  // ==========================================
+
+  if (menorDiferenca > 3) {
+    return {
+      profile: null,
+      matchBy: "novo",
+      confidence: 0,
+      status: "novo_colaborador"
+    };
+  }
+
+  // ==========================================
+  // 4 - VALIDAR NOME
+  // ==========================================
+
+  if (!melhorCPF?.nome || !nomeNormalizado) {
+    return {
+      profile: null,
+      matchBy: "novo",
+      confidence: 0,
+      status: "novo_colaborador"
+    };
+  }
+
+  const nomeBanco = normalizeText(melhorCPF.nome);
+
+  const tokensBanco = nomeBanco
+    .split(" ")
+    .filter(t => t.length >= 3);
+
+  const tokensEncontrados = tokensBanco.filter(
+    token => nomeNormalizado.includes(token)
+  );
+
+  const similaridade =
+    tokensEncontrados.length / tokensBanco.length;
+
+  // ==========================================
+  // 5 - NOME COMPATÍVEL
+  // ==========================================
+
+  if (similaridade >= 0.75) {
+    return {
+      profile: melhorCPF,
+      matchBy: "cpf+nome",
+      confidence: similaridade,
+      status: "sugerido"
+    };
+  }
+
+  // ==========================================
+  // 6 - NOVO COLABORADOR
+  // ==========================================
 
   return {
     profile: null,
-    matchBy: "none",
+    matchBy: "novo",
     confidence: 0,
-    status: "revisao"
+    status: "novo_colaborador"
   };
 }
