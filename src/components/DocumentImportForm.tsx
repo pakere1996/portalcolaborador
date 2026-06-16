@@ -509,7 +509,7 @@ export function DocumentImportForm() {
   </div>
 </div>
 
-              {showNovoColab && !manualProfileId ? (
+              {(showNovoColab && !manualProfileId) ? (
                 <div className="space-y-3 p-4 bg-white rounded-xl border border-border">
                   <div className="font-semibold text-sm">Cadastrar Novo Colaborador</div>
                   <div className="grid grid-cols-2 gap-2">
