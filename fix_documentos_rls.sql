@@ -444,14 +444,17 @@ export function findBestProfileMatch(
       p => p.cpf?.replace(/\D/g, "") === cpf
     );
 
-    if (profile) {
-      return {
-        profile,
-        score: 1,
-        matchedText: cpf,
-      };
-    }
-  }
+    // CPF encontrado
+if (profile) {
+   return {
+      profile,
+      score: 1,
+      matchedText: cpf
+   };
+}
+
+// CPF não encontrado
+return null;
 
   // ==================================================
   // ETAPA 2 - NOME COMPLETO
