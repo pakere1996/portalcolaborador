@@ -32,9 +32,10 @@ type Cargo = Tables<'cargos'>;
 
 const blankEditForm = {
   nome: "", cpf: "", matricula: "", email: "", whatsapp: "",
-  cargo: "", unidade_id: "null", folga_fixa_semana: "null",
+  cargo: "", unidade_id: "", folga_fixa_semana: "",
   data_nascimento: "", data_admissao: "", perfil_acesso: "colaborador",
   ativo: true,
+  senha: "",
 };
 
 export default function Colaboradores() {
@@ -50,6 +51,7 @@ export default function Colaboradores() {
 
   // New Dialog
   const [openNewDialog, setOpenNewDialog] = useState(false);
+  const [newForm, setNewForm] = useState(blankEditForm);
   // Edit Dialog
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [editForm, setEditForm] = useState(blankEditForm);
@@ -104,31 +106,31 @@ export default function Colaboradores() {
 
   const uniqueCargos = [...new Set(profiles.map(p => p.cargo).filter(Boolean))];
 
-  const handleCreate = async (formData: any) => {
+  const handleCreate = async () => {
     setBusy(true);
     try {
-      const cleanCpf = onlyDigits(formData.cpf);
+      const cleanCpf = onlyDigits(newForm.cpf);
       if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
 
       const { data: authUser, error: authErr } = await adminApi.createUser({
-        nome: formData.nome.trim(),
+        nome: newForm.nome.trim(),
         cpf: cleanCpf,
-        email: formData.email.trim().toLowerCase() || `${cleanCpf}@pakere.com.br`,
-        senha: formData.senha || cleanCpf.slice(-6),
-        cargo: formData.cargo,
-        dataAdmissao: formData.data_admissao,
-        dataNascimento: formData.data_nascimento,
-        folgaFixaSemana: formData.folga_fixa_semana === "null" ? null : Number(formData.folga_fixa_semana),
-        role: formData.perfil_acesso,
+        email: newForm.email.trim().toLowerCase() || `${cleanCpf}@pakere.com.br`,
+        senha: newForm.senha || cleanCpf.slice(-6),
+        cargo: newForm.cargo,
+        dataAdmissao: newForm.data_admissao,
+        dataNascimento: newForm.data_nascimento,
+        folgaFixaSemana: newForm.folga_fixa_semana === "" ? null : Number(newForm.folga_fixa_semana),
+        role: newForm.perfil_acesso,
       });
 
       if (authErr) throw authErr;
 
       // Update profile with additional fields
       const { error: profErr } = await supabase.from("profiles").update({
-        matricula: formData.matricula.trim() || null,
-        whatsapp: formData.whatsapp.trim() || null,
-        unidade_id: formData.unidade_id === "null" ? null : formData.unidade_id,
+        matricula: newForm.matricula.trim() || null,
+        whatsapp: newForm.whatsapp.trim() || null,
+        unidade_id: newForm.unidade_id === "" ? null : newForm.unidade_id,
         ativo: true,
       }).eq("id", authUser.userId);
 
@@ -136,6 +138,7 @@ export default function Colaboradores() {
 
       toast.success("Colaborador criado com sucesso!");
       setOpenNewDialog(false);
+      setNewForm(blankEditForm);
       loadData();
     } catch (e) {
       toast.error("Erro ao criar colaborador", { description: (e as Error).message });
@@ -153,12 +156,13 @@ export default function Colaboradores() {
       email: p.email ?? "",
       whatsapp: p.whatsapp ?? "",
       cargo: p.cargo,
-      unidade_id: p.unidade_id ?? "null",
-      folga_fixa_semana: p.folga_fixa_semana?.toString() ?? "null",
+      unidade_id: p.unidade_id ?? "",
+      folga_fixa_semana: p.folga_fixa_semana?.toString() ?? "",
       data_nascimento: p.data_nascimento ?? "",
       data_admissao: p.data_admissao ?? "",
       perfil_acesso: p.role ?? "colaborador",
       ativo: p.ativo,
+      senha: "",
     });
   };
 
@@ -177,8 +181,8 @@ export default function Colaboradores() {
         email: editForm.email.trim() || null,
         whatsapp: editForm.whatsapp.trim() || null,
         cargo: editForm.cargo,
-        unidade_id: editForm.unidade_id === "null" ? null : editForm.unidade_id,
-        folga_fixa_semana: editForm.folga_fixa_semana === "null" ? null : Number(editForm.folga_fixa_semana),
+        unidade_id: editForm.unidade_id === "" ? null : editForm.unidade_id,
+        folga_fixa_semana: editForm.folga_fixa_semana === "" ? null : Number(editForm.folga_fixa_semana),
         data_nascimento: editForm.data_nascimento || null,
         data_admissao: editForm.data_admissao || null,
         ativo: editForm.ativo,
@@ -220,6 +224,7 @@ export default function Colaboradores() {
     } finally {
       setBusy(false);
     }
+ 0
   };
 
   const openResetPassword = (p: Profile) => {
@@ -258,12 +263,14 @@ export default function Colaboradores() {
           <ColaboradorFormDialog
             open={openNewDialog}
             onOpenChange={setOpenNewDialog}
-            form={blankEditForm}
-            isEdit={false}
+            form={newForm}
+            setForm={setNewForm}
             unidades={unidades}
             cargos={cargos}
             busy={busy}
-            onSave={loadData}
+            onSave={handleCreate}
+            title="Novo Colaborador"
+            isEdit={false}
           />
         </Dialog>
       </div>
@@ -375,12 +382,13 @@ export default function Colaboradores() {
         open={!!editingProfile}
         onOpenChange={(open) => { if (!open) setEditingProfile(null); }}
         form={editForm}
-        isEdit={true}
-        profileToEdit={editingProfile}
+        setForm={setEditForm}
         unidades={unidades}
         cargos={cargos}
         busy={busy}
-        onSave={loadData}
+        onSave={handleUpdate}
+        title="Editar Colaborador"
+        isEdit={true}
       />
 
       {/* Delete Confirmation Dialog */}

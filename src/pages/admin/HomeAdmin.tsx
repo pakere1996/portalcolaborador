@@ -97,6 +97,14 @@ const adminModules = [
   },
 ];
 
+const blankEditForm = {
+  nome: "", cpf: "", matricula: "", email: "", whatsapp: "",
+  cargo: "", unidade_id: "", folga_fixa_semana: "",
+  data_nascimento: "", data_admissao: "", perfil_acesso: "colaborador",
+  ativo: true,
+  senha: "",
+};
+
 export default function AdminHomeAdminPage() {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [unidades, setUnidades] = useState<any[]>([]);
@@ -110,14 +118,10 @@ export default function AdminHomeAdminPage() {
 
   // New Dialog
   const [openNewDialog, setOpenNewDialog] = useState(false);
+  const [newForm, setNewForm] = useState(blankEditForm);
   // Edit Dialog
   const [editingProfile, setEditingProfile] = useState<any | null>(null);
-  const [editForm, setEditForm] = useState({
-    nome: "", cpf: "", matricula: "", email: "", whatsapp: "",
-    cargo: "", unidade_id: "null", folga_fixa_semana: "null",
-    data_nascimento: "", data_admissao: "", perfil_acesso: "colaborador",
-    ativo: true,
-  });
+  const [editForm, setEditForm] = useState(blankEditForm);
   // Delete Confirmation
   const [confirmDelete, setConfirmDelete] = useState<any | null>(null);
   // Reset Password
@@ -169,31 +173,31 @@ export default function AdminHomeAdminPage() {
 
   const uniqueCargos = [...new Set(profiles.map(p => p.cargo).filter(Boolean))];
 
-  const handleCreate = async (formData: any) => {
+  const handleCreate = async () => {
     setBusy(true);
     try {
-      const cleanCpf = onlyDigits(formData.cpf);
+      const cleanCpf = onlyDigits(newForm.cpf);
       if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
 
       const { data: authUser, error: authErr } = await adminApi.createUser({
-        nome: formData.nome.trim(),
+        nome: newForm.nome.trim(),
         cpf: cleanCpf,
-        email: formData.email.trim().toLowerCase() || `${cleanCpf}@pakere.com.br`,
-        senha: formData.senha || cleanCpf.slice(-6),
-        cargo: formData.cargo,
-        dataAdmissao: formData.data_admissao,
-        dataNascimento: formData.data_nascimento,
-        folgaFixaSemana: formData.folga_fixa_semana === "null" ? null : Number(formData.folga_fixa_semana),
-        role: formData.perfil_acesso,
+        email: newForm.email.trim().toLowerCase() || `${cleanCpf}@pakere.com.br`,
+        senha: newForm.senha || cleanCpf.slice(-6),
+        cargo: newForm.cargo,
+        dataAdmissao: newForm.data_admissao,
+        dataNascimento: newForm.data_nascimento,
+        folgaFixaSemana: newForm.folga_fixa_semana === "" ? null : Number(newForm.folga_fixa_semana),
+        role: newForm.perfil_acesso,
       });
 
       if (authErr) throw authErr;
 
       // Update profile with additional fields
       const { error: profErr } = await supabase.from("profiles").update({
-        matricula: formData.matricula.trim() || null,
-        whatsapp: formData.whatsapp.trim() || null,
-        unidade_id: formData.unidade_id === "null" ? null : formData.unidade_id,
+        matricula: newForm.matricula.trim() || null,
+        whatsapp: newForm.whatsapp.trim() || null,
+        unidade_id: newForm.unidade_id === "" ? null : newForm.unidade_id,
         ativo: true,
       }).eq("id", authUser.userId);
 
@@ -201,6 +205,7 @@ export default function AdminHomeAdminPage() {
 
       toast.success("Colaborador criado com sucesso!");
       setOpenNewDialog(false);
+      setNewForm(blankEditForm);
       loadData();
     } catch (e) {
       toast.error("Erro ao criar colaborador", { description: (e as Error).message });
@@ -218,12 +223,13 @@ export default function AdminHomeAdminPage() {
       email: p.email ?? "",
       whatsapp: p.whatsapp ?? "",
       cargo: p.cargo,
-      unidade_id: p.unidade_id ?? "null",
-      folga_fixa_semana: p.folga_fixa_semana?.toString() ?? "null",
+      unidade_id: p.unidade_id ?? "",
+      folga_fixa_semana: p.folga_fixa_semana?.toString() ?? "",
       data_nascimento: p.data_nascimento ?? "",
       data_admissao: p.data_admissao ?? "",
       perfil_acesso: p.role ?? "colaborador",
       ativo: p.ativo,
+      senha: "",
     });
   };
 
@@ -242,8 +248,8 @@ export default function AdminHomeAdminPage() {
         email: editForm.email.trim() || null,
         whatsapp: editForm.whatsapp.trim() || null,
         cargo: editForm.cargo,
-        unidade_id: editForm.unidade_id === "null" ? null : editForm.unidade_id,
-        folga_fixa_semana: editForm.folga_fixa_semana === "null" ? null : Number(editForm.folga_fixa_semana),
+        unidade_id: editForm.unidade_id === "" ? null : editForm.unidade_id,
+        folga_fixa_semana: editForm.folga_fixa_semana === "" ? null : Number(editForm.folga_fixa_semana),
         data_nascimento: editForm.data_nascimento || null,
         data_admissao: editForm.data_admissao || null,
         ativo: editForm.ativo,
@@ -346,6 +352,84 @@ export default function AdminHomeAdminPage() {
           </div>
         </div>
       ))}
+
+      {/* Dialogs for quick collaborator management from dashboard */}
+      <Dialog open={openNewDialog} onOpenChange={setOpenNewDialog}>
+        <DialogTrigger asChild>
+          <Button variant="outline" className="justify-start gap-2" onClick={() => { setNewForm(blankEditForm); setOpenNewDialog(true); }}>
+            <Plus className="size-4" /> Novo Colaborador
+          </Button>
+        </DialogTrigger>
+        <ColaboradorFormDialog
+          open={openNewDialog}
+          onOpenChange={setOpenNewDialog}
+          form={newForm}
+          setForm={setNewForm}
+          unidades={unidades}
+          cargos={cargos}
+          busy={busy}
+          onSave={handleCreate}
+          title="Novo Colaborador"
+          isEdit={false}
+        />
+      </Dialog>
+
+      <ColaboradorFormDialog
+        open={!!editingProfile}
+        onOpenChange={(open) => { if (!open) setEditingProfile(null); }}
+        form={editForm}
+        setForm={setEditForm}
+        unidades={unidades}
+        cargos={cargos}
+        busy={busy}
+        onSave={handleUpdate}
+        title="Editar Colaborador"
+        isEdit={true}
+      />
+
+      <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {confirmDelete?.nome}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação é irreversível. O usuário será removido do Auth e o perfil será excluído.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={doDelete} className="bg-red-600 text-white hover:bg-red-700" disabled={busy}>
+              {busy ? "Excluindo..." : "Excluir Permanentemente"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!resetPasswordDialog} onOpenChange={(o) => !o && setResetPasswordDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Redefinir senha de {resetPasswordDialog?.profile.nome}</AlertDialogTitle>
+            <AlertDialogDescription>
+              A nova senha será aplicada imediatamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="nova-senha">Nova Senha</Label>
+              <Input id="nova-senha" type="password" value={resetPasswordDialog?.senha} onChange={(e) => setResetPasswordDialog({ ...resetPasswordDialog!, senha: e.target.value })} placeholder="Mínimo 6 caracteres" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmar-senha">Confirmar Senha</Label>
+              <Input id="confirmar-senha" type="password" value={resetPasswordDialog?.confirmar} onChange={(e) => setResetPasswordDialog({ ...resetPasswordDialog!, confirmar: e.target.value })} placeholder="Repita a senha" />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={doResetPassword} className="bg-primary text-white hover:bg-primary/90" disabled={busy}>
+              {busy ? "Salvando..." : "Redefinir Senha"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
