@@ -71,8 +71,8 @@ export function DocumentImportForm() {
     whatsapp: "", perfil_acesso: "colaborador", matricula: ""
   });
   const [showNovoColab, setShowNovoColab] = useState(false);
-  const [suggestedProfile, setSuggestedProfile] = useState<any>(null);
   const { user } = useAuth();
+  const [suggestedProfile, setSuggestedProfile] = useState<any>(null);
   // Trava de segurança: Se selecionar um colaborador na lista, fecha o form de novo cadastro
 useEffect(() => {
   if (manualProfileId) {
