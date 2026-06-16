@@ -661,37 +661,40 @@ export function DocumentImportForm() {
                 </div>
               ) : (
                 <Button 
-                  variant="outline" 
-                  className="w-full" 
-                  onClick={() => { 
-                    let dataCorreta = "";
-                    if (result.dataAdmissao && result.dataAdmissao.includes("/")) {
-                      const partes = result.dataAdmissao.split("/");
-                      if (partes.length === 3) {
-                        dataCorreta = `${partes[2]}-${partes[1]}-${partes[0]}`;
-                      }
-                    } else {
-                      dataCorreta = result.dataAdmissao ?? "";
-                    }
+  variant="outline" 
+  className="w-full" 
+  onClick={() => { 
+    // ADICIONE ESTA LINHA AQUI PARA GARANTIR A LIMPEZA:
+    setManualProfileId(""); 
 
-                    setShowNovoColab(true); 
-                    setNovoColabForm({ 
-                      nome: result.nome ?? "", 
-                      cpf: result.cpf ?? "", 
-                      cargo: result.cargo ?? "", 
-                      unidadeId: result.unidadeId ?? "", 
-                      senha: result.cpf ? result.cpf.replace(/\D/g, "").slice(-6) : "", 
-                      folgaFixa: "none", 
-                      dataAdmissao: dataCorreta, 
-                      dataNascimento: "", 
-                      whatsapp: "", 
-                      perfil_acesso: "colaborador",
-                      matricula: "" 
-                    }); 
-                  }}
-                >
-                  <UserPlus className="size-4 mr-2" /> Cadastrar Novo Colaborador
-                </Button>
+    let dataCorreta = "";
+    if (result.dataAdmissao && result.dataAdmissao.includes("/")) {
+      const partes = result.dataAdmissao.split("/");
+      if (partes.length === 3) {
+        dataCorreta = `${partes[2]}-${partes[1]}-${partes[0]}`;
+      }
+    } else {
+      dataCorreta = result.dataAdmissao ?? "";
+    }
+
+    setShowNovoColab(true); 
+    setNovoColabForm({ 
+      nome: result.nome ?? "", 
+      cpf: result.cpf ?? "", 
+      cargo: result.cargo ?? "", 
+      unidadeId: result.unidadeId ?? "", 
+      senha: result.cpf ? result.cpf.replace(/\D/g, "").slice(-6) : "", 
+      folgaFixa: "none", 
+      dataAdmissao: dataCorreta, 
+      dataNascimento: "", 
+      whatsapp: "", 
+      perfil_acesso: "colaborador",
+      matricula: "" 
+    });
+  }}
+>
+  <UserPlus className="size-4 mr-2" /> Cadastrar Novo Colaborador
+</Button>
               )}
 
               <Button variant="ghost" className="w-full text-muted-foreground" onClick={handleIgnorar}>
