@@ -44,6 +44,7 @@ function AuthenticatedRoutes() {
         {/* Shared Routes */}
         <Route path="/perfil" element={<Perfil />} />
         <Route path="/calendario" element={<Calendario />} />
+        <Route path="/admin/calendario" element={<CalendarioAdmin />} />
         <Route path="/trocas" element={<Trocas />} />
         <Route path="/historico" element={<Historico />} />
         <Route path="/documentos" element={<Documentos />} />
