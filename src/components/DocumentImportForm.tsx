@@ -106,6 +106,14 @@ export function DocumentImportForm() {
         const nameMatch = text.match(/\d{2}\/\d{2}\/\d{4}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+?)\s+\d+\s+[A-Z]/);
         const nome = nameMatch ? nameMatch[1].trim().replace(/\s+/g, " ") : null;
 
+        // Extrai cargo
+        const cargoMatch = text.match(/(?:cargo|fun[çc][ãa]o):\s*([^\n\r]+)/i);
+        const cargo = cargoMatch ? cargoMatch[1].trim() : null;
+
+        // Extrai data de admissão
+        const admissaoMatch = text.match(/admiss[ãa]o[:\s]+(\d{2}\/\d{2}\/\d{4})/i);
+        const dataAdmissao = admissaoMatch ? admissaoMatch[1] : null;
+
         // Extrai CPF
         const cpf = extractCPF(text);
 
