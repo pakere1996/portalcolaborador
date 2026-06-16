@@ -65,7 +65,7 @@ export function DocumentImportForm() {
   const [isUploading, setIsUploading] = useState(false);
   const [manualProfileId, setManualProfileId] = useState<string>("");
   
-  const [setSuggestedProfile, setnovoColabForm, setNovoColabForm] = useState({
+  const [setSuggestedProfile, novoColabForm, setNovoColabForm] = useState({
     nome: "", cpf: "", cargo: "", unidadeId: "", senha: "",
     folgaFixa: "none", dataAdmissao: "", dataNascimento: "",
     whatsapp: "", perfil_acesso: "colaborador", matricula: ""
