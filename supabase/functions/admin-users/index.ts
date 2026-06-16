@@ -82,7 +82,7 @@ serve(async (req) => {
         id: userId,
         nome: payload.nome,
         cpf: payload.cpf,
-        email: email,
+        email_contato: email,
         cargo: payload.cargo,
         data_admissao: payload.dataAdmissao,
         data_nascimento: payload.dataNascimento,
