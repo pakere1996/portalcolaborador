@@ -96,7 +96,7 @@ export function DocumentImportForm() {
     setCurrentPage(0);
   };
 
- const handleProcessar = async () => {
+const handleProcessar = async () => {
     if (!selectedFile) return;
     setIsProcessing(true);
     try {
@@ -104,66 +104,77 @@ export function DocumentImportForm() {
       const results: PageResult[] = pages.map((p) => {
         const text = p.text;
 
-        // Extrai nome
+        // 1. Extrai nome e busca o perfil vinculado (A sua Flag)
         const nameMatch = text.match(/\d{2}\/\d{2}\/\d{4}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+?)\s+\d+\s+[A-Z]/);
         const nome = nameMatch ? nameMatch[1].trim().replace(/\s+/g, " ") : null;
+        const cpf = extractCPF(text);
+        
+        const match = findBestProfileMatch(nome, cpf, profiles);
+        const perfilVinculado = match.profile; // Esse é o objeto da sua flag
 
         // =================================================================
-        // SUPER FILTRO: EXTRAÇÃO DE CARGO E COMPATIBILIDADE DE SELEÇÃO
+        // TRADUTOR DE CARGO: CONVERTE DADOS DO PDF/FLAG PARA A BASE OFICIAL
         // =================================================================
-        let cargo = null;
-        const cargoMatch = text.match(/(?:cargo|fun[çc][ãa]o)[:\s]*([A-Za-zÀ-ÿÇç\s-]+)/i);
+        let cargoFinalId = null;
+        let isNewCargo = false;
+        let suggestedCargoName = null;
 
-        if (cargoMatch) {
-          let cargoExtraido = cargoMatch[1].trim();
-          // Remove ruídos de campos colados na mesma linha devido ao layout do PDF
-          cargoExtraido = cargoExtraido.split(/(?:setor|dep|unidade|c\.|registro|s[eé]rie|\s{2,})/i)[0].trim();
-          
-          if (cargoExtraido && cargoExtraido.length > 2) {
-            const toTitleCase = (s: string) => s.toLowerCase().replace(/(?:^|\s)\S/g, l => l.toUpperCase());
-            const cargoLower = cargoExtraido.toLowerCase();
-            
-            // INTELIGÊNCIA DE SELEÇÃO: Busca a grafia exata cadastrada no sistema 
-            // (Evita que "ATENDENTE" falhe ao tentar selecionar "Atendente" no seu Dropdown)
-            let cargoDoSistema = null;
-            if (profiles && profiles.length > 0) {
-              const perfilComCargo = profiles.find(p => p.cargo && p.cargo.toLowerCase().trim() === cargoLower);
-              if (perfilComCargo) {
-                cargoDoSistema = perfilComCargo.cargo;
-              }
+        // Passo A: Tenta extrair o texto do PDF
+        const cargoMatch = text.match(/(?:cargo|fun[çc][ãa]o)[:\s]*([A-Za-zÀ-ÿÇç\u00a0\s-]+)/i);
+        let cargoTexto = cargoMatch ? cargoMatch[1].replace(/\u00a0/g, " ").trim() : null;
+        
+        if (cargoTexto) {
+          cargoTexto = cargoTexto.split(/(?:setor|dep|unidade|c\.|registro|s[eé]rie|hor[aá]rio|escala|cbo|pis|ctps|\s{2,})/i)[0].trim();
+        }
+
+        // Passo B: Se o PDF não tiver o cargo, pegamos o cargo que veio na flag (mesmo que seja o nome antigo/legado)
+        // Note: mude '.cargo' para a propriedade real de texto do cargo dentro do seu perfil (ex: .cargoNome, .funcao)
+        const cargoOrigem = cargoTexto || perfilVinculado?.cargo;
+
+        if (cargoOrigem) {
+          const cargoLower = cargoOrigem.toString().toLowerCase().trim();
+          const toTitleCase = (s: string) => s.toLowerCase().replace(/(?:^|\s)\S/g, l => l.toUpperCase());
+          suggestedCargoName = toTitleCase(cargoOrigem.toString());
+
+          // Passo C: Cruzamos o texto (seja do PDF ou da Flag) com a LISTA OFICIAL de cargos cadastrados
+          if (listaCargos && listaCargos.length > 0) {
+            const cargoOficialEncontrado = listaCargos.find(c => 
+              (c.nome && c.nome.toLowerCase().trim() === cargoLower) || 
+              (c.descricao && c.descricao.toLowerCase().trim() === cargoLower) ||
+              (c.id?.toString() === cargoOrigem.toString()) // Caso o ID por acaso já fosse coincidente
+            );
+
+            if (cargoOficialEncontrado) {
+              // SUCESSO: Encontrou o correspondente na tabela nova. Mapeia o ID correto para o Select preencher
+              cargoFinalId = cargoOficialEncontrado.id;
+              isNewCargo = false;
+            } else {
+              // O cargo existe no PDF/Flag, mas NÃO EXISTE na sua nova base de cargos cadastrados
+              isNewCargo = true;
             }
-            
-            // Se achou no sistema, usa a grafia dele. Se não, padroniza em Title Case como segurança.
-            cargo = cargoDoSistema || toTitleCase(cargoExtraido);
+          } else {
+            isNewCargo = true;
           }
         }
 
         // =================================================================
-        // SUPER FILTRO: EXTRAÇÃO ULTRA-RESILIENTE DE DATA DE ADMISSÃO
+        // EXTRAÇÃO DE DATA DE ADMISSÃO (Mantida funcional)
         // =================================================================
         let dataAdmissao = null;
-
-        // Tenta a captura direta tradicional
         const admissaoDireto = text.match(/(?:admiss[ãa]o|admissao|adm)[:\s]*[^0-9/]{0,20}(\d{2})\/(\d{2})\/(\d{4})/i);
         
         if (admissaoDireto) {
           dataAdmissao = `${admissaoDireto[3]}-${admissaoDireto[2]}-${admissaoDireto[1]}`;
         } else {
-          // FALLBACK INTELIGENTE: Se o leitor do PDF misturar colunas e quebrar a linha,
-          // capturamos todas as datas e identificamos a admissão por antiguidade.
           const todasAsDatas = text.match(/\d{2}\/\d{2}\/\d{4}/g) || [];
-          
           if (todasAsDatas.length > 0) {
             const periodoInfo = extractPeriodo(text);
             const anoPeriodo = periodoInfo?.ano ? parseInt(periodoInfo.ano) : null;
             let dataCandidata = null;
 
-            // Regra 1: A data de admissão geralmente pertence a um ano anterior ao ano de emissão do ponto
             if (anoPeriodo) {
               dataCandidata = todasAsDatas.find(d => parseInt(d.split('/')[2]) < anoPeriodo);
             }
-
-            // Regra 2: Se for admissão recente (mesmo ano), ela será a data cronologicamente mais antiga do documento
             if (!dataCandidata) {
               const ordenadas = [...todasAsDatas].sort((a, b) => {
                 const [dA, mA, aA] = a.split('/').map(Number);
@@ -172,27 +183,18 @@ export function DocumentImportForm() {
               });
               dataCandidata = ordenadas[0];
             }
-
             if (dataCandidata) {
               const [dia, mes, ano] = dataCandidata.split('/');
-              dataAdmissao = `${ano}-${mes}-${dia}`; // Formato YYYY-MM-DD exigido pelo <input type="date">
+              dataAdmissao = `${ano}-${mes}-${dia}`;
             }
           }
         }
 
-        // Extrai CPF
-        const cpf = extractCPF(text);
-
-        // Extrai CNPJ e unidade
+        // Outras extrações padrão do seu script
         const cnpjMatch = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
         const cnpj = cnpjMatch ? cnpjMatch[0] : null;
         const unidade = cnpj ? unidades.find(u => u.cnpj && cleanCNPJ(u.cnpj) === cleanCNPJ(cnpj)) : null;
-
-        // Extrai período
         const periodo = extractPeriodo(text);
-
-        // Matching
-        const match = findBestProfileMatch(nome, cpf, profiles);
 
         return {
           pageNumber: p.pageNumber,
@@ -204,9 +206,11 @@ export function DocumentImportForm() {
           ano: periodo?.ano ?? null,
           unidadeId: unidade?.id ?? null,
           matchStatus: match.status,
-          matchedProfile: match.profile ?? null,
+          matchedProfile: perfilVinculado,
           confidence: match.confidence,
-          cargo: cargo,
+          cargo: cargoFinalId, // Vincula estritamente o ID válido da tabela nova!
+          isNewCargo: isNewCargo, 
+          suggestedCargoName: suggestedCargoName,
           dataAdmissao: dataAdmissao,
           vinculado: false,
           ignorado: false,
@@ -215,7 +219,7 @@ export function DocumentImportForm() {
 
       setPageResults(results);
       setCurrentPage(0);
-      toast.success(`${pages.length} páginas processadas com sucesso!`);
+      toast.success(`${pages.length} páginas processadas!`);
     } catch (err) {
       toast.error("Erro ao processar PDF", { description: (err as Error).message });
     } finally {
