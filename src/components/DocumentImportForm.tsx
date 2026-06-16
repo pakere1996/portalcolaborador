@@ -137,6 +137,13 @@ useEffect(() => {
         const cpf = extractCPF(text);
         
         const match = findBestProfileMatch(nome, cpf, profiles);
+        console.log("================================");
+console.log("NOME PDF:", nome);
+console.log("CPF PDF:", cpf);
+console.log("MATCH:", match);
+console.log("PERFIL:", match?.profile?.nome);
+console.log("CPF PERFIL:", match?.profile?.cpf);
+console.log("================================");
         const perfilVinculado = match.profile;
 
         // =================================================================
