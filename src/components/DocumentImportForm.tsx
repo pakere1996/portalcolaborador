@@ -108,16 +108,16 @@ export function DocumentImportForm() {
         const nameMatch = text.match(/\d{2}\/\d{2}\/\d{4}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+?)\s+\d+\s+[A-Z]/);
         const nome = nameMatch ? nameMatch[1].trim().replace(/\s+/g, " ") : null;
 
-        // Extrai cargo (máximo 30 caracteres para evitar capturar texto longo)
-        const cargoMatch = text.match(/(?:cargo|fun[çc][ãa]o):\s*([A-Za-zÀ-ÿ\s]{2,30}?)(?:\s{2,}|\n|\r|$)/i);
-        const cargo = cargoMatch ? cargoMatch[1].trim() : null;
+        // Extrai cargo (Adaptado para o formato exato da imagem, parando antes do 'Setor')
+        const cargoMatch = text.match(/(?:cargo|fun[çc][ãa]o):\s*([A-Za-zÀ-ÿ\s]+?)(?=\s{2,}|setor|\n|\r|$)/i);
+        const cargo = cargoMatch ? cargoMatch[1].trim().replace(/\s+/g, " ") : null;
 
-        // Extrai data de admissão (formato: Admissão DD/MM/AAAA ou Admissão: DD/MM/AAAA)
-        const admissaoMatch = text.match(/admiss[ãa]o[:\s]*(\d{2}\/\d{2}\/\d{4})/i);
-        // Converte de DD/MM/AAAA para AAAA-MM-DD para o campo date do HTML
+        // Extrai data de admissão capturando Dia, Mês e Ano separadamente
+        const admissaoMatch = text.match(/admiss[ãa]o[:\s]+(\d{2})\/(\d{2})\/(\d{4})/i);
+        // Converte com segurança para o formato AAAA-MM-DD que o formulário exige
         const dataAdmissao = admissaoMatch
-          ? admissaoMatch[1].split("/").reverse().join("-")
-          : null;
+        ? `${admissaoMatch[3]}-${admissaoMatch[2]}-${admissaoMatch[1]}`
+       : null;
 
         // Extrai CPF
         const cpf = extractCPF(text);
