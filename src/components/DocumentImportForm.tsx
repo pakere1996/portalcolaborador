@@ -43,6 +43,16 @@ interface Cargo {
   descricao?: string | null;
 }
 
+// 🌟 FUNÇÃO AUXILIAR: Remove acentos, espaços, pontuações e caixa alta para garantir o match de strings
+const normalizeTextForMatch = (str: string): string => {
+  return str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Remove acentos
+    .replace(/[^a-z0-9]/g, "")       // Remove espaços, pontos, traços e barras
+    .trim();
+};
+
 export function DocumentImportForm() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -51,7 +61,7 @@ export function DocumentImportForm() {
   const [currentPage, setCurrentPage] = useState(0);
   const [profiles, setProfiles] = useState<ProfileForMatching[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
-  const [listaCargos, setListaCargos] = useState<Cargo[]>([]); // 🌟 Base oficial sincronizada com o banco
+  const [listaCargos, setListaCargos] = useState<Cargo[]>([]); 
   const [isUploading, setIsUploading] = useState(false);
   const [manualProfileId, setManualProfileId] = useState<string>("");
   
@@ -65,7 +75,6 @@ export function DocumentImportForm() {
 
   const documentType = window.location.pathname.includes("ponto") ? "ponto" : "contracheque";
 
-  // Carrega todas as bases sincronizadas do Supabase
   useEffect(() => {
     if (!user) return;
     
@@ -75,7 +84,6 @@ export function DocumentImportForm() {
     supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome")
       .then(({ data }) => setUnidades(data ?? []));
 
-    // 🌟 Busca a lista real da sua tela de cadastro de cargos
     supabase.from("cargos").select("id, nome, descricao").order("nome")
       .then(({ data }) => setListaCargos(data ?? []));
   }, [user?.id]);
@@ -126,34 +134,40 @@ export function DocumentImportForm() {
         const perfilVinculado = match.profile;
 
         // =================================================================
-        // TRADUTOR DE CARGO: CONVERTE DADOS DO PDF/FLAG PARA A BASE OFICIAL
+        // PROCESSAMENTO E TRADUÇÃO DE CARGO COM DE-PARA INTELIGENTE
         // =================================================================
         let cargoFinalId = null;
         let isNewCargo = false;
         let suggestedCargoName = null;
 
-        const cargoMatch = text.match(/(?:cargo|fun[çc][ãa]o)[:\s]*([A-Za-zÀ-ÿÇç\u00a0\s-]+)/i);
+        // Regex aprimorada para capturar variações como "Cargo/Função", pontos ou traços
+        const cargoMatch = text.match(/(?:cargo|fun[çc][ãa]o|cargo\/fun[çc][ãa]o)[:\s-]*([A-Za-zÀ-ÿÇç\u00a0\s\./-]+)/i);
         let cargoTexto = cargoMatch ? cargoMatch[1].replace(/\u00a0/g, " ").trim() : null;
         
         if (cargoTexto) {
-          cargoTexto = cargoTexto.split(/(?:setor|dep|unidade|c\.|registro|s[eé]rie|hor[aá]rio|escala|cbo|pis|ctps|\s{2,})/i)[0].trim();
+          cargoTexto = cargoTexto.split(/(?:setor|dep|unidade|c\.|registro|s[eé]rie|hor[aá]rio|escala|cbo|pis|ctps|data|\s{2,})/i)[0].trim();
         }
 
         const cargoOrigem = cargoTexto || perfilVinculado?.cargo;
 
         if (cargoOrigem) {
-          const cargoLower = cargoOrigem.toString().toLowerCase().trim();
           const toTitleCase = (s: string) => s.toLowerCase().replace(/(?:^|\s)\S/g, l => l.toUpperCase());
           suggestedCargoName = toTitleCase(cargoOrigem.toString());
 
           if (listaCargos && listaCargos.length > 0) {
-            const cargoOficialEncontrado = listaCargos.find(c => 
-              (c.nome && c.nome.toLowerCase().trim() === cargoLower) || 
-              (c.id?.toString() === cargoOrigem.toString())
-            );
+            const normOrigem = normalizeTextForMatch(cargoOrigem.toString());
+
+            // Varre a lista de cargos oficial usando a normalização flexível
+            const cargoOficialEncontrado = listaCargos.find(c => {
+              if (!c.nome) return false;
+              const normOficial = normalizeTextForMatch(c.nome);
+              
+              // Verifica igualdade ou se um termo está contido no outro (evita quebras por sulfixos/prefixos)
+              return normOficial === normOrigem || normOficial.includes(normOrigem) || normOrigem.includes(normOficial);
+            });
 
             if (cargoOficialEncontrado) {
-              cargoFinalId = cargoOficialEncontrado.id; // Guarda o ID oficial do banco
+              cargoFinalId = cargoOficialEncontrado.id; // Vincula o ID real do banco de dados
               isNewCargo = false;
             } else {
               isNewCargo = true;
@@ -230,7 +244,6 @@ export function DocumentImportForm() {
     }
   };
 
-  // 🌟 FUNÇÃO INÉDITA: Faz o INSERT real do novo cargo na sua tabela oficial do Supabase
   const handleCadastrarCargoRapido = async (nomeCargo: string) => {
     if (!nomeCargo) return;
     try {
@@ -242,13 +255,8 @@ export function DocumentImportForm() {
 
       if (error) throw error;
 
-      // 1. Atualiza a lista oficial do estado na tela
       setListaCargos(prev => [...prev, data]);
-      
-      // 2. Preenche automaticamente o formulário de cadastro com o ID recém criado
       setNovoColabForm(f => ({ ...f, cargo: data.id }));
-      
-      // 3. Atualiza o resultado da página atual para não constar mais como pendente
       setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, cargo: data.id, isNewCargo: false } : r));
       
       toast.success(`Cargo "${nomeCargo}" adicionado à base de dados!`);
@@ -326,7 +334,7 @@ export function DocumentImportForm() {
         cpf: cleanCpf,
         email: `${cleanCpf}@pakere.com.br`,
         senha: novoColabForm.senha || cleanCpf.slice(-6),
-        cargo: novoColabForm.cargo, // Envia o ID correto do cargo selecionado
+        cargo: novoColabForm.cargo, 
         dataAdmissao: novoColabForm.dataAdmissao || null,
         dataNascimento: novoColabForm.dataNascimento || null,
         folgaFixaSemana: novoColabForm.folgaFixa === "none" ? null : Number(novoColabForm.folgaFixa),
@@ -487,10 +495,9 @@ export function DocumentImportForm() {
                       <Input placeholder="000.000.000-00" value={novoColabForm.cpf} onChange={e => setNovoColabForm(f => ({ ...f, cpf: e.target.value }))} />
                     </div>
 
-                    {/* 🌟 BALÃO DE ALERTA DO BANCO DE DADOS REAL */}
                     {result.isNewCargo && !novoColabForm.cargo && result.suggestedCargoName && (
                       <div className="col-span-2 bg-amber-50 border border-amber-200 p-2 rounded-lg text-xs text-amber-800 flex items-center justify-between gap-2 animate-in fade-in duration-200">
-                        <span>✨ O cargo <strong>"{result.suggestedCargoName}"</strong> foi lido no PDF mas não existe na base oficial.</span>
+                        <span>✨ O cargo <strong>"{result.suggestedCargoName}"</strong> foi lido no PDF mas não bateu com a escrita exata da base.</span>
                         <Button 
                           type="button"
                           size="sm"
@@ -503,7 +510,6 @@ export function DocumentImportForm() {
                       </div>
                     )}
 
-                    {/* SELEÇÃO DO CARGO UTILIZANDO A BASE DE DADOS OFICIAL */}
                     <div className="col-span-2 grid grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <Label className="text-xs">Cargo *</Label>
@@ -609,7 +615,7 @@ export function DocumentImportForm() {
                     setNovoColabForm({ 
                       nome: result.nome ?? "", 
                       cpf: result.cpf ?? "", 
-                      cargo: result.cargo ?? "", // Injeta o ID oficial do cargo pré-mapeado
+                      cargo: result.cargo ?? "", 
                       unidadeId: result.unidadeId ?? "", 
                       senha: result.cpf ? result.cpf.replace(/\D/g, "").slice(-6) : "", 
                       folgaFixa: "none", 
