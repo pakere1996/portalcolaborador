@@ -331,9 +331,26 @@ console.log("================================");
       });
       if (insertError) throw insertError;
 
-      setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, vinculado: true, matchedProfile: profiles.find(p => p.id === profileId) ?? r.matchedProfile } : r));
-      toast.success("Documento vinculado com sucesso!");
-      setManualProfileId("");
+      setPageResults(prev =>
+  prev.map((r, i) =>
+    i === currentPage
+      ? {
+          ...r,
+          vinculado: true,
+          matchedProfile: profiles.find(p => p.id === profileId) ?? r.matchedProfile
+        }
+      : r
+  )
+);
+
+// limpa estados pendentes
+setSuggestedProfile(null);
+setNovoColaborador(null);
+setNovoColaboradorData(null);
+setShowNovoColaborador(false);
+
+toast.success("Documento vinculado com sucesso!");
+setManualProfileId("");
 
       const next = pageResults.findIndex((r, i) => i > currentPage && !r.vinculado && !r.ignorado);
       if (next !== -1) setCurrentPage(next);
