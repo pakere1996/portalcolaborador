@@ -57,7 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   ];
 
   const adminFolgaNav: NavItem[] = [
-    { to: "/admin", label: "Dashboard", icon: Shield },
+    { to: "/admin/folgas", label: "Dashboard", icon: Shield },
     { to: "/admin/calendario", label: "Calendário Geral", icon: Calendar },
     { to: "/admin/solicitacoes", label: "Solicitações", icon: ClipboardList },
     { to: "/admin/aprovacoes", label: "Aprovações", icon: UserCheck },
