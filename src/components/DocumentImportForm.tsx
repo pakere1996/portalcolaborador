@@ -20,6 +20,8 @@ interface PageResult {
   mes: number | null;
   ano: number | null;
   unidadeId: string | null;
+  cargo: string | null;
+  dataAdmissao: string | null;
   matchStatus: "automatico" | "sugerido" | "revisao";
   matchedProfile: ProfileForMatching | null;
   confidence: number;
