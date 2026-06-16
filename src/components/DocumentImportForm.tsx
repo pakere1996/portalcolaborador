@@ -405,87 +405,129 @@ if (admissaoMatch) {
                 </div>
               </div>
 
-              {/* Criar novo colaborador */}
-              {showNovoColab ? (
-                <div className="space-y-3 p-4 bg-white rounded-xl border border-border">
-                  <div className="font-semibold text-sm">Cadastrar Novo Colaborador</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="col-span-2 space-y-1">
-                      <Label className="text-xs">Nome Completo *</Label>
-                      <Input placeholder="Nome completo" value={novoColabForm.nome} onChange={e => setNovoColabForm(f => ({ ...f, nome: e.target.value }))} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">CPF *</Label>
-                      <Input placeholder="000.000.000-00" value={novoColabForm.cpf} onChange={e => setNovoColabForm(f => ({ ...f, cpf: e.target.value }))} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Cargo *</Label>
-                      <Input placeholder="Ex: Atendente" value={novoColabForm.cargo} onChange={e => setNovoColabForm(f => ({ ...f, cargo: e.target.value }))} />
-                    </div>
-                    <div className="col-span-2 space-y-1">
-                      <Label className="text-xs">Unidade *</Label>
-                      <Select value={novoColabForm.unidadeId} onValueChange={v => setNovoColabForm(f => ({ ...f, unidadeId: v }))}>
-                        <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
-                        <SelectContent>
-                          {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Data de Admissão</Label>
-                      <Input type="date" value={novoColabForm.dataAdmissao} onChange={e => setNovoColabForm(f => ({ ...f, dataAdmissao: e.target.value }))} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Data de Nascimento</Label>
-                      <Input type="date" value={novoColabForm.dataNascimento} onChange={e => setNovoColabForm(f => ({ ...f, dataNascimento: e.target.value }))} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Folga Fixa Semanal</Label>
-                      <Select value={novoColabForm.folgaFixa} onValueChange={v => setNovoColabForm(f => ({ ...f, folgaFixa: v }))}>
-                        <SelectTrigger><SelectValue placeholder="Nenhuma" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Nenhuma</SelectItem>
-                          <SelectItem value="0">Domingo</SelectItem>
-                          <SelectItem value="1">Segunda-feira</SelectItem>
-                          <SelectItem value="2">Terça-feira</SelectItem>
-                          <SelectItem value="3">Quarta-feira</SelectItem>
-                          <SelectItem value="4">Quinta-feira</SelectItem>
-                          <SelectItem value="5">Sexta-feira</SelectItem>
-                          <SelectItem value="6">Sábado</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Perfil de Acesso</Label>
-                      <Select value={novoColabForm.perfil_acesso} onValueChange={v => setNovoColabForm(f => ({ ...f, perfil_acesso: v }))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="colaborador">Colaborador</SelectItem>
-                          <SelectItem value="admin">Administrador</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">WhatsApp</Label>
-                      <Input placeholder="(00) 00000-0000" value={novoColabForm.whatsapp} onChange={e => setNovoColabForm(f => ({ ...f, whatsapp: e.target.value }))} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Senha Inicial</Label>
-                      <Input type="password" placeholder="Padrão: 6 últimos dígitos CPF" value={novoColabForm.senha} onChange={e => setNovoColabForm(f => ({ ...f, senha: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <Button className="flex-1" onClick={handleCriarColab} disabled={isUploading}>
-                      {isUploading ? <Loader2 className="size-4 mr-2 animate-spin" /> : <UserPlus className="size-4 mr-2" />} Criar Colaborador
-                    </Button>
-                    <Button variant="outline" onClick={() => setShowNovoColab(false)}>Cancelar</Button>
-                  </div>
-                </div>
+{/* Criar novo colaborador */}
+{showNovoColab ? (
+  <div className="space-y-3 p-4 bg-white rounded-xl border border-border">
+    <div className="font-semibold text-sm">Cadastrar Novo Colaborador</div>
+    <div className="grid grid-cols-2 gap-2">
+      
+      <div className="col-span-2 space-y-1">
+        <Label className="text-xs">Nome Completo *</Label>
+        <Input placeholder="Nome completo" value={novoColabForm.nome} onChange={e => setNovoColabForm(f => ({ ...f, nome: e.target.value }))} />
+      </div>
+      
+      <div className="col-span-2 space-y-1">
+        <Label className="text-xs">CPF *</Label>
+        <Input placeholder="000.000.000-00" value={novoColabForm.cpf} onChange={e => setNovoColabForm(f => ({ ...f, cpf: e.target.value }))} />
+      </div>
+
+      {/* BLOCO DE CARGO E MATRÍCULA CORRIGIDO PARA ESTA TELA */}
+      <div className="col-span-2 grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Cargo *</Label>
+          {cargos.length > 0 ? (
+            <Select value={novoColabForm.cargo} onValueChange={(v) => setNovoColabForm(f => ({ ...f, cargo: v }))}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o cargo" />
+              </SelectTrigger>
+              <SelectContent>
+                {cargos.map((c) => (
+                  <SelectItem key={c.id} value={c.nome}>{c.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input value={novoColabForm.cargo} onChange={e => setNovoColabForm(f => ({ ...f, cargo: e.target.value }))} placeholder="Ex: Atendente" />
+          )}
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Matrícula (Opcional)</Label>
+          <Input value={novoColabForm.matricula || ""} onChange={e => setNovoColabForm(f => ({ ...f, matricula: e.target.value }))} placeholder="Matrícula" />
+        </div>
+      </div>
+
+      <div className="col-span-2 space-y-1">
+        <Label className="text-xs">Unidade *</Label>
+        <Select value={novoColabForm.unidadeId} onValueChange={v => setNovoColabForm(f => ({ ...f, unidadeId: v }))}>
+          <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
+          <SelectContent>
+            {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">Data de Admissão</Label>
+        <Input type="date" value={novoColabForm.dataAdmissao} onChange={e => setNovoColabForm(f => ({ ...f, dataAdmissao: e.target.value }))} />
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">Data de Nascimento</Label>
+        <Input type="date" value={novoColabForm.dataNascimento} onChange={e => setNovoColabForm(f => ({ ...f, dataNascimento: e.target.value }))} />
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">Folga Fixa Semanal</Label>
+        <Select value={novoColabForm.folgaFixa} onValueChange={v => setNovoColabForm(f => ({ ...f, folgaFixa: v }))}>
+          <SelectTrigger><SelectValue placeholder="Nenhuma" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Nenhuma</SelectItem>
+            <SelectItem value="0">Domingo</SelectItem>
+            <SelectItem value="1">Segunda-feira</SelectItem>
+            <SelectItem value="2">Terça-feira</SelectItem>
+            <SelectItem value="3">Quarta-feira</SelectItem>
+            <SelectItem value="4">Quinta-feira</SelectItem>
+            <SelectItem value="5">Sexta-feira</SelectItem>
+            <SelectItem value="6">Sábado</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">Perfil de Acesso</Label>
+        <Select value={novoColabForm.perfil_acesso} onValueChange={v => setNovoColabForm(f => ({ ...f, perfil_acesso: v }))}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="colaborador">Colaborador</SelectItem>
+            <SelectItem value="admin">Administrador</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">WhatsApp</Label>
+        <Input placeholder="(00) 00000-0000" value={novoColabForm.whatsapp} onChange={e => setNovoColabForm(f => ({ ...f, whatsapp: e.target.value }))} />
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">Senha Inicial</Label>
+        <Input type="password" placeholder="Padrão: 6 últimos dígitos CPF" value={novoColabForm.senha} onChange={e => setNovoColabForm(f => ({ ...f, senha: e.target.value }))} />
+      </div>
+
+    </div>
+    <div className="flex gap-2 pt-2">
+      <Button className="flex-1" onClick={handleCriarColab} disabled={isUploading}>
+        {isUploading ? <Loader2 className="size-4 mr-2 animate-spin" /> : <UserPlus className="size-4 mr-2" />} Criar Colaborador
+      </Button>
+      <Button variant="outline" onClick={() => setShowNovoColab(false)}>Cancelar</Button>
+    </div>
+  </div>
 ) : (
   <Button 
     variant="outline" 
     className="w-full" 
     onClick={() => { 
+      // Tradutor automático de formato de data para o calendário aceitar
+      let dataCorreta = "";
+      if (result.dataAdmissao && result.dataAdmissao.includes("/")) {
+        const partes = result.dataAdmissao.split("/");
+        if (partes.length === 3) {
+          dataCorreta = `${partes[2]}-${partes[1]}-${partes[0]}`;
+        }
+      } else {
+        dataCorreta = result.dataAdmissao ?? "";
+      }
+
       setShowNovoColab(true); 
       setNovoColabForm({ 
         nome: result.nome ?? "", 
@@ -494,10 +536,11 @@ if (admissaoMatch) {
         unidadeId: result.unidadeId ?? "", 
         senha: result.cpf ? result.cpf.replace(/\D/g, "").slice(-6) : "", 
         folgaFixa: "none", 
-        dataAdmissao: result.dataAdmissao || "", // Usa o valor convertido ou deixa em branco se não achar
+        dataAdmissao: dataCorreta, 
         dataNascimento: "", 
         whatsapp: "", 
-        perfil_acesso: "colaborador" 
+        perfil_acesso: "colaborador",
+        matricula: "" 
       }); 
     }}
   >
