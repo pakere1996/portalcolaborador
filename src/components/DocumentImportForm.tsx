@@ -96,7 +96,7 @@ export function DocumentImportForm() {
     setCurrentPage(0);
   };
 
-  const handleProcessar = async () => {
+ const handleProcessar = async () => {
     if (!selectedFile) return;
     setIsProcessing(true);
     try {
@@ -109,48 +109,75 @@ export function DocumentImportForm() {
         const nome = nameMatch ? nameMatch[1].trim().replace(/\s+/g, " ") : null;
 
         // =================================================================
-        // SUPER FILTRO: EXTRAÇÃO RESILIENTE DE CARGO (ANTI-MISTURA DE LAYOUT)
+        // SUPER FILTRO: EXTRAÇÃO DE CARGO E COMPATIBILIDADE DE SELEÇÃO
         // =================================================================
         let cargo = null;
-        // Captura um bloco de até 100 caracteres logo após a palavra Cargo/Função
-        const blocoCargoMatch = text.match(/(?:cargo|fun[çc][ãa]o)[\s\S]{1,100}/i);
+        const cargoMatch = text.match(/(?:cargo|fun[çc][ãa]o)[:\s]*([A-Za-zÀ-ÿÇç\s-]+)/i);
 
-        if (blocoCargoMatch) {
-          let bloco = blocoCargoMatch[0];
+        if (cargoMatch) {
+          let cargoExtraido = cargoMatch[1].trim();
+          // Remove ruídos de campos colados na mesma linha devido ao layout do PDF
+          cargoExtraido = cargoExtraido.split(/(?:setor|dep|unidade|c\.|registro|s[eé]rie|\s{2,})/i)[0].trim();
           
-          // Remove do bloco todas as labels vizinhas que o PDF costuma misturar
-          bloco = bloco.replace(/(?:cargo|fun[çc][ãa]o|s[eé]rie|registro|ctps|setor|depart|dep\.|c\.\s*de\s*custo|custo)[:\s]*/gi, " ");
-          
-          // Limpa quebras de linha e espaços extras
-          bloco = bloco.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
-          
-          if (bloco) {
-            // Divide o que sobrou em palavras para isolar o cargo real (ex: "ATENDENTE")
-            const partes = bloco.split(" ");
-            let palavrasCargo = [];
-            for (let palavra of partes) {
-              // Se esbarrar em números (como CPFs/PIS) ou textos longos de outros campos, para de ler
-              if (/^\d+$/.test(palavra) || palavra.length > 20 || /^[0-9./-]+$/.test(palavra)) {
-                break;
+          if (cargoExtraido && cargoExtraido.length > 2) {
+            const toTitleCase = (s: string) => s.toLowerCase().replace(/(?:^|\s)\S/g, l => l.toUpperCase());
+            const cargoLower = cargoExtraido.toLowerCase();
+            
+            // INTELIGÊNCIA DE SELEÇÃO: Busca a grafia exata cadastrada no sistema 
+            // (Evita que "ATENDENTE" falhe ao tentar selecionar "Atendente" no seu Dropdown)
+            let cargoDoSistema = null;
+            if (profiles && profiles.length > 0) {
+              const perfilComCargo = profiles.find(p => p.cargo && p.cargo.toLowerCase().trim() === cargoLower);
+              if (perfilComCargo) {
+                cargoDoSistema = perfilComCargo.cargo;
               }
-              palavrasCargo.push(palavra);
-              if (palavrasCargo.length >= 3) break; // Limita o nome do cargo a no máximo 3 palavras
             }
-            cargo = palavrasCargo.join(" ").toUpperCase().trim();
+            
+            // Se achou no sistema, usa a grafia dele. Se não, padroniza em Title Case como segurança.
+            cargo = cargoDoSistema || toTitleCase(cargoExtraido);
           }
         }
 
         // =================================================================
-        // SUPER FILTRO: EXTRAÇÃO RESILIENTE DE DATA (PROCURA CURTA MULTILINHA)
+        // SUPER FILTRO: EXTRAÇÃO ULTRA-RESILIENTE DE DATA DE ADMISSÃO
         // =================================================================
-        // Varre um raio de até 100 caracteres após "admis" procurando a primeira data válida.
-        // O `[\s\S]{0,100}?` permite que o leitor pule quebras de linha ou espaços que o PDF gerou.
-        const admissaoMatch = text.match(/(?:admiss|adm)[\s\S]{0,100}?(\d{2})\/(\d{2})\/(\d{4})/i);
         let dataAdmissao = null;
 
-        if (admissaoMatch) {
-          // Organiza no formato AAAA-MM-DD que o formulário exige
-          dataAdmissao = `${admissaoMatch[3]}-${admissaoMatch[2]}-${admissaoMatch[1]}`;
+        // Tenta a captura direta tradicional
+        const admissaoDireto = text.match(/(?:admiss[ãa]o|admissao|adm)[:\s]*[^0-9/]{0,20}(\d{2})\/(\d{2})\/(\d{4})/i);
+        
+        if (admissaoDireto) {
+          dataAdmissao = `${admissaoDireto[3]}-${admissaoDireto[2]}-${admissaoDireto[1]}`;
+        } else {
+          // FALLBACK INTELIGENTE: Se o leitor do PDF misturar colunas e quebrar a linha,
+          // capturamos todas as datas e identificamos a admissão por antiguidade.
+          const todasAsDatas = text.match(/\d{2}\/\d{2}\/\d{4}/g) || [];
+          
+          if (todasAsDatas.length > 0) {
+            const periodoInfo = extractPeriodo(text);
+            const anoPeriodo = periodoInfo?.ano ? parseInt(periodoInfo.ano) : null;
+            let dataCandidata = null;
+
+            // Regra 1: A data de admissão geralmente pertence a um ano anterior ao ano de emissão do ponto
+            if (anoPeriodo) {
+              dataCandidata = todasAsDatas.find(d => parseInt(d.split('/')[2]) < anoPeriodo);
+            }
+
+            // Regra 2: Se for admissão recente (mesmo ano), ela será a data cronologicamente mais antiga do documento
+            if (!dataCandidata) {
+              const ordenadas = [...todasAsDatas].sort((a, b) => {
+                const [dA, mA, aA] = a.split('/').map(Number);
+                const [dB, mB, aB] = b.split('/').map(Number);
+                return new Date(aA, mA - 1, dA).getTime() - new Date(aB, mB - 1, dB).getTime();
+              });
+              dataCandidata = ordenadas[0];
+            }
+
+            if (dataCandidata) {
+              const [dia, mes, ano] = dataCandidata.split('/');
+              dataAdmissao = `${ano}-${mes}-${dia}`; // Formato YYYY-MM-DD exigido pelo <input type="date">
+            }
+          }
         }
 
         // Extrai CPF
