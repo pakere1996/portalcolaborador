@@ -313,6 +313,60 @@ toast.success(`${pages.length} páginas processadas!`);
   };
 
   const handleVincular = async (profileId: string) => {
+    const handleVinculoAutomatico = async (
+  profileId: string,
+  result: PageResult
+) => {
+  try {
+    if (!result.mes || !result.ano) return;
+
+    const { count } = await supabase
+      .from("documentos")
+      .select("id", { count: "exact", head: true })
+      .eq("colaborador_id", profileId)
+      .eq("tipo", documentType)
+      .eq("mes", result.mes)
+      .eq("ano", result.ano);
+
+    if (count && count > 0) {
+      return;
+    }
+
+    const storagePath =
+      `documentos/${documentType}/${profileId}/` +
+      `${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}.pdf`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("documentos")
+      .upload(storagePath, selectedFile!, {
+        contentType: "application/pdf",
+        upsert: false,
+      });
+
+    if (
+      uploadError &&
+      !uploadError.message.includes("already exists")
+    ) {
+      throw uploadError;
+    }
+
+    const { error: insertError } = await supabase
+      .from("documentos")
+      .insert({
+        colaborador_id: profileId,
+        tipo: documentType,
+        mes: result.mes,
+        ano: result.ano,
+        storage_path: storagePath,
+        status: "disponivel",
+        nome_pdf: selectedFile!.name,
+      });
+
+    if (insertError) throw insertError;
+  } catch (err) {
+    console.error("Erro no vínculo automático:", err);
+  }
+};
     const result = pageResults[currentPage];
     if (!result || !result.mes || !result.ano) {
       toast.error("Mês/ano não identificado nesta página.");
