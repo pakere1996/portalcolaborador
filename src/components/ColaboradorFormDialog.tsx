@@ -1,24 +1,14 @@
 import React from "react";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -26,430 +16,218 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { Profile, Unidade } from "@/integrations/supabase/types";
-import { toast } from "sonner";
-import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Plus } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
-import { cn } from "@/lib/utils";
-import { maskCNPJ } from "@/lib/utils"; // Import maskCNPJ
+import { Switch } from "@/components/ui/switch";
+import { maskCNPJ } from "@/lib/utils";
+import { Tables } from "@/integrations/supabase/types";
 
-const formSchema = z.object({
-  nome: z.string().min(2, { message: "O nome deve ter pelo menos 2 caracteres." }),
-  cpf: z.string().min(11, { message: "CPF inválido." }),
-  cargo: z.string().min(1, { message: "O cargo é obrigatório." }),
-  matricula: z.string().optional(),
-  ativo: z.boolean(),
-  data_admissao: z.date().optional().nullable(),
-  data_nascimento: z.date().optional().nullable(),
-  folga_fixa_semana: z.string().optional().nullable(),
-  unidade_id: z.string().uuid({ message: "A unidade é obrigatória." }), // Made mandatory
-  endereco: z.string().optional().nullable(),
-  email_contato: z.string().email("Email inválido.").optional().nullable(),
-  whatsapp: z.string().optional().nullable(),
-});
+type Unidade = Tables<"unidades">;
+type Cargo = Tables<"cargos">;
 
-type ProfileFormValues = z.infer<typeof formSchema>;
-
-interface ColaboradorFormDialogProps {
-  profile?: Profile;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+interface ColaboradorForm {
+  nome: string;
+  cpf: string;
+  matricula: string;
+  email: string;
+  whatsapp: string;
+  cargo: string;
+  unidadeId: string;
+  folgaFixa: string;
+  dataAdmissao: string;
+  dataNascimento: string;
+  perfil_acesso: string;
+  ativo: boolean;
+  senha: string;
 }
 
-const fetchUnidades = async (): Promise<Unidade[]> => {
-  const { data, error } = await supabase
-    .from("unidades")
-    .select("*")
-    .eq("ativo", true)
-    .order("nome");
-  if (error) throw error;
-  return data;
-};
+interface ColaboradorFormDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  form: ColaboradorForm;
+  setForm: (form: ColaboradorForm) => void;
+  unidades: Unidade[];
+  cargos: Cargo[];
+  busy: boolean;
+  isEdit: boolean;
+  onSave: () => void;
+}
 
-const upsertProfile = async (values: ProfileFormValues, profileId?: string) => {
-  const payload = {
-    ...values,
-    data_admissao: values.data_admissao ? format(values.data_admissao, "yyyy-MM-dd") : null,
-    data_nascimento: values.data_nascimento ? format(values.data_nascimento, "yyyy-MM-dd") : null,
-    folga_fixa_semana: values.folga_fixa_semana ? parseInt(values.folga_fixa_semana) : null,
-    unidade_id: values.unidade_id,
-  };
-
-  if (profileId) {
-    const { error } = await supabase
-      .from("profiles")
-      .update(payload)
-      .eq("id", profileId);
-    if (error) throw error;
-  } else {
-    // This path is usually for admin creating a profile linked to an existing auth.user
-    // For simplicity here, we assume the profile already exists or is being created via a different flow (like signup)
-    // Since this component is used in Admin/Colaboradores, we'll assume we are updating an existing profile or creating a placeholder.
-    // However, the current schema requires an auth.user ID. We'll keep the update logic for now.
-    throw new Error("Criação de novo colaborador via formulário não suportada diretamente. Use o fluxo de aprovação.");
-  }
-};
+const DIAS_SEMANA = [
+  { value: "0", label: "Domingo" },
+  { value: "1", label: "Segunda-feira" },
+  { value: "2", label: "Terça-feira" },
+  { value: "3", label: "Quarta-feira" },
+  { value: "4", label: "Quinta-feira" },
+  { value: "5", label: "Sexta-feira" },
+  { value: "6", label: "Sábado" },
+];
 
 export function ColaboradorFormDialog({
-  profile,
   open,
   onOpenChange,
+  form,
+  setForm,
+  unidades,
+  cargos,
+  busy,
+  isEdit,
+  onSave,
 }: ColaboradorFormDialogProps) {
-  const queryClient = useQueryClient();
-  const isEdit = !!profile;
-
-  const { data: unidades } = useQuery<Unidade[]>({
-    queryKey: ["unidades"],
-    queryFn: fetchUnidades,
-  });
-
-  const defaultValues: ProfileFormValues = {
-    nome: profile?.nome || "",
-    cpf: profile?.cpf || "",
-    cargo: profile?.cargo || "",
-    matricula: profile?.matricula || "",
-    ativo: profile?.ativo ?? true,
-    data_admissao: profile?.data_admissao ? new Date(profile.data_admissao) : null,
-    data_nascimento: profile?.data_nascimento ? new Date(profile.data_nascimento) : null,
-    folga_fixa_semana: profile?.folga_fixa_semana?.toString() || "",
-    unidade_id: profile?.unidade_id || "", // Initialize with existing or empty string
-    endereco: profile?.endereco || "",
-    email_contato: profile?.email_contato || "",
-    whatsapp: profile?.whatsapp || "",
-  };
-
-  const form = useForm<ProfileFormValues>({
-    resolver: zodResolver(formSchema),
-    defaultValues,
-  });
-
-  // Reset form when dialog opens/profile changes
- React.useEffect(() => {
-    if (open) {
-      form.reset({
-        nome: profile?.nome || "",
-        cpf: profile?.cpf || "",
-        cargo: profile?.cargo || "",
-        matricula: profile?.matricula || "",
-        ativo: profile?.ativo ?? true,
-        data_admissao: profile?.data_admissao ? new Date(profile.data_admissao) : null,
-        data_nascimento: profile?.data_nascimento ? new Date(profile.data_nascimento) : null,
-        folga_fixa_semana: profile?.folga_fixa_semana?.toString() || "",
-        unidade_id: profile?.unidade_id || "",
-        endereco: profile?.endereco || "",
-        email_contato: profile?.email_contato || "",
-        whatsapp: profile?.whatsapp || "",
-      });
-    }
-  }, [open, profile]);
-
-  const mutation = useMutation({
-    mutationFn: (values: ProfileFormValues) => upsertProfile(values, profile?.id),
-    onSuccess: () => {
-      toast.success(
-        isEdit
-          ? "Colaborador atualizado com sucesso!"
-          : "Colaborador criado com sucesso!"
-      );
-      queryClient.invalidateQueries({ queryKey: ["profiles"] });
-      onOpenChange(false);
-    },
-    onError: (error) => {
-      console.error("Erro ao salvar colaborador:", error);
-      toast.error("Erro ao salvar colaborador.", {
-        description: error.message,
-      });
-    },
-  });
-
-  const onSubmit = (values: ProfileFormValues) => {
-    mutation.mutate(values);
-  };
+  const set = (field: keyof ColaboradorForm) => (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => setForm({ ...form, [field]: e.target.value });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[620px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isEdit ? "Editar Colaborador" : "Novo Colaborador"}
           </DialogTitle>
         </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="nome"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome Completo</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="cpf"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>CPF</FormLabel>
-                    <FormControl>
-                      <Input {...field} disabled={isEdit} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+
+        <div className="space-y-4 py-2">
+          {/* Nome e CPF */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Nome Completo *</Label>
+              <Input value={form.nome} onChange={set("nome")} placeholder="Nome completo" />
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="cargo"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Cargo</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="matricula"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Matrícula (Opcional)</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <div className="space-y-2">
+              <Label>CPF *</Label>
+              <Input value={form.cpf} onChange={set("cpf")} placeholder="000.000.000-00" disabled={isEdit} />
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="unidade_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Unidade *</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value || ""}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione a unidade" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {unidades?.map((unidade) => (
-                          <SelectItem key={unidade.id} value={unidade.id}>
-                            {unidade.nome} - {maskCNPJ(unidade.cnpj)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="folga_fixa_semana"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Folga Fixa Semanal (Opcional)</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value || ""}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Nenhuma" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="0">Domingo</SelectItem>
-                        <SelectItem value="1">Segunda-feira</SelectItem>
-                        <SelectItem value="2">Terça-feira</SelectItem>
-                        <SelectItem value="3">Quarta-feira</SelectItem>
-                        <SelectItem value="4">Quinta-feira</SelectItem>
-                        <SelectItem value="5">Sexta-feira</SelectItem>
-                        <SelectItem value="6">Sábado</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="data_admissao"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Data de Admissão (Opcional)</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, "PPP")
-                            ) : (
-                              <span>Selecione uma data</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value || undefined}
-                          onSelect={field.onChange}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="data_nascimento"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Data de Nascimento (Opcional)</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, "PPP")
-                            ) : (
-                              <span>Selecione uma data</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value || undefined}
-                          onSelect={field.onChange}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <FormField
-              control={form.control}
-              name="endereco"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Endereço (Opcional)</FormLabel>
-                  <FormControl>
-                    <Textarea {...field} value={field.value || ""} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+          {/* Cargo e Matrícula */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Cargo *</Label>
+              {cargos.length > 0 ? (
+                <Select value={form.cargo} onValueChange={(v) => setForm({ ...form, cargo: v })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o cargo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cargos.map((c) => (
+                      <SelectItem key={c.id} value={c.nome}>{c.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input value={form.cargo} onChange={set("cargo")} placeholder="Ex: Atendente" />
               )}
-            />
+            </div>
+            <div className="space-y-2">
+              <Label>Matrícula (Opcional)</Label>
+              <Input value={form.matricula} onChange={set("matricula")} placeholder="Matrícula" />
+            </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="email_contato"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email de Contato (Opcional)</FormLabel>
-                    <FormControl>
-                      <Input {...field} value={field.value || ""} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="whatsapp"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>WhatsApp (Opcional)</FormLabel>
-                    <FormControl>
-                      <Input {...field} value={field.value || ""} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+          {/* Unidade e Folga Fixa */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Unidade *</Label>
+              <Select value={form.unidadeId} onValueChange={(v) => setForm({ ...form, unidadeId: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a unidade" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhuma</SelectItem>
+                  {unidades.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.nome}{u.cnpj ? ` — ${maskCNPJ(u.cnpj)}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Folga Fixa Semanal</Label>
+              <Select value={form.folgaFixa} onValueChange={(v) => setForm({ ...form, folgaFixa: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Nenhuma" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhuma</SelectItem>
+                  {DIAS_SEMANA.map((d) => (
+                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Datas */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Data de Admissão</Label>
+              <Input type="date" value={form.dataAdmissao} onChange={set("dataAdmissao")} />
+            </div>
+            <div className="space-y-2">
+              <Label>Data de Nascimento</Label>
+              <Input type="date" value={form.dataNascimento} onChange={set("dataNascimento")} />
+            </div>
+          </div>
+
+          {/* Email e WhatsApp */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Email de Contato</Label>
+              <Input type="email" value={form.email} onChange={set("email")} placeholder="email@exemplo.com" />
+            </div>
+            <div className="space-y-2">
+              <Label>WhatsApp</Label>
+              <Input value={form.whatsapp} onChange={set("whatsapp")} placeholder="(00) 00000-0000" />
+            </div>
+          </div>
+
+          {/* Perfil de Acesso */}
+          <div className="space-y-2">
+            <Label>Perfil de Acesso</Label>
+            <Select value={form.perfil_acesso} onValueChange={(v) => setForm({ ...form, perfil_acesso: v })}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="colaborador">Colaborador</SelectItem>
+                <SelectItem value="admin">Administrador</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Senha (só no cadastro) */}
+          {!isEdit && (
+            <div className="space-y-2">
+              <Label>Senha Inicial</Label>
+              <Input
+                type="password"
+                value={form.senha}
+                onChange={set("senha")}
+                placeholder="Deixe vazio para usar os 6 últimos dígitos do CPF"
               />
             </div>
+          )}
 
-            <FormField
-              control={form.control}
-              name="ativo"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                  <FormControl>
-                    <Checkbox
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                  <div className="space-y-1 leading-none">
-                    <FormLabel>Colaborador Ativo</FormLabel>
-                  </div>
-                </FormItem>
-              )}
-            />
+          {/* Ativo */}
+          {isEdit && (
+            <div className="flex items-center gap-3 rounded-xl border border-border p-4">
+              <Switch
+                checked={form.ativo}
+                onCheckedChange={(checked) => setForm({ ...form, ativo: checked })}
+              />
+              <Label>Colaborador Ativo</Label>
+            </div>
+          )}
+        </div>
 
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending
-                ? "Salvando..."
-                : isEdit
-                ? "Salvar Alterações"
-                : "Criar Colaborador"}
-            </Button>
-          </form>
-        </Form>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+            Cancelar
+          </Button>
+          <Button onClick={onSave} disabled={busy}>
+            {busy ? "Salvando..." : isEdit ? "Salvar Alterações" : "Criar Colaborador"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
