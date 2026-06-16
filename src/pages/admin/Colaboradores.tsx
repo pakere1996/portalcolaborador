@@ -14,8 +14,12 @@ import { toast } from "sonner";
 import { Plus, Users, Pencil, Trash2, Search, Shield, UserCheck, Mail, Phone, Calendar, Building2, Key, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { formatCPF, onlyDigits, isValidCPFLength } from "@/lib/cpf";
-import { formatPhone, cleanCNPJ, formatCNPJ } from "@/lib/utils";
-import { ColaboradorForm } from "@/components/ColaboradorForm";
+import {
+  cn,
+  formatPhone,
+  cleanCNPJ,
+  formatCNPJ
+} from "@/lib/utils";import { ColaboradorForm } from "@/components/ColaboradorForm";
 import { ColaboradorFormDialog } from "@/components/ColaboradorFormDialog";
 import { Tables } from "@/integrations/supabase/types";
 import { adminApi } from "@/lib/admin-api";
