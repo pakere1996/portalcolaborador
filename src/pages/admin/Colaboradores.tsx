@@ -104,7 +104,7 @@ export default function Colaboradores() {
       const { data: authUser, error: authErr } = await adminApi.createUser({
         nome: newForm.nome.trim(),
         cpf: cleanCpf,
-        email: newForm.email.trim().toLowerCase() || `${cleanCpf}@pakere.com.br`,
+email: newForm.email.trim().toLowerCase() || `${cleanCpf}@pakere.com.br`,
         senha: newForm.senha || cleanCpf.slice(-6),
         cargo: newForm.cargo,
         dataAdmissao: newForm.dataAdmissao,
