@@ -1,85 +1,38 @@
-import { Profile } from "@/integrations/supabase/types";
-
-export interface ProfileForMatching {
-  id: string;
-  nome: string;
-  cpf: string;
-  matricula: string | null;
+function normalizeText(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-export interface MatchResult {
-  profile: ProfileForMatching | null;
-  matchBy: "cpf" | "nome" | "matricula" | "none";
-  confidence: number;
-  status: "automatico" | "sugerido" | "revisao";
-}
-
-/**
- * Extrai CPF de um texto (formato XXX.XXX.XXX-XX ou apenas números)
- */
-export function extractCPF(text: string): string | null {
-  // Procura por CPF formatado
-  const formattedMatch = text.match(/\d{3}\.\d{3}\.\d{3}-\d{2}/);
-  if (formattedMatch) return formattedMatch[0];
-
-  // Procura por 11 dígitos consecutivos (CPF sem formatação)
-  const digitsMatch = text.match(/\b\d{11}\b/);
-  if (digitsMatch) {
-    const cpf = digitsMatch[0];
-    return `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}`;
-  }
-
-  return null;
-}
-
-/**
- * Extrai CPF de texto (alias para compatibilidade)
- */
-export function extractCPFFromText(text: string): string | null {
-  return extractCPF(text);
-}
-
-/**
- * Calcula similaridade entre duas strings (Levenshtein simplificado)
- */
-function similarity(a: string, b: string): number {
-  const aNorm = a.toLowerCase().trim();
-  const bNorm = b.toLowerCase().trim();
-  
-  if (aNorm === bNorm) return 1;
-  if (!aNorm || !bNorm) return 0;
-  
-  const longer = aNorm.length > bNorm.length ? aNorm : bNorm;
-  const shorter = aNorm.length > bNorm.length ? bNorm : aNorm;
-  
-  let matchCount = 0;
-  for (let i = 0; i < shorter.length; i++) {
-    if (longer.includes(shorter[i])) matchCount++;
-  }
-  
-  return matchCount / longer.length;
-}
-
-/**
- * Encontra o melhor match de perfil baseado em nome e CPF
- */
 export function findBestProfileMatch(
   nomePDF: string | null,
   cpfPDF: string | null,
   profiles: Profile[]
 ) {
+
   const nomeNormalizado = normalizeText(nomePDF || "");
-  const cpfLimpo = cpfPDF?.replace(/\D/g, "") || "";
+  const cpfPDFLimpo = (cpfPDF || "").replace(/\D/g, "");
 
-  // ==========================================
-  // 1 - CPF EXATO
-  // ==========================================
+  console.log("================================");
+  console.log("NOME PDF:", nomePDF);
+  console.log("CPF PDF:", cpfPDFLimpo);
+  console.log("================================");
 
-  const cpfExato = profiles.find(
-    p => p.cpf?.replace(/\D/g, "") === cpfLimpo
+  // =====================================================
+  // ETAPA 1 - CPF EXATO
+  // =====================================================
+
+  const cpfExato = profiles.find(profile =>
+    (profile.cpf || "").replace(/\D/g, "") === cpfPDFLimpo
   );
 
   if (cpfExato) {
+
+    console.log("MATCH POR CPF EXATO:", cpfExato.nome);
+
     return {
       profile: cpfExato,
       matchBy: "cpf",
@@ -88,94 +41,102 @@ export function findBestProfileMatch(
     };
   }
 
-  // ==========================================
-  // 2 - PROCURA CPF PARECIDO
-  // ==========================================
+  // =====================================================
+  // ETAPA 2 - BUSCAR CPF MAIS PRÓXIMO
+  // =====================================================
 
-  let melhorCPF: Profile | null = null;
+  let melhorPerfil: Profile | null = null;
   let menorDiferenca = 999;
 
   for (const profile of profiles) {
-    const cpfBanco = profile.cpf?.replace(/\D/g, "");
 
-    if (!cpfBanco || cpfBanco.length !== 11 || cpfLimpo.length !== 11) {
+    const cpfBanco = (profile.cpf || "").replace(/\D/g, "");
+
+    if (cpfBanco.length !== 11 || cpfPDFLimpo.length !== 11) {
       continue;
     }
 
     let diferencas = 0;
 
     for (let i = 0; i < 11; i++) {
-      if (cpfBanco[i] !== cpfLimpo[i]) {
+      if (cpfBanco[i] !== cpfPDFLimpo[i]) {
         diferencas++;
       }
     }
 
     if (diferencas < menorDiferenca) {
       menorDiferenca = diferencas;
-      melhorCPF = profile;
+      melhorPerfil = profile;
     }
   }
 
-  // ==========================================
-  // 3 - CPF MUITO DIFERENTE
-  // ==========================================
+  console.log("MENOR DIFERENCA CPF:", menorDiferenca);
+  console.log("MELHOR PERFIL CPF:", melhorPerfil?.nome);
 
-  if (menorDiferenca > 3) {
+  // =====================================================
+  // ETAPA 3 - CPF MUITO DIFERENTE
+  // =====================================================
+
+  if (menorDiferenca > 3 || !melhorPerfil) {
+
+    console.log("NOVO COLABORADOR - CPF MUITO DIFERENTE");
+
     return {
       profile: null,
-      matchBy: "novo",
+      matchBy: "none",
       confidence: 0,
-      status: "novo_colaborador"
+      status: "revisao"
     };
   }
 
-  // ==========================================
-  // 4 - VALIDAR NOME
-  // ==========================================
+  // =====================================================
+  // ETAPA 4 - VALIDAR NOME
+  // =====================================================
 
-  if (!melhorCPF?.nome || !nomeNormalizado) {
-    return {
-      profile: null,
-      matchBy: "novo",
-      confidence: 0,
-      status: "novo_colaborador"
-    };
-  }
-
-  const nomeBanco = normalizeText(melhorCPF.nome);
+  const nomeBanco = normalizeText(melhorPerfil.nome || "");
 
   const tokensBanco = nomeBanco
     .split(" ")
-    .filter(t => t.length >= 3);
+    .filter(token => token.length >= 3);
 
-  const tokensEncontrados = tokensBanco.filter(
-    token => nomeNormalizado.includes(token)
+  const tokensEncontrados = tokensBanco.filter(token =>
+    nomeNormalizado.includes(token)
   );
 
-  const similaridade =
-    tokensEncontrados.length / tokensBanco.length;
+  const similaridadeNome =
+    tokensBanco.length === 0
+      ? 0
+      : tokensEncontrados.length / tokensBanco.length;
 
-  // ==========================================
-  // 5 - NOME COMPATÍVEL
-  // ==========================================
+  console.log("SIMILARIDADE NOME:", similaridadeNome);
+  console.log("TOKENS ENCONTRADOS:", tokensEncontrados);
 
-  if (similaridade >= 0.75) {
+  // =====================================================
+  // ETAPA 5 - NOME COMPATÍVEL
+  // =====================================================
+
+  if (similaridadeNome >= 0.75) {
+
+    console.log("MATCH SUGERIDO:", melhorPerfil.nome);
+
     return {
-      profile: melhorCPF,
-      matchBy: "cpf+nome",
-      confidence: similaridade,
+      profile: melhorPerfil,
+      matchBy: "cpf",
+      confidence: similaridadeNome,
       status: "sugerido"
     };
   }
 
-  // ==========================================
-  // 6 - NOVO COLABORADOR
-  // ==========================================
+  // =====================================================
+  // ETAPA 6 - NOVO COLABORADOR
+  // =====================================================
+
+  console.log("NOVO COLABORADOR - NOME NÃO COMPATÍVEL");
 
   return {
     profile: null,
-    matchBy: "novo",
+    matchBy: "none",
     confidence: 0,
-    status: "novo_colaborador"
+    status: "revisao"
   };
 }
