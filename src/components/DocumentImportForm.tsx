@@ -350,7 +350,7 @@ toast.success(`${pages.length} páginas processadas!`);
       if (insertError) throw insertError;
 
       setPageResults(prev =>
-     const handleVinculoAutomatico = async (
+  const handleVinculoAutomatico = async (
   profileId: string,
   result: PageResult
 ) => {
