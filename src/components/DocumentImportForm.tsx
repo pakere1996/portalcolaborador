@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Upload, FileText, X, Loader2, CheckCircle2, AlertTriangle, XCircle, ChevronLeft, ChevronRight, UserPlus } from "lucide-react";
 import { extractTextFromPDF } from "@/lib/pdf-utils";
 import { extractCPF, findBestProfileMatch, type ProfileForMatching } from "@/lib/documentos-matching";
+import { adminApi } from "@/lib/admin-api";
 
 interface PageResult {
   pageNumber: number;
@@ -42,7 +43,11 @@ export function DocumentImportForm() {
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [manualProfileId, setManualProfileId] = useState<string>("");
-  const [novoColabForm, setNovoColabForm] = useState({ nome: "", cpf: "", cargo: "" });
+  const [novoColabForm, setNovoColabForm] = useState({
+    nome: "", cpf: "", cargo: "", unidadeId: "", senha: "",
+    folgaFixa: "none", dataAdmissao: "", dataNascimento: "",
+    whatsapp: "", perfil_acesso: "colaborador",
+  });
   const [showNovoColab, setShowNovoColab] = useState(false);
   const { user } = useAuth();
 
@@ -204,27 +209,38 @@ export function DocumentImportForm() {
   };
 
   const handleCriarColab = async () => {
-    if (!novoColabForm.nome || !novoColabForm.cpf) {
-      toast.error("Nome e CPF são obrigatórios.");
+    if (!novoColabForm.nome || !novoColabForm.cpf || !novoColabForm.cargo || !novoColabForm.unidadeId) {
+      toast.error("Nome, CPF, cargo e unidade são obrigatórios.");
       return;
     }
     setIsUploading(true);
     try {
-      const result = pageResults[currentPage];
-      const { data, error } = await supabase.from("profiles").insert({
-        nome: novoColabForm.nome,
-        cpf: novoColabForm.cpf.replace(/\D/g, ""),
-        cargo: novoColabForm.cargo || "Colaborador",
-        unidade_id: result?.unidadeId ?? null,
-        ativo: true,
-      }).select("id, nome, cpf, matricula").single();
-      if (error) throw error;
-      setProfiles(prev => [...prev, data as ProfileForMatching]);
+      const cleanCpf = novoColabForm.cpf.replace(/\D/g, "");
+      const { data: authUser, error: authErr } = await adminApi.createUser({
+        nome: novoColabForm.nome.trim(),
+        cpf: cleanCpf,
+        email: `${cleanCpf}@pakere.com.br`,
+        senha: novoColabForm.senha || cleanCpf.slice(-6),
+        cargo: novoColabForm.cargo,
+        dataAdmissao: novoColabForm.dataAdmissao || null,
+        dataNascimento: novoColabForm.dataNascimento || null,
+        folgaFixaSemana: novoColabForm.folgaFixa === "none" ? null : Number(novoColabForm.folgaFixa),
+        role: novoColabForm.perfil_acesso,
+      });
+      if (authErr) throw authErr;
+
+      const { error: profErr } = await supabase.from("profiles").update({
+        unidade_id: novoColabForm.unidadeId,
+        whatsapp: novoColabForm.whatsapp || null,
+      }).eq("id", authUser.userId);
+      if (profErr) throw profErr;
+
+      const newProfile: ProfileForMatching = { id: authUser.userId, nome: novoColabForm.nome, cpf: cleanCpf, matricula: null };
+      setProfiles(prev => [...prev, newProfile]);
       setShowNovoColab(false);
-      setNovoColabForm({ nome: "", cpf: "", cargo: "" });
+      setNovoColabForm({ nome: "", cpf: "", cargo: "", unidadeId: "", senha: "", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", whatsapp: "", perfil_acesso: "colaborador" });
       toast.success("Colaborador criado! Agora vincule o documento.");
-      // Atualiza o match da página atual
-      setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, matchedProfile: data as ProfileForMatching, matchStatus: "automatico" } : r));
+      setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, matchedProfile: newProfile, matchStatus: "automatico" } : r));
     } catch (err) {
       toast.error("Erro ao criar colaborador", { description: (err as Error).message });
     } finally {
@@ -362,16 +378,76 @@ export function DocumentImportForm() {
 
               {/* Criar novo colaborador */}
               {showNovoColab ? (
-                <div className="space-y-3 p-3 bg-white rounded-xl border border-border">
-                  <div className="font-semibold text-sm">Novo Colaborador</div>
-                  <div className="space-y-2">
-                    <Input placeholder="Nome completo *" value={novoColabForm.nome} onChange={e => setNovoColabForm(f => ({ ...f, nome: e.target.value }))} />
-                    <Input placeholder="CPF (só números) *" value={novoColabForm.cpf} onChange={e => setNovoColabForm(f => ({ ...f, cpf: e.target.value }))} />
-                    <Input placeholder="Cargo (opcional)" value={novoColabForm.cargo} onChange={e => setNovoColabForm(f => ({ ...f, cargo: e.target.value }))} />
+                <div className="space-y-3 p-4 bg-white rounded-xl border border-border">
+                  <div className="font-semibold text-sm">Cadastrar Novo Colaborador</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Nome Completo *</Label>
+                      <Input placeholder="Nome completo" value={novoColabForm.nome} onChange={e => setNovoColabForm(f => ({ ...f, nome: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">CPF *</Label>
+                      <Input placeholder="000.000.000-00" value={novoColabForm.cpf} onChange={e => setNovoColabForm(f => ({ ...f, cpf: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Cargo *</Label>
+                      <Input placeholder="Ex: Atendente" value={novoColabForm.cargo} onChange={e => setNovoColabForm(f => ({ ...f, cargo: e.target.value }))} />
+                    </div>
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Unidade *</Label>
+                      <Select value={novoColabForm.unidadeId} onValueChange={v => setNovoColabForm(f => ({ ...f, unidadeId: v }))}>
+                        <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
+                        <SelectContent>
+                          {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Data de Admissão</Label>
+                      <Input type="date" value={novoColabForm.dataAdmissao} onChange={e => setNovoColabForm(f => ({ ...f, dataAdmissao: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Data de Nascimento</Label>
+                      <Input type="date" value={novoColabForm.dataNascimento} onChange={e => setNovoColabForm(f => ({ ...f, dataNascimento: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Folga Fixa Semanal</Label>
+                      <Select value={novoColabForm.folgaFixa} onValueChange={v => setNovoColabForm(f => ({ ...f, folgaFixa: v }))}>
+                        <SelectTrigger><SelectValue placeholder="Nenhuma" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhuma</SelectItem>
+                          <SelectItem value="0">Domingo</SelectItem>
+                          <SelectItem value="1">Segunda-feira</SelectItem>
+                          <SelectItem value="2">Terça-feira</SelectItem>
+                          <SelectItem value="3">Quarta-feira</SelectItem>
+                          <SelectItem value="4">Quinta-feira</SelectItem>
+                          <SelectItem value="5">Sexta-feira</SelectItem>
+                          <SelectItem value="6">Sábado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Perfil de Acesso</Label>
+                      <Select value={novoColabForm.perfil_acesso} onValueChange={v => setNovoColabForm(f => ({ ...f, perfil_acesso: v }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="colaborador">Colaborador</SelectItem>
+                          <SelectItem value="admin">Administrador</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">WhatsApp</Label>
+                      <Input placeholder="(00) 00000-0000" value={novoColabForm.whatsapp} onChange={e => setNovoColabForm(f => ({ ...f, whatsapp: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Senha Inicial</Label>
+                      <Input type="password" placeholder="Padrão: 6 últimos dígitos CPF" value={novoColabForm.senha} onChange={e => setNovoColabForm(f => ({ ...f, senha: e.target.value }))} />
+                    </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 pt-2">
                     <Button className="flex-1" onClick={handleCriarColab} disabled={isUploading}>
-                      {isUploading ? <Loader2 className="size-4 mr-2 animate-spin" /> : null} Criar
+                      {isUploading ? <Loader2 className="size-4 mr-2 animate-spin" /> : <UserPlus className="size-4 mr-2" />} Criar Colaborador
                     </Button>
                     <Button variant="outline" onClick={() => setShowNovoColab(false)}>Cancelar</Button>
                   </div>
