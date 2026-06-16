@@ -36,6 +36,7 @@ function AuthenticatedRoutes() {
   }
 
   const isAdmin = role === "admin";
+  
 
   // Todas as rotas autenticadas são renderizadas dentro do AppShell
   return (
