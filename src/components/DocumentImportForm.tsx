@@ -140,6 +140,8 @@ export function DocumentImportForm() {
           matchStatus: match.status,
           matchedProfile: match.profile ?? null,
           confidence: match.confidence,
+          cargo: cargo,
+          dataAdmissao: dataAdmissao,
           vinculado: false,
           ignorado: false,
         };
