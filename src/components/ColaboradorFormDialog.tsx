@@ -42,6 +42,7 @@ interface ColaboradorForm {
 interface ColaboradorFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  title?: string;
   form: ColaboradorForm;
   setForm: (form: ColaboradorForm) => void;
   unidades: Unidade[];
