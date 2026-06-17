@@ -200,7 +200,7 @@ export default function AdminHomeAdminPage() {
       const { error: profErr } = await supabase.from("profiles").update({
         matricula: newForm.matricula.trim() || null,
         whatsapp: newForm.whatsapp.trim() || null,
-        unidade_id: newForm.unidade_id === "" ? null : newForm.unidade_id,
+        unidadeId: newForm.unidadeId === "" ? null : newForm.unidadeId,
         ativo: true,
       }).eq("id", authUser.userId);
 
