@@ -34,7 +34,11 @@ interface Solic {
 }
 
 export default function CalendarioPage() {
-  const { user, profile } = useAuth(); // Adicionando profile
+  const { user, profile: rawProfile } = useAuth();
+  
+  // Intercepta e estende a tipagem do perfil para incluir a unidade_id sem quebrar o build
+  const profile = rawProfile as (Exclude<typeof rawProfile, null> & { unidade_id?: string | null }) | null;
+
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month0, setMonth0] = useState(today.getMonth());
