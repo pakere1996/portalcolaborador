@@ -72,13 +72,13 @@ export default function BloqueiosPage() {
   };
 
   const saveRegra = async () => {
-    if (!regraForm.descricao.trim()) return toast.error("Descrição é obrigatória");
+    if (!regraForm.descricao?.trim()) return toast.error("Descrição é obrigatória");
     setBusy(true);
     try {
       if (regraDialog) {
         const { error } = await supabase.from("bloqueio_regras").update(regraForm).eq("id", regraDialog.id);
         if (error) throw error;
-        toast.success("Regra atualizada");
+        toast.success("Regra updated");
       } else {
         const { error } = await supabase.from("bloqueio_regras").insert(regraForm);
         if (error) throw error;
@@ -160,8 +160,9 @@ export default function BloqueiosPage() {
   };
 
   const deleteManualBlock = async (id: string) => {
-    const { error } = await supabase.from("datas_bloqueadas").delete().eq("id", id);
-    if (error) return toast.error(error.message);
+    const { error } = await supabase.from("datas_runs").delete().eq("id", id);
+    const { error: err } = await supabase.from("datas_bloqueadas").delete().eq("id", id);
+    if (err) return toast.error(err.message);
     toast.success("Bloqueio removido");
     load();
   };
@@ -223,11 +224,11 @@ export default function BloqueiosPage() {
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
                   <Label>Descrição *</Label>
-                  <Input value={regraForm.descricao} onChange={(e) => setRegraForm({ ...regraForm, descricao: e.target.value })} placeholder="Ex: Natal, Black Friday..." />
+                  <Input value={regraForm.descricao ?? ""} onChange={(e) => setRegraForm({ ...regraForm, descricao: e.target.value })} placeholder="Ex: Natal, Black Friday..." />
                 </div>
                 <div className="space-y-2">
                   <Label>Tipo *</Label>
-                  <select value={regraForm.tipo} onChange={(e) => setRegraForm({ ...regraForm, tipo: e.target.value })} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <select value={regraForm.tipo ?? "fixa_anual"} onChange={(e) => setRegraForm({ ...regraForm, tipo: e.target.value })} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     <option value="fixa_anual">Fixa Anual (dia/mês fixo)</option>
                     <option value="dinamica">Dinâmica (ex: 2º sábado do mês)</option>
                     <option value="pos_pagamento">Pós-Pagamento (1º sáb após dia 5)</option>
@@ -250,7 +251,7 @@ export default function BloqueiosPage() {
                   <div className="space-y-2"><Label>Mês (1-12) *</Label><Input type="number" min={1} max={12} value={regraForm.mes ?? ""} onChange={(e) => setRegraForm({ ...regraForm, mes: Number(e.target.value) })} /></div>
                 )}
                 <div className="flex items-center gap-2">
-                  <input type="checkbox" id="ativo" checked={regraForm.ativo} onChange={(e) => setRegraForm({ ...regraForm, ativo: e.target.checked })} className="size-4" />
+                  <input type="checkbox" id="ativo" checked={regraForm.ativo ?? true} onChange={(e) => setRegraForm({ ...regraForm, ativo: e.target.checked })} className="size-4" />
                   <Label htmlFor="ativo">Ativa</Label>
                 </div>
               </div>
@@ -274,9 +275,9 @@ export default function BloqueiosPage() {
                       <CalendarCheck className="size-5" />
                     </div>
                     <div>
-                      <div className="font-semibold">{r.descricao}</div>
+                      <div className="font-semibold">{r.descricao ?? ""}</div>
                       <div className="text-sm text-muted-foreground flex items-center gap-4">
-                        <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">{getTipoLabel(r.tipo)}</span>
+                        <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">{getTipoLabel(r.tipo ?? "")}</span>
                         {r.tipo === "fixa_anual" && <span>Dia {r.dia}/{String(r.mes).padStart(2, '0')}</span>}
                         {r.tipo === "dinamica" && <span>{r.ordinal}º dia {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"][r.dia_semana ?? 0]} do mês {r.mes}</span>}
                         {r.tipo === "pos_pagamento" && <span>1º Sábado após dia 5 do mês {r.mes}</span>}
@@ -353,7 +354,7 @@ export default function BloqueiosPage() {
                     <div>
                       <div className="font-semibold">{formatBR(parseYMD(d.data))}</div>
                       <div className="text-sm text-muted-foreground flex items-center gap-4">
-                        <span>{d.motivo}</span>
+                        <span>{d.motivo ?? ""}</span>
                         <Badge variant="outline" className={d.auto ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-rose-50 text-rose-700 border-rose-200"}>
                           {d.auto ? "Automático" : "Manual"}
                         </Badge>
