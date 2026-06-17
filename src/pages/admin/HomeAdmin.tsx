@@ -227,7 +227,7 @@ export default function AdminHomeAdminPage() {
       whatsapp: p.whatsapp ?? "",
       cargo: p.cargo,
       unidadeId: p.unidadeId ?? "",
-      folgaFixa: p.folga_fixa_semana?.toString() ?? "none",
+      folgaFixa: p.folgaFixa?.toString() ?? "none",
       dataNascimento: p.dataNascimento ?? "",
       dataAdmissao: p.dataAdmissao ?? "",
       perfil_acesso: p.role ?? "colaborador",
