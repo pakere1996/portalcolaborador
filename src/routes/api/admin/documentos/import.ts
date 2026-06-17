@@ -9,7 +9,7 @@ const importSchema = z.object({
 
 export const importDocumentos = createServerFn({ method: "POST" })
   .validator(importSchema)
-  .handler(async ({ fileName, fileSize, filePath }) => {
+  .handler(async ({ fileName, fileSize, filePath }: { fileName: string; fileSize: number; filePath: string }) => {
     // Esta função agora serve apenas como um log ou gatilho, 
     // já que o upload real é feito via Edge Function para maior segurança.
     return {
