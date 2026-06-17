@@ -25,8 +25,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Filter, User, Trash2, Plus, Settings2, Save, Lock, Info, Unlock, AlertTriangle, ChevronRight, Building, Loader2 } from "lucide-react";
-import { dayType, formatBR, monthKey, parseYMD, ymd, autoBlockedDatesForMonth } from "@/lib/folga-rules";
+import { Calendar as CalIcon, Filter, User, Trash2, Plus, Settings2, Save, Lock, Info, Unlock, AlertTriangle, ChevronRight, Building, Loader2, CheckCircle, Users } from "lucide-react";
+import { dayType, formatBR, monthKey, parseYMD, ymd, autoBlockedDatesForMonth, calculateDateStatus, getMonthDays } from "@/lib/folga-rules";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Tables } from "@/integrations/supabase/types";
@@ -48,6 +48,7 @@ export default function AdminCalendar() {
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [limites, setLimites] = useState<any[]>([]);
   const [pendentes, setPendentes] = useState<any[]>([]);
+  const [prios, setPrios] = useState<any[]>([]);
   
   const [filterUnidade, setFilterUnidade] = useState("all"); 
   const [filterUser, setFilterUser] = useState("all");
@@ -59,7 +60,6 @@ export default function AdminCalendar() {
   const [savingLimit, setSavingLimit] = useState(false);
   const [busyAssign, setBusyAssign] = useState(false);
 
-  // Estado para o AlertDialog de confirmação
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     colaboradorId: string;
@@ -73,13 +73,14 @@ export default function AdminCalendar() {
     const endDate = new Date(year, month0 + 1, 0);
     const end = ymd(endDate);
 
-    const [fRes, bRes, pRes, limRes, pendRes, uRes] = await Promise.all([
+    const [fRes, bRes, pRes, limRes, pendRes, uRes, prioRes] = await Promise.all([
       supabase.from("folgas").select("*").gte("data", start).lte("data", end),
       supabase.from("datas_bloqueadas").select("*").gte("data", start).lte("data", end),
       supabase.from("profiles").select("*").eq("ativo", true).order("nome"),
       supabase.from("dia_config").select("*").gte("data", start).lte("data", end),
       supabase.from("solicitacoes_especiais").select("*").eq("status", "pendente").gte("data", start).lte("data", end),
       supabase.from("unidades").select("*").order("nome"),
+      supabase.from("prioridade_aniversario").select("*").eq("status", "ativa").gte("data", start).lte("data", end),
     ]);
 
     setProfiles(pRes.data ?? []);
@@ -88,6 +89,7 @@ export default function AdminCalendar() {
     setLimites(limRes.data ?? []);
     setPendentes(pendRes.data ?? []);
     setUnidades(uRes.data ?? []);
+    setPrios(prioRes.data ?? []);
   };
 
   useEffect(() => { load(); }, [year, month0]);
@@ -106,6 +108,24 @@ export default function AdminCalendar() {
     if (filterUnidade === "all") return profiles;
     return profiles.filter(p => p.unidade_id === filterUnidade);
   }, [profiles, filterUnidade]);
+
+  const manualMap = useMemo(() => {
+    const m = new Map<string, { reason: string; liberada: boolean }>();
+    for (const b of manual) m.set(b.data, { reason: b.motivo, liberada: b.liberada });
+    return m;
+  }, [manual]);
+
+  const dayLimits = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const l of limites) m.set(l.data, l.limite_colaboradores);
+    return m;
+  }, [limites]);
+
+  const birthdayByDate = useMemo(() => {
+    const m = new Map<string, { userId: string }>();
+    for (const p of prios) m.set(p.data, { userId: p.user_id });
+    return m;
+  }, [prios]);
 
   const occupantsByDate = useMemo(() => {
     const m = new Map<string, DayOccupant[]>();
@@ -160,17 +180,35 @@ export default function AdminCalendar() {
     return m;
   }, [filteredProfiles, folgas, pendentes, year, month0, filterUser, filterType]);
 
-  const manualMap = useMemo(() => {
-    const m = new Map<string, { reason: string; liberada: boolean }>();
-    for (const b of manual) m.set(b.data, { reason: b.motivo, liberada: b.liberada });
-    return m;
-  }, [manual]);
+  // Summary Stats
+  const stats = useMemo(() => {
+    const days = getMonthDays(year, month0);
+    let totalFolgas = 0;
+    let totalVagas = 0;
+    let diasLotados = 0;
 
-  const dayLimits = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const l of limites) m.set(l.data, l.limite_colaboradores);
-    return m;
-  }, [limites]);
+    days.forEach(d => {
+      const iso = ymd(d);
+      const status = calculateDateStatus({
+        date: d,
+        myUserId: null,
+        allFolgas: folgas,
+        allProfiles: filteredProfiles,
+        manualBlocked: manualMap,
+        dayLimits,
+        birthdayByDate: birthdayByDate as any,
+        isAdmin: true
+      });
+      
+      if (dayType(d)) {
+        totalFolgas += status.occupancy || 0;
+        totalVagas += status.limit || 1;
+        if ((status.occupancy || 0) >= (status.limit || 1)) diasLotados++;
+      }
+    });
+
+    return { totalFolgas, totalVagas, diasLotados, vagasRestantes: totalVagas - totalFolgas };
+  }, [year, month0, folgas, filteredProfiles, manualMap, dayLimits, birthdayByDate]);
 
   const onSelect = (iso: string) => {
     setDlg({ iso, status: "" });
@@ -286,6 +324,34 @@ export default function AdminCalendar() {
         </div>
       </div>
 
+      {/* Summary Counters */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Folgas Marcadas</div>
+          <div className="text-2xl font-black text-slate-900 flex items-center gap-2">
+            <CheckCircle className="size-5 text-emerald-500" /> {stats.totalFolgas}
+          </div>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Vagas Restantes</div>
+          <div className="text-2xl font-black text-slate-900 flex items-center gap-2">
+            <Users className="size-5 text-blue-500" /> {stats.vagasRestantes}
+          </div>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Dias Lotados</div>
+          <div className="text-2xl font-black text-slate-900 flex items-center gap-2">
+            <AlertTriangle className="size-5 text-rose-500" /> {stats.diasLotados}
+          </div>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Capacidade Total</div>
+          <div className="text-2xl font-black text-slate-900 flex items-center gap-2">
+            <CalIcon className="size-5 text-slate-400" /> {stats.totalVagas}
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-wrap gap-8 items-end shadow-sm">
         <div className="space-y-2.5">
           <Label className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400 flex items-center gap-2">
@@ -340,6 +406,7 @@ export default function AdminCalendar() {
         year={year} month0={month0}
         occupantsByDate={occupantsByDate} manualBlocked={manualMap}
         dayLimits={dayLimits}
+        birthdayByDate={birthdayByDate as any}
         myUserId={user?.id ?? null}
         allFolgas={folgas}
         allProfiles={filteredProfiles} 
@@ -510,11 +577,4 @@ export default function AdminCalendar() {
       </AlertDialog>
     </div>
   );
-}
-
-function getMonthDays(year: number, month0: number): Date[] {
-  const days: Date[] = [];
-  const last = new Date(year, month0 + 1, 0).getDate();
-  for (let i = 1; i <= last; i++) days.push(new Date(year, month0, i));
-  return days;
 }

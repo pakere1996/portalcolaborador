@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Users, Calendar, ClipboardList, ArrowLeftRight, Ban, Sparkles, Cake, AlertTriangle, TrendingUp } from "lucide-react";
+import { Shield, Users, Calendar, ClipboardList, ArrowLeftRight, Ban, Sparkles, Cake, AlertTriangle, TrendingUp, ChevronRight } from "lucide-react";
 import { formatBR, parseYMD } from "@/lib/folga-rules";
 import { Button } from "@/components/ui/button";
 import { adminApi } from "@/lib/admin-api";
@@ -17,6 +17,7 @@ export default function AdminDashboard() {
     trocasPendentes: 0,
   });
   const [proximasFolgas, setProximasFolgas] = useState<{ data: string; ocupacao: number; limite: number; temAniversario?: boolean; status: string; percentual: number }[]>([]);
+  const [aniversariantes, setAniversariantes] = useState<{ id: string; nome: string; data_nascimento: string; idade: number }[]>([]);
   const [busySorteio, setBusySorteio] = useState(false);
   const [alertas, setAlertas] = useState<{ tipo: string; mensagem: string; data?: string }[]>([]);
 
@@ -34,7 +35,8 @@ export default function AdminDashboard() {
       trocasP, 
       configRes, 
       priosRes,
-      folgasDataRes
+      folgasDataRes,
+      profilesRes
     ] = await Promise.all([
       supabase.from("profiles").select("*", { count: "exact", head: true }).eq("ativo", true),
       supabase.from("folgas").select("*", { count: "exact", head: true }).gte("data", start).lte("data", end),
@@ -44,6 +46,7 @@ export default function AdminDashboard() {
       supabase.from("dia_config").select("data, limite_colaboradores").gte("data", start).lte("data", end),
       supabase.from("prioridade_aniversario").select("data").eq("status", "ativa").gte("data", start).lte("data", end),
       supabase.from("folgas").select("data").gte("data", start).lte("data", end),
+      supabase.from("profiles").select("id, nome, data_nascimento").eq("ativo", true),
     ]);
 
     setStats({
@@ -53,6 +56,23 @@ export default function AdminDashboard() {
       bloqueadas: blocC.count ?? 0,
       trocasPendentes: trocasP.count ?? 0,
     });
+
+    // Processar aniversariantes do mês
+    const currentMonth = now.getMonth() + 1;
+    const bdays = (profilesRes.data ?? [])
+      .filter(p => p.data_nascimento && new Date(p.data_nascimento + "T00:00:00").getMonth() + 1 === currentMonth)
+      .map(p => {
+        const bdate = new Date(p.data_nascimento + "T00:00:00");
+        return {
+          id: p.id,
+          nome: p.nome,
+          data_nascimento: p.data_nascimento,
+          idade: now.getFullYear() - bdate.getFullYear()
+        };
+      })
+      .sort((a, b) => new Date(a.data_nascimento).getDate() - new Date(b.data_nascimento).getDate());
+    
+    setAniversariantes(bdays);
 
     const { data: folgasData } = folgasDataRes;
     const counts = new Map<string, number>();
@@ -87,7 +107,6 @@ export default function AdminDashboard() {
     // Gerar alertas inteligentes
     const novosAlertas: any[] = [];
     
-    // Alertas de dias quase lotados (>70%)
     proximos.filter(p => p.status === 'quase_lotado').forEach(p => {
       novosAlertas.push({
         tipo: 'quase_lotado',
@@ -96,7 +115,6 @@ export default function AdminDashboard() {
       });
     });
 
-    // Alertas de dias lotados
     proximos.filter(p => p.status === 'lotado').forEach(p => {
       novosAlertas.push({
         tipo: 'lotado',
@@ -105,7 +123,6 @@ export default function AdminDashboard() {
       });
     });
 
-    // Alertas de aniversariantes
     proximos.filter(p => p.temAniversario).forEach(p => {
       novosAlertas.push({
         tipo: 'aniversario',
@@ -239,10 +256,10 @@ export default function AdminDashboard() {
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-slate-900">{formatBR(parseYMD(p.data))}</span>
                       {p.temAniversario && (
-  <span title="Aniversariante com prioridade">
-    <Cake className="size-4 text-amber-500" />
-  </span>
-)}
+                        <span title="Aniversariante com prioridade">
+                          <Cake className="size-4 text-amber-500" />
+                        </span>
+                      )}
                     </div>
                     <Badge className={getStatusColor(p.status)}>{getStatusLabel(p.status)}</Badge>
                   </div>
@@ -265,49 +282,36 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Resumo de Regras e Ações Rápidas */}
+        {/* Aniversariantes do Mês */}
         <Card className="shadow-sm border-border">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="size-4 text-primary" /> Resumo & Ações Rápidas
+              <Cake className="size-4 text-primary" /> Aniversariantes de {new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date())}
             </CardTitle>
+            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">{aniversariantes.length}</Badge>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3 text-sm text-muted-foreground">
-              <div className="flex gap-2 p-3 bg-blue-50 rounded-xl border border-blue-100">
-                <span className="size-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                <span>As folgas do mês seguinte são liberadas automaticamente todo <b>dia 15</b>.</span>
-              </div>
-              <div className="flex gap-2 p-3 bg-blue-50 rounded-xl border border-blue-100">
-                <span className="size-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                <span>O sistema bloqueia o 1º fim de semana após o dia 5 (pagamento).</span>
-              </div>
-              <div className="flex gap-2 p-3 bg-blue-50 rounded-xl border border-blue-100">
-                <span className="size-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                <span>Aniversariantes têm prioridade automática se a data cair no fim de semana.</span>
-              </div>
-              <div className="flex gap-2 p-3 bg-amber-50 rounded-xl border border-amber-100">
-                <span className="size-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
-                <span>Limites por dia configuráveis via <b>Calendário Geral → clicar no dia</b>.</span>
-              </div>
-            </div>
-            
-            <div className="pt-4 border-t border-border space-y-2">
-              <h4 className="font-semibold text-sm">Ações Rápidas</h4>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Button variant="outline" className="justify-start gap-2" onClick={() => window.location.href = '/admin/calendario'}>
-                  <Calendar className="size-4" /> Gerenciar Calendário
-                </Button>
-                <Button variant="outline" className="justify-start gap-2" onClick={() => window.location.href = '/admin/bloqueios'}>
-                  <Ban className="size-4" /> Configurar Bloqueios
-                </Button>
-                <Button variant="outline" className="justify-start gap-2" onClick={() => window.location.href = '/admin/solicitacoes'}>
-                  <ClipboardList className="size-4" /> Ver Solicitações ({stats.pendentes})
-                </Button>
-                <Button variant="outline" className="justify-start gap-2" onClick={() => window.location.href = '/admin/trocas'}>
-                  <ArrowLeftRight className="size-4" /> Ver Trocas ({stats.trocasPendentes})
-                </Button>
-              </div>
+          <CardContent>
+            <div className="space-y-3">
+              {aniversariantes.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground text-sm">Nenhum aniversariante este mês.</div>
+              ) : (
+                aniversariantes.map((a) => (
+                  <div key={a.id} className="flex items-center justify-between p-3 rounded-xl bg-amber-50/30 border border-amber-100/50">
+                    <div className="flex items-center gap-3">
+                      <div className="size-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 font-bold">
+                        {new Date(a.data_nascimento + "T00:00:00").getDate()}
+                      </div>
+                      <div>
+                        <div className="font-semibold text-slate-900">{a.nome}</div>
+                        <div className="text-xs text-muted-foreground">Completa {a.idade} anos</div>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="icon" className="text-amber-600 hover:bg-amber-100" onClick={() => window.location.href = '/admin/calendario'}>
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  </div>
+                ))
+              )}
             </div>
           </CardContent>
         </Card>

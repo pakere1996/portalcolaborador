@@ -42,6 +42,7 @@ export type DayInfo =
       status: DateStatusKind;
       occupants: DayOccupant[];
       limit: number;
+      occupancy: number;
       birthdayUser?: { userId: string; userName?: string };
       label?: string;
       tooltip?: string;
@@ -115,7 +116,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         iso,
         status: statusInfo.status,
         occupants: occupantsByDate?.get(iso) || [],
-        limit: dayLimits.get(iso) || 1,
+        limit: statusInfo.limit || 1,
+        occupancy: statusInfo.occupancy || 0,
         label: statusInfo.label,
         tooltip: statusInfo.reason,
         birthdayUser: bdayMap.get(iso),
@@ -222,22 +224,36 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                 }
               >
                 <div className="flex justify-between items-start mb-3">
-                  <span
-                    className={cn(
-                      "text-sm font-bold tracking-tight",
-                      c.status === "available"
-                        ? "text-emerald-700"
-                        : (isSunday || isSaturday) && c.status !== "past"
-                        ? "text-slate-900"
-                        : "text-slate-400",
-                      c.status === "past" && "text-slate-200",
-                      c.status === "pending" && "text-violet-700",
-                      c.status === "mine" && "text-amber-700",
-                      c.status === "swapped" && "text-amber-700"
+                  <div className="flex flex-col">
+                    <span
+                      className={cn(
+                        "text-sm font-bold tracking-tight",
+                        c.status === "available"
+                          ? "text-emerald-700"
+                          : (isSunday || isSaturday) && c.status !== "past"
+                          ? "text-slate-900"
+                          : "text-slate-400",
+                        c.status === "past" && "text-slate-200",
+                        c.status === "pending" && "text-violet-700",
+                        c.status === "mine" && "text-amber-700",
+                        c.status === "swapped" && "text-amber-700"
+                      )}
+                    >
+                      {c.date.getDate()}
+                    </span>
+                    {isAdmin && (isSunday || isSaturday) && (
+                      <span className={cn(
+                        "text-[9px] font-black mt-0.5 px-1.5 py-0.5 rounded-md border",
+                        c.occupancy >= c.limit 
+                          ? "bg-rose-100 text-rose-700 border-rose-200" 
+                          : c.occupancy >= c.limit * 0.7 
+                          ? "bg-amber-100 text-amber-700 border-amber-200"
+                          : "bg-emerald-100 text-emerald-700 border-emerald-200"
+                      )}>
+                        {c.occupancy}/{c.limit}
+                      </span>
                     )}
-                  >
-                    {c.date.getDate()}
-                  </span>
+                  </div>
                   <div className="flex gap-1">
                     {c.status === "available" && (
                       <LockOpen className="size-3.5 text-emerald-500 drop-shadow-[0_0_3px_rgba(16,185,129,0.3)]" />

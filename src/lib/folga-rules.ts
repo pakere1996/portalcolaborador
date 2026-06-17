@@ -16,6 +16,8 @@ export interface DateStatus {
   status: DateStatusKind;
   reason?: string;
   label?: string;
+  occupancy?: number;
+  limit?: number;
 }
 
 export function ymd(d: Date): string {
@@ -171,13 +173,15 @@ export function calculateDateStatus(params: {
   const totalOccupied = monthlyCount + fixedCount;
 
   if (totalOccupied >= limit) {
-    return { status: "taken", label: "Lotado", reason: "Limite de folgas atingido" };
+    return { status: "taken", label: "Lotado", reason: "Limite de folgas atingido", occupancy: totalOccupied, limit };
   }
 
   // 9. Disponível ou Dia de Semana Comum
   return { 
     status: isWknd ? "available" : "weekday",
-    reason: isWknd ? "Disponível para seleção" : undefined
+    reason: isWknd ? "Disponível para seleção" : undefined,
+    occupancy: totalOccupied,
+    limit
   };
 }
 
