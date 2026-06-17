@@ -102,8 +102,8 @@ const adminModules = [
 
 const blankEditForm = {
   nome: "", cpf: "", matricula: "", email: "", whatsapp: "",
-  cargo: "", unidade_id: "", folga_fixa_semana: "",
-  data_nascimento: "", data_admissao: "", perfil_acesso: "colaborador",
+  cargo: "", unidadeId: "", folgaFixa: "none",
+  dataNascimento: "", dataAdmissao: "", perfil_acesso: "colaborador",
   ativo: true,
   senha: "",
 };
