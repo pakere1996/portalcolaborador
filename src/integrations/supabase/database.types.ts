@@ -414,6 +414,10 @@ export interface Database {
           tipo: string
           descricao: string | null
           ativo: boolean
+          mes: number | null
+          dia: number | null
+          dia_semana: number | null
+          ordinal: number | null
           created_at: string | null
         }
         Insert: {
@@ -421,6 +425,10 @@ export interface Database {
           tipo: string
           descricao?: string | null
           ativo?: boolean
+          mes?: number | null
+          dia?: number | null
+          dia_semana?: number | null
+          ordinal?: number | null
           created_at?: string | null
         }
         Update: {
@@ -428,6 +436,10 @@ export interface Database {
           tipo?: string
           descricao?: string | null
           ativo?: boolean
+          mes?: number | null
+          dia?: number | null
+          dia_semana?: number | null
+          ordinal?: number | null
           created_at?: string | null
         }
       }
