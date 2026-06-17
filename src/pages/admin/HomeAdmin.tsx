@@ -190,7 +190,7 @@ export default function AdminHomeAdminPage() {
         cargo: newForm.cargo,
         dataAdmissao: newForm.dataAdmissao,
         dataNascimento: newForm.dataNascimento,
-        folgaFixaSemana: newForm.folga_fixa_semana === "" ? null : Number(newForm.folga_fixa_semana),
+        folgaFixaSemana: newForm.folgaFixa === "" ? null : Number(newForm.folgaFixa),
         role: newForm.perfil_acesso,
       });
 
