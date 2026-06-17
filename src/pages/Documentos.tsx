@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Download, Eye, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { Documento, getDocumentTypeLabel } from "@/lib/documentos";
+import { Documento } from "@/integrations/supabase/types";
 import { Tables } from "@/integrations/supabase/types";
 
 
