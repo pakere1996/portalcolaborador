@@ -121,18 +121,21 @@ export interface Database {
         Row: {
           id: string
           nome: string
+          descricao: string | null
           ativo: boolean
           created_at: string | null
         }
         Insert: {
           id?: string
           nome: string
+          descricao?: string | null
           ativo?: boolean
           created_at?: string | null
         }
         Update: {
           id?: string
           nome?: string
+          descricao?: string | null
           ativo?: boolean
           created_at?: string | null
         }
