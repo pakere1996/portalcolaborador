@@ -226,7 +226,7 @@ export default function AdminHomeAdminPage() {
       email: p.email_contato ?? "",
       whatsapp: p.whatsapp ?? "",
       cargo: p.cargo,
-      unidadeId: p.unidade_id ?? "",
+      unidadeId: p.unidadeId ?? "",
       folgaFixa: p.folga_fixa_semana?.toString() ?? "none",
       dataNascimento: p.dataNascimento ?? "",
       dataAdmissao: p.dataAdmissao ?? "",
