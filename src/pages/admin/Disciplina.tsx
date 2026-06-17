@@ -61,7 +61,7 @@ export default function AdminDisciplinaPage() {
     ] = await Promise.all([
       supabase.from("profiles").select("id, nome, unidade_id").eq("ativo", true).order("nome"),
       supabase.from("unidades").select("id, nome").order("nome"),
-      supabase.from("ocorrencias_disciplinares")
+      supabase.from("registros_disciplinares")
         .select(`
           *,
           colaborador:colaborador_id(nome),
