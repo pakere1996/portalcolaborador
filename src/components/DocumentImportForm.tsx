@@ -142,7 +142,7 @@ useEffect(() => {
         const nome = nameMatch ? nameMatch[1].trim().replace(/\s+/g, " ") : null;
         const cpf = extractCPF(text);
         
-        const match = findBestProfileMatch(nome, cpf, profiles);
+        const match = findBestProfileMatch(nome, cpf, profiles as any);
         console.log("================================");
 console.log("NOME PDF:", nome);
 console.log("CPF PDF:", cpf);
