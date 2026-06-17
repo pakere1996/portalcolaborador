@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
-import { ensureDocumentosSchema } from "@/lib/ensure-documentos-schema";
 import {
   disciplinarStoragePath,
   formatDisciplinarTipo,
@@ -95,7 +94,7 @@ export default function AdminDocumentosDisciplinarPage() {
       { data: units, error: unitError }
     ] = await Promise.all([
       supabase.from("profiles").select("id, nome, unidade_id").eq("ativo", true).order("nome"),
-      supabase.from("registros_disciplinares" as any).select("*").order("created_at", { ascending: false }),
+      supabase.from("registros_disciplinares").select("*").order("created_at", { ascending: false }),
       supabase.from("unidades").select("*").order("nome"),
     ]);
 
@@ -110,7 +109,6 @@ export default function AdminDocumentosDisciplinarPage() {
   };
 
   useEffect(() => {
-    ensureDocumentosSchema().catch((error) => toast.error("Erro ao preparar documentos", { description: error.message }));
     load();
   }, []);
 
@@ -122,7 +120,7 @@ export default function AdminDocumentosDisciplinarPage() {
       }
 
       const { data: existing } = await supabase
-        .from("registros_disciplinares" as any)
+        .from("registros_disciplinares")
         .select("*")
         .eq("colaborador_id", colaboradorId)
         .eq("tipo", tipo)
@@ -177,7 +175,7 @@ export default function AdminDocumentosDisciplinarPage() {
 
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await supabase.from("registros_disciplinares" as any).insert({
+      const { error: insertError } = await supabase.from("registros_disciplinares").insert({
         user_id: payload.colaboradorId,
         colaborador_id: payload.colaboradorId,
         tipo: payload.tipo,
@@ -220,7 +218,7 @@ export default function AdminDocumentosDisciplinarPage() {
   };
 
   const remove = async (id: string) => {
-    const { error } = await supabase.from("registros_disciplinares" as any).delete().eq("id", id);
+    const { error } = await supabase.from("registros_disciplinares").delete().eq("id", id);
     if (error) return toast.error(error.message);
     toast.success("Registro removido");
     load();

@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
-import { ensureDocumentosSchema } from "@/lib/ensure-documentos-schema";
 import {
   atestadoStoragePath,
   getFileKind,
@@ -105,7 +104,7 @@ export default function AdminDocumentosAtestadosPage() {
       { data: units, error: unitError }
     ] = await Promise.all([
       supabase.from("profiles").select("id, nome, unidade_id").eq("ativo", true).order("nome"),
-      supabase.from("atestados" as any).select("*").order("created_at", { ascending: false }),
+      supabase.from("atestados").select("*").order("created_at", { ascending: false }),
       supabase.from("unidades").select("*").order("nome"),
     ]);
 
@@ -120,7 +119,6 @@ export default function AdminDocumentosAtestadosPage() {
   };
 
   useEffect(() => {
-    ensureDocumentosSchema().catch((error) => toast.error("Erro ao preparar documentos", { description: error.message }));
     load();
   }, []);
 
@@ -132,7 +130,7 @@ export default function AdminDocumentosAtestadosPage() {
       }
 
       const { data: existing } = await supabase
-        .from("atestados" as any)
+        .from("atestados")
         .select("*")
         .eq("colaborador_id", colaboradorId)
         .eq("data_atestado", data)
@@ -186,7 +184,7 @@ export default function AdminDocumentosAtestadosPage() {
 
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await supabase.from("atestados" as any).insert({
+      const { error: insertError } = await supabase.from("atestados").insert({
         user_id: payload.colaboradorId,
         colaborador_id: payload.colaboradorId,
         data_atestado: payload.data,
@@ -197,7 +195,6 @@ export default function AdminDocumentosAtestadosPage() {
         storage_path: storagePath,
         storage_type: kind,
         criado_por: user.id,
-        // Não há campo unidade_id na tabela atestados, mas o colaborador já está vinculado à unidade
       });
 
       if (insertError) throw insertError;
@@ -241,7 +238,7 @@ export default function AdminDocumentosAtestadosPage() {
 
     setBusy(true);
     try {
-      const { error } = await supabase.from("atestados" as any).update({
+      const { error } = await supabase.from("atestados").update({
         status,
         observacao_admin: obs || null,
         respondido_por: user.id,

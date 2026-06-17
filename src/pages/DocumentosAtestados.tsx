@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
-import { ensureDocumentosSchema } from "@/lib/ensure-documentos-schema";
 import { notifyAtestadoPendente } from "@/lib/notify-atestado";
 import {
   atestadoStoragePath,
@@ -68,7 +67,7 @@ export default function DocumentosAtestadosPage() {
     if (!user) return;
     setLoading(true);
     const { data: items, error } = await supabase
-      .from("atestados" as any)
+      .from("atestados")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
@@ -79,7 +78,6 @@ export default function DocumentosAtestadosPage() {
   };
 
   useEffect(() => {
-    ensureDocumentosSchema().catch((error) => toast.error("Erro ao preparar documentos", { description: error.message }));
     load();
   }, [user?.id]);
 
@@ -91,7 +89,7 @@ export default function DocumentosAtestadosPage() {
       }
 
       const { data: existing } = await supabase
-        .from("atestados" as any)
+        .from("atestados")
         .select("*")
         .eq("colaborador_id", user.id)
         .eq("data_atestado", data)
@@ -141,7 +139,7 @@ export default function DocumentosAtestadosPage() {
       if (uploadError) throw uploadError;
 
       const { data: inserted, error: insertError } = await supabase
-        .from("atestados" as any)
+        .from("atestados")
         .insert({
           user_id: user.id,
           colaborador_id: user.id,
