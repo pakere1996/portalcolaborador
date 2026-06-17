@@ -99,7 +99,7 @@ export default function AdminDisciplinaPage() {
     try {
       // 1. Inserir a ocorrência
       const { data: newOcorrencia, error: insertError } = await supabase
-        .from("ocorrencias_disciplinares")
+        .from("registros_disciplinares")
         .insert({
           colaborador_id: colaboradorId,
           unidade_id: unidadeId,
