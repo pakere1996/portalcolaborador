@@ -23,7 +23,7 @@ import { adminApi } from "@/lib/admin-api";
 
 type Profile = Tables<'profiles'> & { unidade_id: string | null };
 type Unidade = Tables<'unidades'>;
-type Ocorrencia = Tables<'ocorrencias_disciplinares'> & {
+type Ocorrencia = Tables<'registros_disciplinares'> & {
   colaborador: Pick<Profile, 'nome'> | null;
   unidade: Pick<Unidade, 'nome'> | null;
 };
