@@ -16,7 +16,7 @@ export default function AdminDashboard() {
     bloqueadas: 0,
     trocasPendentes: 0,
   });
-  const [proximasFolgas, setProximasFolgas] = useState<{ data: string; ocupacao: number; limite: number; temAniversario?: boolean }[]>([]);
+  const [proximasFolgas, setProximasFolgas] = useState<{ data: string; ocupacao: number; limite: number; temAniversario?: boolean; status: string; percentual: number }[]>([]);
   const [busySorteio, setBusySorteio] = useState(false);
   const [alertas, setAlertas] = useState<{ tipo: string; mensagem: string; data?: string }[]>([]);
 
