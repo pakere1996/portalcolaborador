@@ -453,18 +453,20 @@ export interface Database {
           created_at: string | null
         }
         Insert: {
-          id?: string
+          id: string
           data: string
-          motivo?: string | null
-          liberada?: boolean
-          created_at?: string | null
+          motivo: string | null
+          liberada: boolean
+          auto: boolean | null
+          created_at: string | null
         }
         Update: {
-          id?: string
-          data?: string
-          motivo?: string | null
-          liberada?: boolean
-          created_at?: string | null
+          id: string
+          data: string
+          motivo: string | null
+          liberada: boolean
+          auto: boolean | null
+          created_at: string | null
         }
       }
       prioridade_aniversario: {
