@@ -73,17 +73,18 @@ export function DocumentImportForm() {
   const [showNovoColab, setShowNovoColab] = useState(false);
   const { user } = useAuth();
   const [suggestedProfile, setSuggestedProfile] = useState<any>(null);
+  
   // Trava de segurança: Se selecionar um colaborador na lista, fecha o form de novo cadastro
-useEffect(() => {
-  if (manualProfileId) {
-    setShowNovoColab(false);
-  }
-}, [manualProfileId]);
+  useEffect(() => {
+    if (manualProfileId) {
+      setShowNovoColab(false);
+    }
+  }, [manualProfileId]);
 
-useEffect(() => {
-  setShowNovoColab(false);
-  setManualProfileId("");
-}, [currentPage]);
+  useEffect(() => {
+    setShowNovoColab(false);
+    setManualProfileId("");
+  }, [currentPage]);
 
   const documentType = window.location.pathname.includes("ponto") ? "ponto" : "contracheque";
 
@@ -144,12 +145,12 @@ useEffect(() => {
         
         const match = findBestProfileMatch(nome, cpf, profiles as any);
         console.log("================================");
-console.log("NOME PDF:", nome);
-console.log("CPF PDF:", cpf);
-console.log("MATCH:", match);
-console.log("PERFIL:", match?.profile?.nome);
-console.log("CPF PERFIL:", match?.profile?.cpf);
-console.log("================================");
+        console.log("NOME PDF:", nome);
+        console.log("CPF PDF:", cpf);
+        console.log("MATCH:", match);
+        console.log("PERFIL:", match?.profile?.nome);
+        console.log("CPF PERFIL:", match?.profile?.cpf);
+        console.log("================================");
         const perfilVinculado = match.profile;
 
         // =================================================================
@@ -222,7 +223,8 @@ console.log("================================");
           const todasAsDatas = text.match(/\d{2}\/\d{2}\/\d{4}/g) || [];
           if (todasAsDatas.length > 0) {
             const periodoInfo = extractPeriodo(text);
-            const anoPeriodo = periodoInfo?.ano ? parseInt(periodoInfo.ano) : null;
+            // 🛠️ CORREÇÃO DE TIPAGEM: Usando Number() para evitar conflito de tipo no TypeScript
+            const anoPeriodo = periodoInfo?.ano ? Number(periodoInfo.ano) : null;
             let dataCandidata = null;
 
             if (anoPeriodo) {
@@ -271,54 +273,54 @@ console.log("================================");
 
       setPageResults(results);
 
-// Vinculação automática dos matches perfeitos
-for (const result of results) {
-  if (
-    result.matchedProfile &&
-    result.confidence === 1 &&
-    result.mes &&
-    result.ano
-  ) {
-    await handleVinculoAutomatico(
-      result.matchedProfile.id,
-      result
-    );
-  }
-}
-
-// Atualiza visualmente os vinculados automáticos
-setPageResults(prev =>
-  prev.map(r =>
-    r.matchedProfile &&
-    r.confidence === 1
-      ? {
-          ...r,
-          vinculado: true
+      // Vinculação automática dos matches perfeitos
+      for (const result of results) {
+        if (
+          result.matchedProfile &&
+          result.confidence === 1 &&
+          result.mes &&
+          result.ano
+        ) {
+          await handleVinculoAutomatico(
+            result.matchedProfile.id,
+            result
+          );
         }
-      : r
-  )
-);
+      }
 
-const primeiroPendente = results.findIndex(
-  r =>
-    r.confidence < 1 &&
-    !r.vinculado &&
-    !r.ignorado
-);
+      // Atualiza visualmente os vinculados automáticos
+      setPageResults(prev =>
+        prev.map(r =>
+          r.matchedProfile &&
+          r.confidence === 1
+            ? {
+                ...r,
+                vinculado: true
+              }
+            : r
+        )
+      );
 
-if (primeiroPendente >= 0) {
-  setCurrentPage(primeiroPendente);
-} else {
-  setCurrentPage(0);
-}
+      const primeiroPendente = results.findIndex(
+        r =>
+          !r.vinculado &&
+          !r.ignorado &&
+          r.confidence < 1
+      );
 
-const qtdAuto = results.filter(
-  r => r.confidence === 1
-).length;
+      if (primeiroPendente >= 0) {
+        setCurrentPage(primeiroPendente);
+      } else {
+        setCurrentPage(0);
+      }
 
-toast.success(
-  `${pages.length} páginas processadas (${qtdAuto} vinculadas automaticamente)`
-);
+      const qtdAuto = results.filter(
+        r => r.confidence === 1
+      ).length;
+
+      toast.success(
+        `${pages.length} páginas processadas (${qtdAuto} vinculadas automaticamente)`
+      );
     } catch (err) {
       toast.error("Erro ao processar PDF", { description: (err as Error).message });
     } finally {
@@ -347,60 +349,60 @@ toast.success(
     }
   };
 
- const handleVinculoAutomatico = async (
-  profileId: string,
-  result: PageResult
-) => {
-  try {
-    if (!result.mes || !result.ano) return;
+  const handleVinculoAutomatico = async (
+    profileId: string,
+    result: PageResult
+  ) => {
+    try {
+      if (!result.mes || !result.ano) return;
 
-    const { count } = await supabase
-      .from("documentos")
-      .select("id", { count: "exact", head: true })
-      .eq("colaborador_id", profileId)
-      .eq("tipo", documentType)
-      .eq("mes", result.mes)
-      .eq("ano", result.ano);
+      const { count } = await supabase
+        .from("documentos")
+        .select("id", { count: "exact", head: true })
+        .eq("colaborador_id", profileId)
+        .eq("tipo", documentType)
+        .eq("mes", result.mes)
+        .eq("ano", result.ano);
 
-    if (count && count > 0) {
-      return;
+      if (count && count > 0) {
+        return;
+      }
+
+      const storagePath =
+        `documentos/${documentType}/${profileId}/` +
+        `..._${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}.pdf`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("documentos")
+        .upload(storagePath, selectedFile!, {
+          contentType: "application/pdf",
+          upsert: false,
+          });
+
+      if (
+        uploadError &&
+        !uploadError.message.includes("already exists")
+      ) {
+        throw uploadError;
+      }
+
+      const { error: insertError } = await supabase
+        .from("documentos")
+        .insert({
+          colaborador_id: profileId,
+          tipo: documentType,
+          mes: result.mes,
+          ano: result.ano,
+          storage_path: storagePath,
+          status: "disponivel",
+          nome_pdf: selectedFile!.name,
+        });
+
+      if (insertError) throw insertError;
+    } catch (err) {
+      console.error("Erro no vínculo automático:", err);
     }
-
-    const storagePath =
-      `documentos/${documentType}/${profileId}/` +
-      `${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}.pdf`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("documentos")
-      .upload(storagePath, selectedFile!, {
-        contentType: "application/pdf",
-        upsert: false,
-      });
-
-    if (
-      uploadError &&
-      !uploadError.message.includes("already exists")
-    ) {
-      throw uploadError;
-    }
-
-    const { error: insertError } = await supabase
-      .from("documentos")
-      .insert({
-        colaborador_id: profileId,
-        tipo: documentType,
-        mes: result.mes,
-        ano: result.ano,
-        storage_path: storagePath,
-        status: "disponivel",
-        nome_pdf: selectedFile!.name,
-      });
-
-    if (insertError) throw insertError;
-  } catch (err) {
-    console.error("Erro no vínculo automático:", err);
-  }
-};
+  };
 
   const handleVincular = async (profileId: string) => {
     const result = pageResults[currentPage];
@@ -440,24 +442,24 @@ toast.success(
       if (insertError) throw insertError;
 
       setPageResults(prev =>
-  prev.map((r, i) =>
-    i === currentPage
-      ? {
-          ...r,
-          vinculado: true,
-          matchedProfile: profiles.find(p => p.id === profileId) ?? r.matchedProfile
-        }
-      : r
-  )
-);
+        prev.map((r, i) =>
+          i === currentPage
+            ? {
+                ...r,
+                vinculado: true,
+                matchedProfile: profiles.find(p => p.id === profileId) ?? r.matchedProfile
+              }
+            : r
+        )
+      );
 
-// limpa estados pendentes
-setSuggestedProfile(null);
-setNovoColabForm({ nome: "", cpf: "", cargo: "", unidadeId: "", senha: "", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", whatsapp: "", perfil_acesso: "colaborador", matricula: "" });
-setShowNovoColab(false);
+      // limpa estados pendentes
+      setSuggestedProfile(null);
+      setNovoColabForm({ nome: "", cpf: "", cargo: "", unidadeId: "", senha: "", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", whatsapp: "", perfil_acesso: "colaborador", matricula: "" });
+      setShowNovoColab(false);
 
-toast.success("Documento vinculado com sucesso!");
-setManualProfileId("");
+      toast.success("Documento vinculado com sucesso!");
+      setManualProfileId("");
 
       const next = pageResults.findIndex((r, i) => i > currentPage && !r.vinculado && !r.ignorado);
       if (next !== -1) setCurrentPage(next);
@@ -616,36 +618,36 @@ setManualProfileId("");
               )}
 
               <div className="space-y-2">
-  <Label className="text-xs">Vincular manualmente a outro colaborador:</Label>
-  <div className="flex gap-2">
-    <Select 
-      value={manualProfileId} 
-      onValueChange={(value) => {
-        setManualProfileId(value);
-        setShowNovoColab(false); // <--- Isso força o fechamento do form
-      }}
-    >
-      <SelectTrigger className="flex-1">
-        <SelectValue placeholder="Selecione o colaborador..." />
-      </SelectTrigger>
-      <SelectContent>
-        {profiles.map(p => (
-          <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-    <Button 
-      variant="outline" 
-      onClick={() => {
-        setShowNovoColab(false); // <--- Isso força o fechamento do form
-        if (manualProfileId) handleVincular(manualProfileId);
-      }} 
-      disabled={!manualProfileId || isUploading}
-    >
-      Vincular
-    </Button>
-  </div>
-</div>
+                <Label className="text-xs">Vincular manualmente a outro colaborador:</Label>
+                <div className="flex gap-2">
+                  <Select 
+                    value={manualProfileId} 
+                    onValueChange={(value) => {
+                      setManualProfileId(value);
+                      setShowNovoColab(false);
+                    }}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Selecione o colaborador..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {profiles.map(p => (
+                        <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setShowNovoColab(false);
+                      if (manualProfileId) handleVincular(manualProfileId);
+                    }} 
+                    disabled={!manualProfileId || isUploading}
+                  >
+                    Vincular
+                  </Button>
+                </div>
+              </div>
 
               {(showNovoColab && !manualProfileId) ? (
                 <div className="space-y-3 p-4 bg-white rounded-xl border border-border">
@@ -741,15 +743,25 @@ setManualProfileId("");
                         <SelectTrigger><SelectValue placeholder="Nenhuma" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Nenhuma</SelectItem>
-                          <SelectItem value="0">Domingo</SelectItem>
                           <SelectItem value="1">Segunda-feira</SelectItem>
                           <SelectItem value="2">Terça-feira</SelectItem>
                           <SelectItem value="3">Quarta-feira</SelectItem>
                           <SelectItem value="4">Quinta-feira</SelectItem>
                           <SelectItem value="5">Sexta-feira</SelectItem>
                           <SelectItem value="6">Sábado</SelectItem>
+                          <SelectItem value="0">Domingo</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs">WhatsApp (Opcional)</Label>
+                      <Input placeholder="(00) 00000-0000" value={novoColabForm.whatsapp} onChange={e => setNovoColabForm(f => ({ ...f, whatsapp: e.target.value }))} />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs">Senha de Acesso</Label>
+                      <Input type="password" placeholder="Padrão: 6 últimos dígitos do CPF" value={novoColabForm.senha} onChange={e => setNovoColabForm(f => ({ ...f, senha: e.target.value }))} />
                     </div>
 
                     <div className="space-y-1">
@@ -758,105 +770,41 @@ setManualProfileId("");
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="colaborador">Colaborador</SelectItem>
-                          <SelectItem value="admin">Administrador</SelectItem>
+                          <SelectItem value="gestor">Gestor / Admin</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs">WhatsApp</Label>
-                      <Input placeholder="(00) 00000-0000" value={novoColabForm.whatsapp} onChange={e => setNovoColabForm(f => ({ ...f, whatsapp: e.target.value }))} />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs font-medium flex items-center justify-between">
-                        <span>Senha Inicial</span>
-                        {novoColabForm.cpf && (
-                          <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                            Sugerida: {novoColabForm.cpf.replace(/\D/g, "").slice(-6)}
-                          </span>
-                        )}
-                      </Label>
-                      <Input 
-                        type="text" 
-                        placeholder="Padrão: 6 últimos dígitos CPF" 
-                        value={novoColabForm.senha} 
-                        onChange={e => setNovoColabForm(f => ({ ...f, senha: e.target.value }))} 
-                        className="font-mono bg-muted/30"
-                      />
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        Informe ao colaborador que a senha padrão são os <strong>6 últimos dígitos do CPF</strong> dele.
-                      </p>
-                    </div>
-
                   </div>
-                  <div className="flex gap-2 pt-2">
-                    <Button className="flex-1" onClick={handleCriarColab} disabled={isUploading}>
-                      {isUploading ? <Loader2 className="size-4 mr-2 animate-spin" /> : <UserPlus className="size-4 mr-2" />} Criar Colaborador
+
+                  <div className="flex justify-end gap-2 pt-2 border-t">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setShowNovoColab(false)}>
+                      Cancelar
                     </Button>
-                    <Button variant="outline" onClick={() => setShowNovoColab(false)}>Cancelar</Button>
+                    <Button type="button" size="sm" onClick={handleCriarColab} disabled={isUploading}>
+                      {isUploading && <Loader2 className="size-4 mr-2 animate-spin" />}
+                      Salvar e Estruturar Cadastro
+                    </Button>
                   </div>
                 </div>
               ) : (
                 <Button 
-  variant="outline" 
-  className="w-full" 
-  onClick={() => { 
-    // ADICIONE ESTA LINHA AQUI PARA GARANTIR A LIMPEZA:
-    setManualProfileId(""); 
-
-    let dataCorreta = "";
-    if (result.dataAdmissao && result.dataAdmissao.includes("/")) {
-      const partes = result.dataAdmissao.split("/");
-      if (partes.length === 3) {
-        dataCorreta = `${partes[2]}-${partes[1]}-${partes[0]}`;
-      }
-    } else {
-      dataCorreta = result.dataAdmissao ?? "";
-    }
-
-    setShowNovoColab(true); 
-    setNovoColabForm({ 
-      nome: result.nome ?? "", 
-      cpf: result.cpf ?? "", 
-      cargo: result.cargo ?? "", 
-      unidadeId: result.unidadeId ?? "", 
-      senha: result.cpf ? result.cpf.replace(/\D/g, "").slice(-6) : "", 
-      folgaFixa: "none", 
-      dataAdmissao: dataCorreta, 
-      dataNascimento: "", 
-      whatsapp: "", 
-      perfil_acesso: "colaborador",
-      matricula: "" 
-    });
-  }}
->
-  <UserPlus className="size-4 mr-2" /> Cadastrar Novo Colaborador
-</Button>
+                  type="button" 
+                  variant="outline" 
+                  className="w-full border-dashed" 
+                  onClick={() => setShowNovoColab(true)}
+                >
+                  <UserPlus className="size-4 mr-2" /> Cadastrar Novo Colaborador na Base
+                </Button>
               )}
 
-              <Button variant="ghost" className="w-full text-muted-foreground" onClick={handleIgnorar}>
-                <XCircle className="size-4 mr-2" /> Ignorar esta página
-              </Button>
+              <div className="flex justify-between items-center pt-2 border-t">
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={handleIgnorar}>
+                  Ignorar esta página
+                </Button>
+              </div>
             </div>
           )}
         </div>
-      )}
-
-      <div className="space-y-1">
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Todas as páginas</div>
-        {pageResults.map((r, i) => (
-          <button key={i} onClick={() => setCurrentPage(i)} className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors ${i === currentPage ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"}`}>
-            <span>Pág. {r.pageNumber} — {r.nome ?? "Nome não identificado"}</span>
-            <span>{r.vinculado ? "✅" : r.ignorado ? "⛔" : r.matchStatus === "automatico" ? "🟢" : r.matchStatus === "sugerido" ? "🟡" : "🔴"}</span>
-          </button>
-        ))}
-      </div>
-
-      {vinculados + ignorados === totalPages && (
-        <Button className="w-full" onClick={() => { setPageResults([]); setSelectedFile(null); setCurrentPage(0); }}>
-          Processar Novo Documento
-        </Button>
       )}
     </div>
   );
