@@ -217,19 +217,19 @@ export default function AdminHomeAdminPage() {
     }
   };
 
-  const openEdit = (p: any) => {
+    const openEdit = (p: any) => {
     setEditingProfile(p);
     setEditForm({
       nome: p.nome,
       cpf: formatCPF(p.cpf),
       matricula: p.matricula ?? "",
-      email: p.email ?? "",
+      email: p.email_contato ?? "",
       whatsapp: p.whatsapp ?? "",
       cargo: p.cargo,
-      unidade_id: p.unidade_id ?? "",
-      folga_fixa_semana: p.folga_fixa_semana?.toString() ?? "",
-      data_nascimento: p.data_nascimento ?? "",
-      data_admissao: p.data_admissao ?? "",
+      unidadeId: p.unidade_id ?? "",
+      folgaFixa: p.folga_fixa_semana?.toString() ?? "none",
+      dataNascimento: p.data_nascimento ?? "",
+      dataAdmissao: p.data_admissao ?? "",
       perfil_acesso: p.role ?? "colaborador",
       ativo: p.ativo,
       senha: "",
