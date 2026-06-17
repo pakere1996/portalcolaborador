@@ -22,7 +22,11 @@ import { Badge } from "@/components/ui/badge";
 import { Tables } from "@/integrations/supabase/types";
 
 type Unidade = Tables<'unidades'>;
-type Profile = Tables<'profiles'>;
+
+// Ajuste na tipagem para corrigir os erros TS2339 do build da Vercel
+type Profile = Tables<'profiles'> & {
+  unidade_id?: string | null;
+};
 
 export default function AdminCalendar() {
   const { user } = useAuth();
@@ -38,7 +42,7 @@ export default function AdminCalendar() {
   const [limites, setLimites] = useState<any[]>([]);
   const [pendentes, setPendentes] = useState<any[]>([]);
   
-  const [filterUnidade, setFilterUnidade] = useState("all"); // Novo filtro de unidade
+  const [filterUnidade, setFilterUnidade] = useState("all"); 
   const [filterUser, setFilterUser] = useState("all");
   const [filterType, setFilterType] = useState("all");
 
@@ -111,7 +115,7 @@ export default function AdminCalendar() {
 
     // 2. Folgas Mensais (FDS)
     folgas.forEach(f => {
-      if (!validUserIds.has(f.user_id)) return; // Filtra por unidade
+      if (!validUserIds.has(f.user_id)) return; 
       if (filterUser !== "all" && f.user_id !== filterUser) return;
       if (filterType !== "all" && filterType !== "monthly") return;
       
@@ -128,7 +132,7 @@ export default function AdminCalendar() {
 
     // 3. Solicitações Pendentes
     pendentes.forEach(p => {
-      if (!validUserIds.has(p.user_id)) return; // Filtra por unidade
+      if (!validUserIds.has(p.user_id)) return; 
       if (filterUser !== "all" && p.user_id !== filterUser) return;
       if (filterType !== "all" && filterType !== "pending") return;
       
@@ -189,7 +193,7 @@ export default function AdminCalendar() {
     
     setSavingLimit(false);
     if (error) return toast.error(error.message);
-    toast.success("Limite atualizado");
+    toast.success("Limite updated");
     load();
   };
 
@@ -306,7 +310,7 @@ export default function AdminCalendar() {
         dayLimits={dayLimits}
         myUserId={user?.id ?? null}
         allFolgas={folgas}
-        allProfiles={filteredProfiles} // Passa apenas os perfis filtrados
+        allProfiles={filteredProfiles} 
         pendingRequests={pendentes}
         isAdmin={true}
         onPrev={goPrev} onNext={goNext}
