@@ -40,5 +40,5 @@ create policy "Admins can insert imports"
   );
 
 -- Create index for faster queries
-create index if not exists idx_documentos_importacao_data_importacao desc on documentos_importacao(data_importacao);
+create index if not exists idx_documentos_importacao_data_importacao on documentos_importacao(data_importacao desc);
 create index if not exists idx_documentos_importacao_status on documentos_importacao(status);
