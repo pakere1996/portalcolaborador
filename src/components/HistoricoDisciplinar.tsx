@@ -5,13 +5,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
-import { Loader2, FileText, Download, ShieldAlert } from "lucide-react";
+import { Loader2, FileText, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatBR } from "@/lib/folga-rules";
 
+// Estendendo a tipagem para garantir compatibilidade com colunas customizadas ou omitidas no esquema
 type Ocorrencia = Tables<'registros_disciplinares'> & {
   responsavel: Pick<Tables<'profiles'>, 'nome'> | null;
+  data_ocorrencia?: string | null;
+  pdf_storage_path?: string | null;
+  storage_path?: string | null;
+  motivo?: string | null;
+  descricao_detalhada?: string | null;
+  tipo?: string | null;
 };
 
 const TIPOS_DISCIPLINA: Record<string, string> = {
@@ -87,41 +94,47 @@ export default function HistoricoDisciplinar() {
           <p>Nenhuma ocorrência disciplinar registrada no seu histórico.</p>
         </div>
       ) : (
-        ocorrencias.map((r) => (
-          <div key={r.id} className="rounded-xl border bg-card p-4 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="font-semibold text-lg">{TIPOS_DISCIPLINA[r.tipo] || r.tipo}</div>
-                <div className="text-sm text-muted-foreground">
-                  Registrado em {formatBR(new Date(r.data_ocorrencia + "T00:00:00"))}
+        ocorrencias.map((r) => {
+          // Garante a leitura do caminho do PDF independente se a coluna for storage_path ou pdf_storage_path
+          const documentoPath = r.storage_path || r.pdf_storage_path;
+          const tipoOcorrencia = r.tipo ?? "outros";
+
+          return (
+            <div key={r.id} className="rounded-xl border bg-card p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-lg">{TIPOS_DISCIPLINA[tipoOcorrencia] || tipoOcorrencia}</div>
+                  <div className="text-sm text-muted-foreground">
+                    Registrado em {r.data_ocorrencia ? formatBR(new Date(r.data_ocorrencia + "T00:00:00")) : "Data não informada"}
+                  </div>
+                </div>
+                <div className="flex gap-2 items-center">
+                  {documentoPath ? (
+                    <Button variant="outline" size="sm" onClick={() => downloadPdf(documentoPath)}>
+                      <FileText className="size-4 mr-1" /> Baixar PDF
+                    </Button>
+                  ) : (
+                    <Badge variant="destructive">Documento Pendente</Badge>
+                  )}
                 </div>
               </div>
-              <div className="flex gap-2 items-center">
-                {r.pdf_storage_path ? (
-                  <Button variant="outline" size="sm" onClick={() => downloadPdf(r.pdf_storage_path!)}>
-                    <FileText className="size-4 mr-1" /> Baixar PDF
-                  </Button>
-                ) : (
-                  <Badge variant="destructive">Documento Pendente</Badge>
-                )}
-              </div>
-            </div>
 
-            <div className="text-sm">
-              <span className="font-semibold">Motivo:</span> {r.motivo}
-            </div>
-            
-            {r.descricao_detalhada && (
-              <div className="rounded-xl bg-muted/40 p-3 text-sm">
-                <span className="font-semibold">Detalhes:</span> {r.descricao_detalhada}
+              <div className="text-sm">
+                <span className="font-semibold">Motivo:</span> {r.motivo ?? "Não informado"}
               </div>
-            )}
-            
-            <div className="text-xs text-muted-foreground pt-2 border-t mt-3">
-              Registrado por: {r.responsavel?.nome || 'Admin'}
+              
+              {r.descricao_detalhada && (
+                <div className="rounded-xl bg-muted/40 p-3 text-sm">
+                  <span className="font-semibold">Detalhes:</span> {r.descricao_detalhada}
+                </div>
+              )}
+              
+              <div className="text-xs text-muted-foreground pt-2 border-t mt-3">
+                Registrado por: {r.responsavel?.nome || 'Admin'}
+              </div>
             </div>
-          </div>
-        ))
+          );
+        })
       )}
     </div>
   );
