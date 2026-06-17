@@ -251,7 +251,7 @@ export default function AdminHomeAdminPage() {
         email_contato: editForm.email.trim() || null,
         whatsapp: editForm.whatsapp.trim() || null,
         cargo: editForm.cargo,
-        unidade_id: editForm.unidadeId === "" ? null : editForm.unidadeId,
+        unidadeId: editForm.unidadeId === "" ? null : editForm.unidadeId,
         folga_fixa_semana: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa),
         dataNascimento: editForm.dataNascimento || null,
         dataAdmissao: editForm.dataAdmissao || null,
