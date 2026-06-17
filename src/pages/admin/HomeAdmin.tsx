@@ -168,7 +168,7 @@ export default function AdminHomeAdminPage() {
 
   const filteredProfiles = profiles.filter(p => {
     const matchesSearch = p.nome.toLowerCase().includes(search.toLowerCase()) || p.cpf.includes(search.replace(/\D/g, ""));
-    const matchesUnidade = filtroUnidade === "all" || p.unidade_id === filtroUnidade;
+    const matchesUnidade = filtroUnidade === "all" || p.unidadeId === filtroUnidade;
     const matchesStatus = filtroStatus === "all" || (filtroStatus === "ativo" ? p.ativo : !p.ativo);
     const matchesCargo = filtroCargo === "all" || p.cargo === filtroCargo;
     return matchesSearch && matchesUnidade && matchesStatus && matchesCargo;
