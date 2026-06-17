@@ -9,24 +9,31 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Filter, User, Trash2, Plus, Settings2, Save, Lock, Info, Unlock, AlertTriangle, ChevronRight, Building } from "lucide-react";
+import { Calendar as CalIcon, Filter, User, Trash2, Plus, Settings2, Save, Lock, Info, Unlock, AlertTriangle, ChevronRight, Building, Loader2 } from "lucide-react";
 import { dayType, formatBR, monthKey, parseYMD, ymd, autoBlockedDatesForMonth } from "@/lib/folga-rules";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Tables } from "@/integrations/supabase/types";
+import { adminApi } from "@/lib/admin-api";
 
 type Unidade = Tables<'unidades'>;
-
-// Ajuste na tipagem para corrigir os erros TS2339 do build da Vercel
-type Profile = Tables<'profiles'> & {
-  unidade_id?: string | null;
-};
+type Profile = Tables<'profiles'> & { unidade_id?: string | null };
 
 export default function AdminCalendar() {
   const { user } = useAuth();
@@ -50,6 +57,16 @@ export default function AdminCalendar() {
   const [assignUser, setAssignUser] = useState<string>("");
   const [editLimit, setEditLimit] = useState<number>(1);
   const [savingLimit, setSavingLimit] = useState(false);
+  const [busyAssign, setBusyAssign] = useState(false);
+
+  // Estado para o AlertDialog de confirmação
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    colaboradorId: string;
+    data: string;
+    tipo: string;
+    mes: string;
+  } | null>(null);
 
   const load = async () => {
     const start = `${year}-${String(month0 + 1).padStart(2, "0")}-01`;
@@ -99,26 +116,20 @@ export default function AdminCalendar() {
     for (const d of days) {
       const iso = ymd(d);
       const wd = d.getDay();
-      
-      // 1. Folgas Fixas (Semanal)
       const fixedOnes = filteredProfiles.filter(p => p.folga_fixa_semana === wd);
-      
       fixedOnes.forEach(p => {
         if (filterUser !== "all" && p.id !== filterUser) return;
         if (filterType !== "all" && filterType !== "fixed") return;
-        
         const arr = m.get(iso) ?? [];
         arr.push({ userId: p.id, userName: p.nome, type: "fixed", origin: "Folga Semanal" });
         m.set(iso, arr);
       });
     }
 
-    // 2. Folgas Mensais (FDS)
     folgas.forEach(f => {
       if (!validUserIds.has(f.user_id)) return; 
       if (filterUser !== "all" && f.user_id !== filterUser) return;
       if (filterType !== "all" && filterType !== "monthly") return;
-      
       const iso = f.data;
       const arr = m.get(iso) ?? [];
       arr.push({ 
@@ -130,12 +141,10 @@ export default function AdminCalendar() {
       m.set(iso, arr);
     });
 
-    // 3. Solicitações Pendentes
     pendentes.forEach(p => {
       if (!validUserIds.has(p.user_id)) return; 
       if (filterUser !== "all" && p.user_id !== filterUser) return;
       if (filterType !== "all" && filterType !== "pending") return;
-      
       const iso = p.data;
       const arr = m.get(iso) ?? [];
       arr.push({ 
@@ -169,17 +178,42 @@ export default function AdminCalendar() {
     setEditLimit(dayLimits.get(iso) ?? 1);
   };
 
-  const assignFolga = async (iso: string) => {
+  const handleAssignFolga = async (iso: string, force = false) => {
     if (!assignUser) return toast.error("Escolha um funcionário");
     const d = parseYMD(iso);
-    const tipo = dayType(d);
-    if (!tipo) return toast.error("Apenas sábado ou domingo");
-    const { error } = await supabase.from("folgas").insert({
-      user_id: assignUser, data: iso, mes: monthKey(d), tipo, criado_por: user?.id,
-    });
-    if (error) return toast.error(error.message);
-    toast.success("Folga atribuída");
-    setDlg(null); load();
+    const tipo = dayType(d) || "outro";
+    const mes = monthKey(d);
+
+    setBusyAssign(true);
+    try {
+      const result = await adminApi.assignFolga({
+        colaborador_id: assignUser,
+        data: iso,
+        mes_referencia: mes,
+        tipo: tipo,
+        criado_por: user?.id,
+        force: force
+      });
+
+      if (result.needs_confirmation) {
+        setConfirmDialog({
+          open: true,
+          colaboradorId: assignUser,
+          data: iso,
+          tipo: tipo,
+          mes: mes
+        });
+        return;
+      }
+
+      toast.success("Folga atribuída com sucesso!");
+      setDlg(null);
+      load();
+    } catch (e) {
+      toast.error("Erro ao atribuir folga", { description: (e as Error).message });
+    } finally {
+      setBusyAssign(false);
+    }
   };
 
   const saveDayLimit = async () => {
@@ -193,7 +227,7 @@ export default function AdminCalendar() {
     
     setSavingLimit(false);
     if (error) return toast.error(error.message);
-    toast.success("Limite updated");
+    toast.success("Limite atualizado");
     load();
   };
 
@@ -233,10 +267,8 @@ export default function AdminCalendar() {
     if (!dlg) return null;
     const m = manual.find(x => x.data === dlg.iso && !x.liberada);
     if (m) return { motivo: m.motivo, auto: m.auto, created_at: m.created_at, id: m.id };
-    
     const auto = autoBlockedDatesForMonth(year, month0).find(b => b.date === dlg.iso);
     if (auto) return { motivo: auto.reason, auto: true, created_at: null, id: null };
-    
     return null;
   }, [dlg, manual, year, month0]);
 
@@ -345,11 +377,6 @@ export default function AdminCalendar() {
                       <AlertTriangle className="size-5 text-rose-500 shrink-0 mt-0.5" />
                       {currentBlock.motivo}
                     </div>
-                    {currentBlock.created_at && (
-                      <div className="text-[10px] text-rose-400 font-bold uppercase tracking-widest">
-                        Criado em: {new Date(currentBlock.created_at).toLocaleDateString('pt-BR')}
-                      </div>
-                    )}
                   </div>
                   <Button 
                     variant="outline" 
@@ -367,9 +394,6 @@ export default function AdminCalendar() {
                     <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
                       <Settings2 className="size-3.5" /> Configuração do Dia
                     </h3>
-                    <div className="text-[10px] font-bold text-slate-400">
-                      Ocupação: {occupantsByDate.get(dlg.iso)?.filter(o => o.type === 'monthly').length ?? 0}/{dayLimits.get(dlg.iso) ?? 1}
-                    </div>
                   </div>
                   <div className="flex gap-3">
                     <div className="flex-1">
@@ -397,64 +421,32 @@ export default function AdminCalendar() {
               <div className="space-y-5">
                 <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Escala do Dia</h3>
                 <div className="grid gap-4">
-                  {occupantsByDate.get(dlg.iso)?.map((occ, idx) => {
-                    const isPending = occ.type === 'pending';
-                    
-                    const content = (
-                      <div className={cn(
-                        "group p-5 rounded-3xl border flex items-center justify-between transition-all",
-                        isPending 
-                          ? "bg-violet-50/50 border-violet-100 hover:bg-white hover:shadow-xl hover:scale-[1.02] cursor-pointer" 
-                          : "bg-slate-50/50 border-slate-100 hover:bg-white hover:shadow-xl hover:scale-[1.02]"
-                      )}>
-                        <div className="flex items-center gap-5">
-                          <div className={cn(
-                            "size-3 rounded-full shadow-sm",
-                            occ.type === 'fixed' ? "bg-blue-400" :
-                            occ.type === 'monthly' ? "bg-amber-400" :
-                            "bg-orange-400"
-                          )} />
-                          <div>
-                            <div className="font-black text-slate-900 text-lg tracking-tight">{occ.userName}</div>
-                            <div className={cn(
-                              "text-[11px] font-bold uppercase tracking-widest mt-0.5",
-                              isPending ? "text-violet-500" : "text-slate-400"
-                            )}>{occ.origin}</div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {isPending && <ChevronRight className="size-5 text-violet-300 group-hover:text-violet-500 transition-colors" />}
-                          {occ.type === 'monthly' && (
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="size-10 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-2xl opacity-0 group-hover:opacity-100 transition-all"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeFolga(dlg.iso, occ.userId);
-                              }}
-                            >
-                              <Trash2 className="size-5" />
-                            </Button>
-                          )}
+                  {occupantsByDate.get(dlg.iso)?.map((occ, idx) => (
+                    <div key={idx} className="group p-5 rounded-3xl border bg-slate-50/50 border-slate-100 hover:bg-white hover:shadow-xl hover:scale-[1.02] transition-all flex items-center justify-between">
+                      <div className="flex items-center gap-5">
+                        <div className={cn(
+                          "size-3 rounded-full shadow-sm",
+                          occ.type === 'fixed' ? "bg-blue-400" :
+                          occ.type === 'monthly' ? "bg-amber-400" :
+                          "bg-orange-400"
+                        )} />
+                        <div>
+                          <div className="font-black text-slate-900 text-lg tracking-tight">{occ.userName}</div>
+                          <div className="text-[11px] font-bold uppercase tracking-widest mt-0.5 text-slate-400">{occ.origin}</div>
                         </div>
                       </div>
-                    );
-
-                    if (isPending) {
-                      return (
-                        <button 
-                          key={idx} 
-                          className="text-left block w-full"
-                          onClick={() => navigate('/admin/solicitacoes')}
+                      {occ.type === 'monthly' && (
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="size-10 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-2xl opacity-0 group-hover:opacity-100 transition-all"
+                          onClick={() => removeFolga(dlg.iso, occ.userId)}
                         >
-                          {content}
-                        </button>
-                      );
-                    }
-
-                    return <div key={idx}>{content}</div>;
-                  })}
+                          <Trash2 className="size-5" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
                   {!occupantsByDate.get(dlg.iso)?.length && (
                     <div className="text-sm font-medium text-slate-400 text-center py-12 bg-slate-50/50 rounded-[2rem] border border-dashed border-slate-200">
                       Ninguém escalado para este dia.
@@ -474,8 +466,12 @@ export default function AdminCalendar() {
                       {filteredProfiles.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <Button className="h-14 px-8 rounded-2xl shadow-xl shadow-primary/20 font-black uppercase tracking-widest text-xs" onClick={() => assignFolga(dlg.iso)}>
-                    <Plus className="size-5 mr-2" /> Atribuir
+                  <Button 
+                    className="h-14 px-8 rounded-2xl shadow-xl shadow-primary/20 font-black uppercase tracking-widest text-xs" 
+                    onClick={() => handleAssignFolga(dlg.iso)}
+                    disabled={busyAssign}
+                  >
+                    {busyAssign ? <Loader2 className="size-5 animate-spin" /> : <><Plus className="size-5 mr-2" /> Atribuir</>}
                   </Button>
                 </div>
               </div>
@@ -487,6 +483,31 @@ export default function AdminCalendar() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* AlertDialog de Confirmação de Folga Duplicada */}
+      <AlertDialog open={!!confirmDialog} onOpenChange={(open) => !open && setConfirmDialog(null)}>
+        <AlertDialogContent className="rounded-[2rem]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="size-6" /> Atenção: Folga Duplicada
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-base">
+              Este colaborador já possui uma folga de final de semana marcada para este mês. 
+              <br /><br />
+              Deseja realmente confirmar esta <b>segunda folga</b> de final de semana?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl"
+              onClick={() => confirmDialog && handleAssignFolga(confirmDialog.data, true)}
+            >
+              Sim, confirmar folga
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

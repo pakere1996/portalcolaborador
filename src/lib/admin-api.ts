@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { assignFolgaManual } from "./server/folgas";
 
 /**
  * Helper para chamar Edge Functions do Supabase que substituem as antigas Server Functions.
@@ -24,9 +25,10 @@ export const adminApi = {
   approveUser: (targetUserId: string, approve: boolean) => 
     callAdminFunction("admin-users", { action: "approve", targetUserId, approve }),
   runSorteio: (ano?: number, mes?: number) => callAdminFunction("sorteio-folgas", { ano, mes }),
-  // Nova função para processar trocas anonimamente
   acceptSwap: (swapId: string) => callAdminFunction("trocas-handler", { action: "accept", swapId }),
-  
-  // Ponto 6: Geração de PDF Disciplinar
   generateDisciplinaryPdf: (ocorrenciaId: string) => callAdminFunction("generate-disciplinary-pdf", { id: ocorrenciaId }),
+  
+  // Nova função via TanStack Start Server Function
+  assignFolga: (payload: { colaborador_id: string; data: string; mes_referencia: string; tipo: string; criado_por?: string; force?: boolean }) => 
+    assignFolgaManual({ data: payload }),
 };

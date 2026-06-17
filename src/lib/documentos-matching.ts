@@ -14,9 +14,6 @@ export interface MatchResult {
   status: string;
 }
 
-/**
- * Normaliza texto para comparação
- */
 function normalizeText(text: string): string {
   return text
     .normalize("NFD")
@@ -25,187 +22,87 @@ function normalizeText(text: string): string {
     .trim();
 }
 
-/**
- * Extrai CPF do texto
- */
 export function extractCPF(text: string): string | null {
   const formattedMatch = text.match(/\d{3}\.\d{3}\.\d{3}-\d{2}/);
-
-  if (formattedMatch) {
-    return formattedMatch[0];
-  }
+  if (formattedMatch) return formattedMatch[0];
 
   const digitsMatch = text.match(/\b\d{11}\b/);
-
   if (digitsMatch) {
     const cpf = digitsMatch[0];
-
-    return `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(
-      6,
-      9
-    )}-${cpf.slice(9)}`;
+    return `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}`;
   }
-
   return null;
 }
 
-/**
- * Compatibilidade com código legado
- */
 export function extractCPFFromText(text: string): string | null {
   return extractCPF(text);
 }
 
-/**
- * Conta quantos dígitos são diferentes entre dois CPFs
- */
 function cpfDifference(cpf1: string, cpf2: string): number {
+  const c1 = cpf1.replace(/\D/g, "");
+  const c2 = cpf2.replace(/\D/g, "");
+  
+  if (c1.length !== 11 || c2.length !== 11) return 999;
+
   let diff = 0;
-
   for (let i = 0; i < 11; i++) {
-    if (cpf1[i] !== cpf2[i]) {
-      diff++;
-    }
+    if (c1[i] !== c2[i]) diff++;
   }
-
   return diff;
 }
 
-/**
- * Similaridade por tokens do nome
- */
-function calculateNameSimilarity(
-  nomePdf: string,
-  nomeBanco: string
-): number {
-  const tokensBanco = normalizeText(nomeBanco)
-    .split(" ")
-    .filter(t => t.length >= 3);
+function calculateNameSimilarity(nomePdf: string, nomeBanco: string): number {
+  const tokensBanco = normalizeText(nomeBanco).split(" ").filter(t => t.length >= 3);
+  const textPdf = normalizeText(nomePdf);
 
-  const tokensPdf = normalizeText(nomePdf);
+  if (tokensBanco.length === 0) return 0;
 
-  const encontrados = tokensBanco.filter(
-    token => tokensPdf.includes(token)
-  );
-
+  const encontrados = tokensBanco.filter(token => textPdf.includes(token));
   return encontrados.length / tokensBanco.length;
 }
 
-/**
- * Match principal
- */
 export function findBestProfileMatch(
   nomePDF: string | null,
   cpfPDF: string | null,
   profiles: Profile[]
 ): MatchResult {
-
   const cpfLimpo = cpfPDF?.replace(/\D/g, "") || "";
-  const nomeNormalizado = normalizeText(nomePDF || "");
+  const nomeNormalizado = nomePDF ? normalizeText(nomePDF) : "";
 
-  // ==========================================
-  // 1 - CPF EXATO
-  // ==========================================
-
-  const cpfExato = profiles.find(
-    p => p.cpf?.replace(/\D/g, "") === cpfLimpo
-  );
-
-  if (cpfExato) {
-    return {
-      profile: cpfExato,
-      matchBy: "cpf",
-      confidence: 1,
-      status: "automatico"
-    };
+  // 1. CPF EXATO (Prioridade Máxima)
+  if (cpfLimpo.length === 11) {
+    const cpfExato = profiles.find(p => p.cpf?.replace(/\D/g, "") === cpfLimpo);
+    if (cpfExato) {
+      return { profile: cpfExato, matchBy: "cpf", confidence: 1, status: "automatico" };
+    }
   }
 
-  // ==========================================
-  // 2 - ENCONTRA CPF MAIS PRÓXIMO
-  // ==========================================
-
+  // 2. Busca por similaridade (CPF próximo + Nome compatível)
   let melhorPerfil: Profile | null = null;
-  let menorDiferenca = 999;
+  let maiorConfianca = 0;
+  let matchTipo = "novo";
 
   for (const profile of profiles) {
-    const cpfBanco = profile.cpf?.replace(/\D/g, "");
+    const cpfBanco = profile.cpf?.replace(/\D/g, "") || "";
+    const diff = cpfLimpo.length === 11 ? cpfDifference(cpfBanco, cpfLimpo) : 999;
+    const simNome = nomeNormalizado ? calculateNameSimilarity(nomeNormalizado, profile.nome || "") : 0;
 
-    if (
-      !cpfBanco ||
-      cpfBanco.length !== 11 ||
-      cpfLimpo.length !== 11
-    ) {
-      continue;
+    // Se o CPF for muito parecido (até 2 dígitos de erro) e o nome bater minimamente
+    if (diff <= 2 && simNome >= 0.5) {
+      return { profile, matchBy: "cpf_proximo", confidence: 0.9, status: "sugerido" };
     }
 
-    const diferenca = cpfDifference(
-      cpfBanco,
-      cpfLimpo
-    );
-
-    if (diferenca < menorDiferenca) {
-      menorDiferenca = diferenca;
+    // Se o nome for muito parecido (75% dos tokens) mesmo sem CPF
+    if (simNome >= 0.75 && simNome > maiorConfianca) {
+      maiorConfianca = simNome;
       melhorPerfil = profile;
+      matchTipo = "nome";
     }
   }
 
-  // ==========================================
-  // 3 - CPF MUITO DIFERENTE
-  // ==========================================
-
-  if (menorDiferenca > 3) {
-    return {
-      profile: null,
-      matchBy: "novo",
-      confidence: 0,
-      status: "novo_colaborador"
-    };
+  if (melhorPerfil && maiorConfianca >= 0.75) {
+    return { profile: melhorPerfil, matchBy: matchTipo, confidence: maiorConfianca, status: "sugerido" };
   }
 
-  // ==========================================
-  // 4 - VALIDAR NOME
-  // ==========================================
-
-  if (
-    !melhorPerfil ||
-    !melhorPerfil.nome ||
-    !nomeNormalizado
-  ) {
-    return {
-      profile: null,
-      matchBy: "novo",
-      confidence: 0,
-      status: "novo_colaborador"
-    };
-  }
-
-  const similaridadeNome =
-    calculateNameSimilarity(
-      nomePDF || "",
-      melhorPerfil.nome
-    );
-
-  // ==========================================
-  // 5 - CPF PARECIDO + NOME COMPATÍVEL
-  // ==========================================
-
-  if (similaridadeNome >= 0.75) {
-    return {
-      profile: melhorPerfil,
-      matchBy: "cpf+nome",
-      confidence: similaridadeNome,
-      status: "sugerido"
-    };
-  }
-
-  // ==========================================
-  // 6 - NOVO COLABORADOR
-  // ==========================================
-
-  return {
-    profile: null,
-    matchBy: "novo",
-    confidence: 0,
-    status: "novo_colaborador"
-  };
+  return { profile: null, matchBy: "novo", confidence: 0, status: "novo_colaborador" };
 }
