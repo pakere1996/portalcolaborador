@@ -228,7 +228,7 @@ export default function AdminHomeAdminPage() {
       cargo: p.cargo,
       unidadeId: p.unidade_id ?? "",
       folgaFixa: p.folga_fixa_semana?.toString() ?? "none",
-      dataNascimento: p.data_nascimento ?? "",
+      dataNascimento: p.dataNascimento ?? "",
       dataAdmissao: p.dataAdmissao ?? "",
       perfil_acesso: p.role ?? "colaborador",
       ativo: p.ativo,
