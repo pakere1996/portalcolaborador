@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatBR } from "@/lib/folga-rules";
 
-type Ocorrencia = Tables<'ocorrencias_disciplinares'> & {
+type Ocorrencia = Tables<'registros_disciplinares'> & {
   responsavel: Pick<Tables<'profiles'>, 'nome'> | null;
 };
 
@@ -32,7 +32,7 @@ export default function HistoricoDisciplinar() {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from("ocorrencias_disciplinares")
+        .from("registros_disciplinares")
         .select(`
           *,
           responsavel:responsavel_id(nome)
