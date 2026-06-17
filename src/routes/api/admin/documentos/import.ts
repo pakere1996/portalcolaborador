@@ -7,11 +7,13 @@ const importSchema = z.object({
   filePath: z.string(),
 });
 
-export const importDocumentos = createServerFn({ method: "POST" })
-  .validator((data: unknown) => importSchema.parse(data))
-  .handler(async ({ data }) => {
-    // No TanStack v1, os parâmetros validados chegam envelopados em 'data'
-    const { fileName, fileSize, filePath } = data;
+export const importDocumentos = createServerFn({ 
+  method: "POST" 
+})
+  .handler(async (args) => {
+    // Validamos manualmente os dados recebidos no payload (args.data)
+    const validated = importSchema.parse(args.data);
+    const { fileName, fileSize, filePath } = validated;
 
     // Esta função agora serve apenas como um log ou gatilho, 
     // já que o upload real é feito via Edge Function para maior segurança.
