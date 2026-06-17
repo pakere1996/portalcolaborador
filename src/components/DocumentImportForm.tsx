@@ -108,7 +108,7 @@ useEffect(() => {
     if (matchPonto) {
       const [, dataInicio] = matchPonto;
       const [, mes, ano] = dataInicio.split("/");
-      return { mes: parseInt(mes), ano: parseInt(ano) };
+      return { mes: parseInt(String(mes)), ano: parseInt(String(ano)) };
     }
     const meses: Record<string, number> = {
       janeiro: 1, fevereiro: 2, março: 3, abril: 4, maio: 5, junho: 6,
