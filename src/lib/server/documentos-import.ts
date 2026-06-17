@@ -7,7 +7,7 @@ const importSchema = z.object({
 
 export const importDocumentos = createServerFn({ method: "POST" })
   .validator(importSchema)
-  .handler(async ({ file }) => {
+  .handler(async ({ file }: { file: File }) => {
     // This is a placeholder - in a real implementation, you would:
     // 1. Parse the uploaded file (PDF, DOC, etc.)
     // 2. Extract CPF, dates, and other relevant data
