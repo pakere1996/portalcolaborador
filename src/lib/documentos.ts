@@ -23,8 +23,8 @@ export function extractPeriodo(text: string, docType: string): { mes: number; an
 
   // Try specific patterns first
   const matchPonto1 = normalizedText.match(/Periodo de referencia:\s*de\s*(\d{2})\/(\d{2})\/(\d{4})/i);
-  if (match) {
-    return { mes: parseInt(match[1]), ano: parseInt(match[3]) };
+  if (matchPonto1) {
+    return { mes: parseInt(matchPonto1[1]), ano: parseInt(matchPonto1[3]) };
   }
 
   const matchContracheque = normalizedText.match(/(\w+)\s+de\s+(\d{4})/i);
@@ -54,4 +54,12 @@ export function extractPeriodo(text: string, docType: string): { mes: number; an
   }
 
   return null;
+}
+
+export async function syncAdminMonthlyDocumentReminder() {
+  // This function is called from the NotificationBell component
+  // It can be used to trigger monthly document reminders for admins
+  // For now, it's a no-op that can be extended with actual logic
+  console.log("[syncAdminMonthlyDocumentReminder] Called - placeholder implementation");
+  return { success: true };
 }
