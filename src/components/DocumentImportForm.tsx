@@ -65,7 +65,7 @@ export function DocumentImportForm() {
     if (!user) return;
     
     supabase.from("profiles").select("id, nome, cpf, matricula, cargo, unidade_id").eq("ativo", true).order("nome")
-      .then(({ data }) => setProfiles((data((data ?? []) as ProfileForMatching[]));
+      .then(({ data }) => setProfiles((data ?? []) as ProfileForMatching[]));
       
     supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome")
       .then(({ data }) => setUnidades(data ?? []));
