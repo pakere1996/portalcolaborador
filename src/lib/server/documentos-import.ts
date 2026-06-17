@@ -5,11 +5,13 @@ const importSchema = z.object({
   file: z.any(),
 });
 
-export const importDocumentos = createServerFn({ method: "POST" })
-  .validator((data: unknown) => importSchema.parse(data))
-  .handler(async ({ data }) => {
-    // Os dados validados pelo Zod chegam dentro da propriedade 'data'
-    const { file } = data as { file: any };
+export const importDocumentos = createServerFn({ 
+  method: "POST" 
+})
+  .handler(async (args) => {
+    // Validamos manualmente os dados recebidos no payload (args.data)
+    const validated = importSchema.parse(args.data);
+    const { file } = validated;
 
     // This is a placeholder - in a real implementation, you would:
     // 1. Parse the uploaded file (PDF, DOC, etc.)
