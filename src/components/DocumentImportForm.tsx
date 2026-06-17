@@ -7,29 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Upload, FileText, X, Loader2, CheckCircle2, AlertTriangle, XCircle, ChevronLeft, ChevronRight, UserPlus } from "lucide-react";
-import { extractTextFromPDF } from "@/lib/pdf-utils";
+import { extractTextFromPDF, PageText } from "@/lib/pdf-utils";
 import { extractCPF, findBestProfileMatch, type ProfileForMatching } from "@/lib/documentos-matching";
 import { adminApi } from "@/lib/admin-api";
-
-interface PageResult {
-  pageNumber: number;
-  text: string;
-  nome: string | null;
-  cpf: string | null;
-  cnpj: string | null;
-  mes: number | null;
-  ano: number | null;
-  unidadeId: string | null;
-  cargo: string | null; // Armazena o ID do cargo oficial
-  dataAdmissao: string | null;
-  matchStatus: "automatico" | "sugerido" | "revisao";
-  matchedProfile: ProfileForMatching | null;
-  confidence: number;
-  isNewCargo: boolean;
-  suggestedCargoName: string | null;
-  vinculado: boolean;
-  ignorado: boolean;
-}
+import { FolhaPontoParser } from "@/lib/folha-ponto-parser";
+import { ContrachequeParser } from "@/lib/contracheque-parser";
+import { DocumentParser, PageResult } from "@/lib/document-parsers";
 
 interface Unidade {
   id: string;
@@ -43,16 +26,6 @@ interface Cargo {
   descricao?: string | null;
 }
 
-// 🌟 FUNÇÃO AUXILIAR: Remove acentos, espaços, pontuações e caixa alta para garantir o match perfeito de strings
-const normalizeTextForMatch = (str: string): string => {
-  return str
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // Remove acentos
-    .replace(/[^a-z0-9]/g, "")       // Remove espaços, pontos, traços e barras horizontais
-    .trim();
-};
-
 export function DocumentImportForm() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -61,7 +34,7 @@ export function DocumentImportForm() {
   const [currentPage, setCurrentPage] = useState(0);
   const [profiles, setProfiles] = useState<ProfileForMatching[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
-  const [listaCargos, setListaCargos] = useState<Cargo[]>([]); 
+  const [listaCargos, setListaCargos] = useState<Cargo[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [manualProfileId, setManualProfileId] = useState<string>("");
   
@@ -91,8 +64,8 @@ export function DocumentImportForm() {
   useEffect(() => {
     if (!user) return;
     
-    supabase.from("profiles").select("id, nome, cpf, matricula").eq("ativo", true).order("nome")
-      .then(({ data }) => setProfiles((data ?? []) as ProfileForMatching[]));
+    supabase.from("profiles").select("id, nome, cpf, matricula, cargo, unidade_id").eq("ativo", true).order("nome")
+      .then(({ data }) => setProfiles((data((data ?? []) as ProfileForMatching[]));
       
     supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome")
       .then(({ data }) => setUnidades(data ?? []));
@@ -102,26 +75,6 @@ export function DocumentImportForm() {
   }, [user?.id]);
 
   const cleanCNPJ = (cnpj: string) => cnpj.replace(/\D/g, "");
-
-  const extractPeriodo = (text: string): { mes: number; ano: number } | null => {
-    const regexPonto = /Per[ií]odo de refer[eê]ncia:\s*de\s*(\d{2}\/\d{2}\/\d{4})\s+(?:a|à)\s+(\d{2}\/\d{2}\/\d{4})/i;
-    const matchPonto = text.match(regexPonto);
-    if (matchPonto) {
-      const [, dataInicio] = matchPonto;
-      const [, mes, ano] = dataInicio.split("/");
-      return { mes: parseInt(String(mes)), ano: parseInt(String(ano)) };
-    }
-    const meses: Record<string, number> = {
-      janeiro: 1, fevereiro: 2, março: 3, abril: 4, maio: 5, junho: 6,
-      julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
-    };
-    const regexContracheque = /\b(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})\b/i;
-    const matchContracheque = text.match(regexContracheque);
-    if (matchContracheque) {
-      return { mes: meses[matchContracheque[1].toLowerCase()], ano: parseInt(matchContracheque[2]) };
-    }
-    return null;
-  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -135,146 +88,67 @@ export function DocumentImportForm() {
     if (!selectedFile) return;
     setIsProcessing(true);
     try {
+      // 1. Extrai texto do PDF (comum para ambos os tipos)
       const pages = await extractTextFromPDF(selectedFile);
-      const results: PageResult[] = pages.map((p) => {
-        const text = p.text;
 
-        const nameMatch = text.match(/\d{2}\/\d{2}\/\d{4}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+?)\s+\d+\s+[A-Z]/);
-        const nome = nameMatch ? nameMatch[1].trim().replace(/\s+/g, " ") : null;
-        const cpf = extractCPF(text);
-        
-        const match = findBestProfileMatch(nome, cpf, profiles as any);
-        console.log("================================");
-        console.log("NOME PDF:", nome);
-        console.log("CPF PDF:", cpf);
-        console.log("MATCH:", match);
-        console.log("PERFIL:", match?.profile?.nome);
-        console.log("CPF PERFIL:", match?.profile?.cpf);
-        console.log("================================");
-        const perfilVinculado = match.profile;
+      // 2. Seleciona o parser correto (Strategy Pattern)
+      const parser: DocumentParser = documentType === "ponto"
+        ? new FolhaPontoParser()
+        : new ContrachequeParser();
 
-        // =================================================================
-        // PROCESSAMENTO DE CARGO REFORÇADO COM DUPLA CAMADA DE SEGURANÇA
-        // =================================================================
-        let cargoFinalId = null;
-        let isNewCargo = false;
-        let suggestedCargoName = null;
+      // 3. Executa o parsing específico
+      const results = parser.parse(pages, profiles);
 
-        // Camada 1: Proximidade Linear por Regex tradicional
-        const cargoMatch = text.match(/(?:cargo|fun[çc][ãa]o|cargo\/fun[çc][ãa]o)[:\s-]*([A-Za-zÀ-ÿÇç\u00a0\s\./-]+)/i);
-        let cargoTexto = cargoMatch ? cargoMatch[1].replace(/\u00a0/g, " ").trim() : null;
-        
-        if (cargoTexto) {
-          cargoTexto = cargoTexto.split(/(?:setor|dep|unidade|c\.|registro|s[eé]rie|hor[aá]rio|escala|cbo|pis|ctps|data|\s{2,})/i)[0].trim();
+      // 4. Pós-processamento comum: resolve unidade via CNPJ e cargo via matching
+      const enrichedResults = results.map((r) => {
+        let unidadeId = null;
+        if (r.cnpj) {
+          const unidade = unidades.find(u => u.cnpj && cleanCNPJ(u.cnpj) === cleanCNPJ(r.cnpj!));
+          unidadeId = unidade?.id ?? null;
         }
 
-        const cargoOrigem = cargoTexto || perfilVinculado?.cargo;
+        // Verifica se o cargo sugerido existe na base
+        let cargoId = null;
+        let isNewCargo = false;
+        if (r.suggestedCargoName && listaCargos.length > 0) {
+          const normSugerido = r.suggestedCargoName
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-z0-9]/g, "");
 
-        if (cargoOrigem) {
-          const toTitleCase = (s: string) => s.toLowerCase().replace(/(?:^|\s)\S/g, l => l.toUpperCase());
-          suggestedCargoName = toTitleCase(cargoOrigem.toString());
+          const cargoOficial = listaCargos.find(c => {
+            if (!c.nome) return false;
+            const normOficial = c.nome
+              .toLowerCase()
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .replace(/[^a-z0-9]/g, "");
+            return normOficial === normSugerido || 
+                   normOficial.includes(normSugerido) || 
+                   normSugerido.includes(normOficial);
+          });
 
-          if (listaCargos && listaCargos.length > 0) {
-            const normOrigem = normalizeTextForMatch(cargoOrigem.toString());
-
-            const cargoOficialEncontrado = listaCargos.find(c => {
-              if (!c.nome) return false;
-              const normOficial = normalizeTextForMatch(c.nome);
-              return normOficial === normOrigem || normOficial.includes(normOrigem) || normOrigem.includes(normOficial);
-            });
-
-            if (cargoOficialEncontrado) {
-              cargoFinalId = cargoOficialEncontrado.id;
-              isNewCargo = false;
-            } else {
-              isNewCargo = true;
-            }
+          if (cargoOficial) {
+            cargoId = cargoOficial.id;
+            isNewCargo = false;
           } else {
             isNewCargo = true;
           }
         }
 
-        // Camada 2 (🌟 ESCAPE FALLBACK): Varredura Geral à prova de quebra de layout de coluna
-        // Se a associação direta quebrou devido ao espaçamento do PDF, vasculhamos a página inteira atrás de cargos da base
-        if (!cargoFinalId && listaCargos && listaCargos.length > 0) {
-          const normFullText = normalizeTextForMatch(text);
-          
-          const cargoPorVarredura = listaCargos.find(c => {
-            if (!c.nome) return false;
-            const normOficial = normalizeTextForMatch(c.nome);
-            // Evita termos genéricos curtos demais (ex: menos de 3 letras) para não gerar falsos positivos
-            return normOficial.length >= 3 && normFullText.includes(normOficial);
-          });
-
-          if (cargoPorVarredura) {
-            cargoFinalId = cargoPorVarredura.id;
-            suggestedCargoName = cargoPorVarredura.nome;
-            isNewCargo = false;
-          }
-        }
-
-        // EXTRAÇÃO DE DATA DE ADMISSÃO
-        let dataAdmissao = null;
-        const admissaoDireto = text.match(/(?:admiss[ãa]o|admissao|adm)[:\s]*[^0-9/]{0,20}(\d{2})\/(\d{2})\/(\d{4})/i);
-        
-        if (admissaoDireto) {
-          dataAdmissao = `${admissaoDireto[3]}-${admissaoDireto[2]}-${admissaoDireto[1]}`;
-        } else {
-          const todasAsDatas = text.match(/\d{2}\/\d{2}\/\d{4}/g) || [];
-          if (todasAsDatas.length > 0) {
-            const periodoInfo = extractPeriodo(text);
-            // 🛠️ CORREÇÃO DE TIPAGEM: Usando Number() para evitar conflito de tipo no TypeScript
-            const anoPeriodo = periodoInfo?.ano ? Number(periodoInfo.ano) : null;
-            let dataCandidata = null;
-
-            if (anoPeriodo) {
-              dataCandidata = todasAsDatas.find(d => parseInt(d.split('/')[2]) < anoPeriodo);
-            }
-            if (!dataCandidata) {
-              const ordenadas = [...todasAsDatas].sort((a, b) => {
-                const [dA, mA, aA] = a.split('/').map(Number);
-                const [dB, mB, aB] = b.split('/').map(Number);
-                return new Date(aA, mA - 1, dA).getTime() - new Date(aB, mB - 1, dB).getTime();
-              });
-              dataCandidata = ordenadas[0];
-            }
-            if (dataCandidata) {
-              const [dia, mes, ano] = dataCandidata.split('/');
-              dataAdmissao = `${ano}-${mes}-${dia}`;
-            }
-          }
-        }
-
-        const cnpjMatch = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
-        const cnpj = cnpjMatch ? cnpjMatch[0] : null;
-        const unidade = cnpj ? unidades.find(u => u.cnpj && cleanCNPJ(u.cnpj) === cleanCNPJ(cnpj)) : null;
-        const periodo = extractPeriodo(text);
-
         return {
-          pageNumber: p.pageNumber,
-          text,
-          nome,
-          cpf,
-          cnpj,
-          mes: periodo?.mes ?? null,
-          ano: periodo?.ano ?? null,
-          unidadeId: unidade?.id ?? null,
-          matchStatus: match.status as "automatico" | "sugerido" | "revisao",
-          matchedProfile: perfilVinculado,
-          confidence: match.confidence,
-          cargo: cargoFinalId, 
-          isNewCargo: isNewCargo, 
-          suggestedCargoName: suggestedCargoName,
-          dataAdmissao: dataAdmissao,
-          vinculado: false,
-          ignorado: false,
+          ...r,
+          unidadeId,
+          cargo: cargoId,
+          isNewCargo,
         };
       });
 
-      setPageResults(results);
+      setPageResults(enrichedResults);
 
       // Vinculação automática dos matches perfeitos
-      for (const result of results) {
+      for (const result of enrichedResults) {
         if (
           result.matchedProfile &&
           result.confidence === 1 &&
@@ -301,7 +175,7 @@ export function DocumentImportForm() {
         )
       );
 
-      const primeiroPendente = results.findIndex(
+      const primeiroPendente = enrichedResults.findIndex(
         r =>
           !r.vinculado &&
           !r.ignorado &&
@@ -314,7 +188,7 @@ export function DocumentImportForm() {
         setCurrentPage(0);
       }
 
-      const qtdAuto = results.filter(
+      const qtdAuto = enrichedResults.filter(
         r => r.confidence === 1
       ).length;
 
@@ -370,14 +244,14 @@ export function DocumentImportForm() {
 
       const storagePath =
         `documentos/${documentType}/${profileId}/` +
-        `..._${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}.pdf`;
+        `${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}.pdf`;
 
       const { error: uploadError } = await supabase.storage
         .from("documentos")
         .upload(storagePath, selectedFile!, {
           contentType: "application/pdf",
           upsert: false,
-          });
+        });
 
       if (
         uploadError &&
@@ -503,7 +377,7 @@ export function DocumentImportForm() {
       }).eq("id", authUser.userId);
       if (profErr) throw profErr;
 
-      const newProfile: ProfileForMatching = { id: authUser.userId, nome: novoColabForm.nome, cpf: cleanCpf, matricula: novoColabForm.matricula || null };
+      const newProfile: ProfileForMatching = { id: authUser.userId, nome: novoColabForm.nome, cpf: cleanCpf, matricula: novoColabForm.matricula || null, cargo: novoColabForm.cargo, unidade_id: novoColabForm.unidadeId };
       setProfiles(prev => [...prev, newProfile]);
       setShowNovoColab(false);
       setNovoColabForm({ nome: "", cpf: "", cargo: "", unidadeId: "", senha: "", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", whatsapp: "", perfil_acesso: "colaborador", matricula: "" });
@@ -596,7 +470,7 @@ export function DocumentImportForm() {
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div><span className="text-muted-foreground">Nome PDF:</span><div className="font-medium">{result.nome ?? "Não identificado"}</div></div>
             <div><span className="text-muted-foreground">CPF:</span><div className="font-medium">{result.cpf ?? "Não identificado"}</div></div>
-            <div><span className="text-muted-foreground">Período:</span><div className="font-medium">{result.mes && result.ano ? `${String(result.mes).padStart(2, "0")}/${result.ano}` : "Não identificado"}</div></div>
+            <div><span className="text-muted-foreground">Período:</span className:</span><div className="font-medium">{result.mes && result.ano ? `${String(result.mes).padStart(2, "0")}/${result.ano}` : "Não identificado"}</div></div>
             <div><span className="text-muted-foreground">Unidade:</span><div className="font-medium">{result.unidadeId ? unidades.find(u => u.id === result.unidadeId)?.nome : "Não identificada"}</div></div>
           </div>
 
