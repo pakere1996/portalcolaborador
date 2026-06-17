@@ -238,7 +238,11 @@ export default function AdminDashboard() {
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-slate-900">{formatBR(parseYMD(p.data))}</span>
-                      {p.temAniversario && <Cake className="size-4 text-amber-500" title="Aniversariante com prioridade" />}
+                      {p.temAniversario && (
+  <span title="Aniversariante com prioridade">
+    <Cake className="size-4 text-amber-500" />
+  </span>
+)}
                     </div>
                     <Badge className={getStatusColor(p.status)}>{getStatusLabel(p.status)}</Badge>
                   </div>
