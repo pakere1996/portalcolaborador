@@ -449,6 +449,7 @@ export interface Database {
           data: string
           motivo: string | null
           liberada: boolean
+          auto: boolean | null
           created_at: string | null
         }
         Insert: {
