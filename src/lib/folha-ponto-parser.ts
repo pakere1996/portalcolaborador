@@ -92,8 +92,7 @@ export class FolhaPontoParser implements DocumentParser {
       )[0].trim();
     }
     return cargoTexto;
-}
-  }
+  };
 
   /**
    * Extrai data de admissão do texto
