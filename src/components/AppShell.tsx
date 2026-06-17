@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import {
   ArrowLeftRight,
@@ -19,6 +19,7 @@ import {
   Home,
   Briefcase,
   Building2,
+  ShieldAlert,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -26,13 +27,20 @@ import { NotificationBell } from "@/components/NotificationBell";
 import logo from "@/assets/pakere-logo.png";
 import { cn } from "@/lib/utils";
 
-interface NavItem { to: string; label: string; icon: any }
+interface NavItem { 
+  to: string; 
+  label: string; 
+  icon: any;
+  end?: boolean;
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { profile, role, signOut } = useAuth();
   const location = useLocation();
   const path = location.pathname;
   const [open, setOpen] = useState(false);
+  
+  // Estados para controlar a abertura dos menus colapsáveis
   const [folgasOpen, setFolgasOpen] = useState(true);
   const [docsOpen, setDocsOpen] = useState(false);
   const [cadastroOpen, setCadastroOpen] = useState(false);
@@ -41,14 +49,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setOpen(false);
   }, [path]);
 
+  // Abre automaticamente as seções se a rota atual pertencer a elas
   useEffect(() => {
-    if (path.startsWith("/documentos") || path.startsWith("/admin/documentos")) {
-      setDocsOpen(true);
-    }
+    if (path.includes("/documentos")) setDocsOpen(true);
     if (path.startsWith("/admin/colaboradores") || path.startsWith("/admin/cargos") || path.startsWith("/admin/unidades")) {
       setCadastroOpen(true);
     }
   }, [path]);
+
+  const isAdmin = role === "admin";
 
   const employeeFolgaNav: NavItem[] = [
     { to: "/calendario", label: "Calendário", icon: Calendar },
@@ -66,16 +75,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   ];
 
   const employeeDocsNav: NavItem[] = [
-    { to: "/documentos", label: "Contracheques", icon: FileText },
+    { to: "/documentos", label: "Contracheques", icon: FileText, end: true },
     { to: "/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
     { to: "/documentos/atestados", label: "Atestados", icon: FileWarning },
   ];
 
   const adminDocsNav: NavItem[] = [
-    { to: "/admin/documentos", label: "Contracheques", icon: FileText },
+    { to: "/admin/documentos", label: "Contracheques", icon: FileText, end: true },
     { to: "/admin/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
     { to: "/admin/documentos/atestados", label: "Atestados", icon: FileWarning },
-    { to: "/admin/documentos/disciplinar", label: "Registros Disciplinares", icon: Shield },
+    { to: "/admin/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
   ];
 
   const adminCadastroNav: NavItem[] = [
@@ -84,22 +93,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/unidades", label: "Unidades", icon: Building2 },
   ];
 
-  const isAdmin = role === "admin";
   const folgaNav = isAdmin ? adminFolgaNav : employeeFolgaNav;
   const docsNav = isAdmin ? adminDocsNav : employeeDocsNav;
-  
   const homePath = isAdmin ? "/admin/home" : "/home";
 
-  const isDocsActive = path.startsWith("/documentos") || path.startsWith("/admin/documentos");
-  const isCadastroActive = path.startsWith("/admin/colaboradores") || path.startsWith("/admin/cargos") || path.startsWith("/admin/unidades");
-
-  const isFolgaActive = path.startsWith("/calendario") ||
-    path.startsWith("/trocas") ||
-    path.startsWith("/historico") ||
-    (path.startsWith("/admin") && !isDocsActive && !isCadastroActive);
-
-  const cadastroPath = isAdmin ? "/admin/colaboradores" : "/perfil";
-  const cadastroLabel = "Cadastro";
+  // Classes utilitárias para NavLink
+  const getLinkClass = (isActive: boolean, isHome = false) => cn(
+    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+    isActive 
+      ? (isHome ? "bg-red-600 text-white font-bold hover:bg-red-700" : "bg-primary/15 text-primary font-medium")
+      : "text-muted-foreground hover:text-foreground hover:bg-accent"
+  );
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
@@ -129,18 +133,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-180px)]">
-          <Link
-            to={homePath}
-            className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors mb-2",
-              path === homePath
-                ? "bg-red-600 text-white font-bold hover:bg-red-700"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent",
-            )}
-          >
+          <NavLink to={homePath} className={({ isActive }) => getLinkClass(isActive, true)}>
             <Home className="size-4" />
             <span>Início</span>
-          </Link>
+          </NavLink>
 
           {isAdmin ? (
             <div className="space-y-1">
@@ -148,53 +144,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 onClick={() => setCadastroOpen(!cadastroOpen)}
                 className={cn(
                   "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                  isCadastroActive ? "text-primary bg-primary/5" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  path.includes("/admin/colaboradores") || path.includes("/admin/cargos") || path.includes("/admin/unidades") 
+                    ? "text-primary bg-primary/5" 
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
                 )}
               >
                 <div className="flex items-center gap-3">
                   <Users className="size-4" />
-                  <span>{cadastroLabel}</span>
+                  <span>Cadastro</span>
                 </div>
                 {cadastroOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
               </button>
 
               {cadastroOpen && (
                 <div className="pl-4 space-y-1 mt-1 border-l border-border ml-5">
-                  {adminCadastroNav.map((item) => {
-                    const active = path === item.to;
-                    const Icon = item.icon;
-                    return (
-                      <Link
-                        key={item.to}
-                        to={item.to}
-                        className={cn(
-                          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
-                          active
-                            ? "bg-primary/15 text-primary font-medium"
-                            : "text-muted-foreground hover:text-foreground hover:bg-accent",
-                        )}
-                      >
-                        <Icon className="size-4" />
-                        {item.label}
-                      </Link>
-                    );
-                  })}
+                  {adminCadastroNav.map((item) => (
+                    <NavLink key={item.to} to={item.to} className={({ isActive }) => getLinkClass(isActive)}>
+                      <item.icon className="size-4" />
+                      {item.label}
+                    </NavLink>
+                  ))}
                 </div>
               )}
             </div>
           ) : (
-            <Link
-              to={cadastroPath}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors mb-2",
-                path === cadastroPath
-                  ? "bg-primary/15 text-primary font-bold"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent",
-              )}
-            >
+            <NavLink to="/perfil" className={({ isActive }) => getLinkClass(isActive)}>
               <Settings className="size-4" />
-              <span>Meu {cadastroLabel}</span>
-            </Link>
+              <span>Meu Cadastro</span>
+            </NavLink>
           )}
 
           <div className="space-y-1">
@@ -202,7 +179,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onClick={() => setFolgasOpen(!folgasOpen)}
               className={cn(
                 "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                isFolgaActive ? "text-primary bg-primary/5" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                path.includes("/calendario") || path.includes("/trocas") || path.includes("/historico") || (path.startsWith("/admin") && !path.includes("/documentos") && !path.includes("/colaboradores"))
+                  ? "text-primary bg-primary/5" 
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
               )}
             >
               <div className="flex items-center gap-3">
@@ -214,25 +193,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             {folgasOpen && (
               <div className="pl-4 space-y-1 mt-1 border-l border-border ml-5">
-                {folgaNav.map((item) => {
-                  const active = path === item.to;
-                  const Icon = item.icon;
-                  return (
-                    <Link
-                      key={item.to}
-                      to={item.to}
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
-                        active
-                          ? "bg-primary/15 text-primary font-medium"
-                          : "text-muted-foreground hover:text-foreground hover:bg-accent",
-                      )}
-                    >
-                      <Icon className="size-4" />
-                      {item.label}
-                    </Link>
-                  );
-                })}
+                {folgaNav.map((item) => (
+                  <NavLink key={item.to} to={item.to} className={({ isActive }) => getLinkClass(isActive)}>
+                    <item.icon className="size-4" />
+                    {item.label}
+                  </NavLink>
+                ))}
               </div>
             )}
           </div>
@@ -242,7 +208,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onClick={() => setDocsOpen(!docsOpen)}
               className={cn(
                 "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                isDocsActive ? "text-primary bg-primary/5" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                path.includes("/documentos") 
+                  ? "text-primary bg-primary/5" 
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
               )}
             >
               <div className="flex items-center gap-3">
@@ -254,25 +222,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             {docsOpen && (
               <div className="pl-4 space-y-1 mt-1 border-l border-border ml-5">
-                {docsNav.map((item) => {
-                  const active = path === item.to || path.startsWith(`${item.to}/`);
-                  const Icon = item.icon;
-                  return (
-                    <Link
-                      key={item.to}
-                      to={item.to}
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
-                        active
-                          ? "bg-primary/15 text-primary font-medium"
-                          : "text-muted-foreground hover:text-foreground hover:bg-accent",
-                      )}
-                    >
-                      <Icon className="size-4" />
-                      {item.label}
-                    </Link>
-                  );
-                })}
+                {docsNav.map((item) => (
+                  <NavLink 
+                    key={item.to} 
+                    to={item.to} 
+                    end={item.end}
+                    className={({ isActive }) => getLinkClass(isActive)}
+                  >
+                    <item.icon className="size-4" />
+                    {item.label}
+                  </NavLink>
+                ))}
               </div>
             )}
           </div>
