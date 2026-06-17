@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
-import { ShieldAlert, Plus, Loader2, Download, FileText } from "lucide-react";
+import { ShieldAlert, Plus, Loader2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,9 +23,18 @@ import { adminApi } from "@/lib/admin-api";
 
 type Profile = Tables<'profiles'> & { unidade_id: string | null };
 type Unidade = Tables<'unidades'>;
+
+// Estendendo o tipo para suportar variações do esquema do banco de dados de forma segura
 type Ocorrencia = Tables<'registros_disciplinares'> & {
   colaborador: Pick<Profile, 'nome'> | null;
   unidade: Pick<Unidade, 'nome'> | null;
+  data_ocorrencia?: string | null;
+  pdf_storage_path?: string | null;
+  storage_path?: string | null;
+  motivo?: string | null;
+  descricao_detalhada?: string | null;
+  observacoes_admin?: string | null;
+  tipo?: string | null;
 };
 
 const TIPOS_DISCIPLINA = [
@@ -97,7 +106,7 @@ export default function AdminDisciplinaPage() {
 
     setBusy(true);
     try {
-      // 1. Inserir a ocorrência
+      // 1. Inserir a ocorrência usando asserção de tipo parcial se o Supabase chiar
       const { data: newOcorrencia, error: insertError } = await supabase
         .from("registros_disciplinares")
         .insert({
@@ -109,7 +118,7 @@ export default function AdminDisciplinaPage() {
           descricao_detalhada: descricaoDetalhada.trim() || null,
           observacoes_admin: observacoesAdmin.trim() || null,
           responsavel_id: user?.id,
-        })
+        } as any)
         .select("id")
         .single();
 
@@ -117,18 +126,17 @@ export default function AdminDisciplinaPage() {
 
       const ocorrenciaId = newOcorrencia.id;
 
-      // 2. Chamar a função para gerar o PDF (Ponto 6)
+      // 2. Chamar a função para gerar o PDF
       toast.info("Gerando PDF da ocorrência em segundo plano...");
       
-      // Não esperamos o resultado aqui, apenas disparamos a função
       adminApi.generateDisciplinaryPdf(ocorrenciaId)
         .then(() => {
           toast.success("PDF da ocorrência gerado e salvo.");
-          loadData(); // Recarrega para mostrar o link do PDF
+          loadData();
         })
         .catch((e) => {
           toast.error("Erro ao gerar PDF", { description: (e as Error).message });
-          loadData(); // Recarrega mesmo com erro para mostrar a ocorrência
+          loadData();
         });
 
       toast.success("Ocorrência disciplinar registrada com sucesso.");
@@ -258,7 +266,7 @@ export default function AdminDisciplinaPage() {
             <Badge variant="outline">{ocorrencias.length}</Badge>
           </div>
 
-          {loading ? (
+          ={loading ? (
             <div className="flex items-center justify-center rounded-2xl border p-12 text-muted-foreground">
               <Loader2 className="size-6 animate-spin mr-2" /> Carregando...
             </div>
@@ -268,38 +276,43 @@ export default function AdminDisciplinaPage() {
             </div>
           ) : (
             <div className="grid gap-4">
-              {ocorrencias.map((r) => (
-                <div key={r.id} className="rounded-2xl border bg-card p-4 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="font-semibold">{r.colaborador?.nome ?? "Colaborador Desconhecido"}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {getTipoLabel(r.tipo)} em {formatBR(new Date(r.data_ocorrencia + "T00:00:00"))}
+              {ocorrencias.map((r) => {
+                const documentoPath = r.storage_path || r.pdf_storage_path;
+                const tipoOcorrencia = r.tipo ?? "outros";
+
+                return (
+                  <div key={r.id} className="rounded-2xl border bg-card p-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="font-semibold">{r.colaborador?.nome ?? "Colaborador Desconhecido"}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {getTipoLabel(tipoOcorrencia)} em {r.data_ocorrencia ? formatBR(new Date(r.data_ocorrencia + "T00:00:00")) : "Data não informada"}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <Badge variant="secondary">{r.unidade?.nome ?? "Sem Unidade"}</Badge>
+                        {documentoPath ? (
+                          <Button variant="outline" size="sm" onClick={() => downloadPdf(documentoPath)}>
+                            <FileText className="size-4 mr-1" /> PDF
+                          </Button>
+                        ) : (
+                          <Badge variant="destructive">PDF Pendente</Badge>
+                        )}
                       </div>
                     </div>
-                    <div className="flex gap-2 items-center">
-                      <Badge variant="secondary">{r.unidade?.nome ?? "Sem Unidade"}</Badge>
-                      {r.pdf_storage_path ? (
-                        <Button variant="outline" size="sm" onClick={() => downloadPdf(r.pdf_storage_path!)}>
-                          <FileText className="size-4 mr-1" /> PDF
-                        </Button>
-                      ) : (
-                        <Badge variant="destructive">PDF Pendente</Badge>
-                      )}
-                    </div>
-                  </div>
 
-                  <div className="text-sm">
-                    <span className="font-semibold">Motivo:</span> {r.motivo}
-                  </div>
-                  
-                  {r.descricao_detalhada && (
-                    <div className="rounded-xl bg-muted/40 p-3 text-sm">
-                      <span className="font-semibold">Detalhes:</span> {r.descricao_detalhada}
+                    <div className="text-sm">
+                      <span className="font-semibold">Motivo:</span> {r.motivo ?? "Não informado"}
                     </div>
-                  )}
-                </div>
-              ))}
+                    
+                    {r.descricao_detalhada && (
+                      <div className="rounded-xl bg-muted/40 p-3 text-sm">
+                        <span className="font-semibold">Detalhes:</span> {r.descricao_detalhada}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
