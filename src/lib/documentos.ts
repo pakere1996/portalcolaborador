@@ -1,75 +1,4 @@
-/**
- * Document utilities for the Folgas Pakerê application.
- * Provides helpers for document handling, CNPJ processing, and date extraction.
- */
-
-export function getDocumentTypeLabel(tipo: string): string {
-  switch (tipo) {
-    case "contracheque":
-      return "Contracheque";
-    case "folha_ponto":
-      return "Folha de Ponto";
-    case "atestado":
-      return "Atestado";
-    case "disciplinar":
-      return "Registro Disciplinar";
-    default:
-      return tipo;
-  }
-}
-
-export function getDocumentStoragePath(
-  colaboradorId: string,
-  tipo: string,
-  ano: number,
-  mes: number
-): string {
-  return `documentos/${colaboradorId}/${tipo}/${ano}-${String(mes).padStart(2, "0")}`;
-}
-
-export function getPendingDocumentStoragePath(
-  tipo: string,
-  ano: number,
-  mes: number,
-  pageIndex: number
-): string {
-  return `documentos/pendentes/${tipo}/${ano}-${String(mes).padStart(2, "0")}-page${pageIndex}`;
-}
-
-export function cleanCNPJ(cnpj: string): string {
-  return cnpj.replace(/\D/g, "");
-}
-
-export function formatCNPJ(cnpj: string): string {
-  const clean = cleanCNPJ(cnpj);
-  return clean.replace(
-    /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
-    "$1.$2.$3/$4-$5"
-  );
-}
-
-export function validateCNPJFormat(cnpj: string): boolean {
-  return /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(cnpj);
-}
-
-export function maskCNPJ(cnpj: string | null): string {
-  if (!cnpj) return "—";
-  const clean = cleanCNPJ(cnpj);
-  if (clean.length !== 14) return cnpj;
-  return formatCNPJ(clean);
-}
-
-export function extractCNPJFromText(text: string): string | null {
-  const match = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
-  return match ? match[0] : null;
-}
-
-export function extractCNPJs(text: string): string[] {
-  const regex = /\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g;
-  return text.match(regex) || [];
-}
-
-export function extractPeriodoFromText(text: string, docType: "contracheque" | "folha_ponto"): { mes: number; ano: number } | null {
+export function extractPeriodo(text: string, docType: string): { mes: number; ano: number } | null {
   const meses: Record<string, number> = {
     janeiro: 1,
     fevereiro: 2,
@@ -92,9 +21,10 @@ export function extractPeriodoFromText(text: string, docType: "contracheque" | "
     .replace(/\f/g, " ")
     .replace(/\s+/g, " ");
 
+  // Try specific patterns first
   const matchPonto1 = normalizedText.match(/Periodo de referencia:\s*de\s*(\d{2})\/(\d{2})\/(\d{4})/i);
-  if (matchPonto1) {
-    return { mes: parseInt(matchPonto1[1]), ano: parseInt(matchPonto1[3]) };
+  if (match) {
+    return { mes: parseInt(match[1]), ano: parseInt(match[3]) };
   }
 
   const matchContracheque = normalizedText.match(/(\w+)\s+de\s+(\d{4})/i);
@@ -118,19 +48,10 @@ export function extractPeriodoFromText(text: string, docType: "contracheque" | "
     return { mes: parseInt(matchPeriodo[1]), ano: parseInt(matchPeriodo[2]) };
   }
 
-  const matchDatePattern = normalizedText.match(/(?:Referencia|Competencia|Periodo|Mes)[^\d]*(\d{2})\/(\d{4})/i);
-  if (matchDatePattern) {
-    return { mes: parseInt(matchDatePattern[1]), ano: parseInt(matchDatePattern[2]) };
-  }
-
   const matchAnyDate = normalizedText.match(/\b(0[1-9]|1[0-2])\/(\d{4})\b/);
   if (matchAnyDate) {
     return { mes: parseInt(matchAnyDate[1]), ano: parseInt(matchAnyDate[2]) };
   }
 
   return null;
-}
-
-export async function syncAdminMonthlyDocumentReminder(): Promise<void> {
-  console.log("Placeholder: syncAdminMonthlyDocumentReminder called.");
 }
