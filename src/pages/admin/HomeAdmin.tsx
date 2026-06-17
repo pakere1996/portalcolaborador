@@ -254,7 +254,7 @@ export default function AdminHomeAdminPage() {
         unidade_id: editForm.unidadeId === "" ? null : editForm.unidadeId,
         folga_fixa_semana: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa),
         dataNascimento: editForm.dataNascimento || null,
-        data_admissao: editForm.dataAdmissao || null,
+        dataAdmissao: editForm.dataAdmissao || null,
         ativo: editForm.ativo,
         updated_at: new Date().toISOString(),
       }).eq("id", editingProfile.id);
