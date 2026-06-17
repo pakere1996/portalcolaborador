@@ -253,7 +253,7 @@ export default function AdminHomeAdminPage() {
         cargo: editForm.cargo,
         unidade_id: editForm.unidadeId === "" ? null : editForm.unidadeId,
         folga_fixa_semana: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa),
-        data_nascimento: editForm.dataNascimento || null,
+        dataNascimento: editForm.dataNascimento || null,
         data_admissao: editForm.dataAdmissao || null,
         ativo: editForm.ativo,
         updated_at: new Date().toISOString(),
