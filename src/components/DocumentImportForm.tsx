@@ -257,7 +257,7 @@ console.log("================================");
           mes: periodo?.mes ?? null,
           ano: periodo?.ano ?? null,
           unidadeId: unidade?.id ?? null,
-          matchStatus: match.status,
+          matchStatus: match.status as "automatico" | "sugerido" | "revisao",
           matchedProfile: perfilVinculado,
           confidence: match.confidence,
           cargo: cargoFinalId, 
