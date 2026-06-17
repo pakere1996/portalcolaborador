@@ -7,9 +7,28 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Download, Eye, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { Documento } from "@/integrations/supabase/types";
 import { Tables } from "@/integrations/supabase/types";
 
+// Tipagem estendida e flexível para evitar quebras por pequenas variações de schema
+type Documento = Tables<'documentos'> & {
+  nome_pdf?: string | null;
+  tipo?: string | null;
+  mes?: number | string | null;
+  ano?: number | string | null;
+  storage_path?: string | null;
+};
+
+// Mapeamento dos rótulos de tipo de documento que estava ausente
+const TIPOS_DOCUMENTO: Record<string, string> = {
+  contracheque: "Contracheque",
+  folha_ponto: "Folha de Ponto",
+  outros: "Outros",
+};
+
+const getDocumentTypeLabel = (tipo: string | null | undefined) => {
+  if (!tipo) return "Documento";
+  return TIPOS_DOCUMENTO[tipo] || tipo;
+};
 
 export default function DocumentosPage() {
   const { user } = useAuth();
@@ -21,7 +40,6 @@ export default function DocumentosPage() {
 
     setLoading(true);
     try {
-      // Busca todos os documentos vinculados ao ID do usuário logado
       const { data, error } = await supabase
         .from("documentos")
         .select("*")
@@ -45,6 +63,10 @@ export default function DocumentosPage() {
   }, [loadDocuments]);
 
   const openPreview = async (doc: Documento) => {
+    if (!doc.storage_path) {
+      return toast.error("Arquivo não localizado no servidor.");
+    }
+
     try {
       const { data, error } = await supabase.storage.from("documentos").createSignedUrl(doc.storage_path, 300);
       if (error) throw error;
@@ -55,13 +77,17 @@ export default function DocumentosPage() {
   };
 
   const downloadDoc = async (doc: Documento) => {
+    if (!doc.storage_path) {
+      return toast.error("Arquivo indisponível para download.");
+    }
+
     try {
       const { data, error } = await supabase.storage.from("documentos").createSignedUrl(doc.storage_path, 300);
       if (error) throw error;
 
       const link = document.createElement("a");
       link.href = data.signedUrl;
-      link.download = doc.nome_pdf;
+      link.download = doc.nome_pdf || 'documento.pdf';
       link.target = "_blank";
       document.body.appendChild(link);
       link.click();
@@ -107,9 +133,9 @@ export default function DocumentosPage() {
                   <div className="flex items-center gap-4 min-w-0">
                     <FileText className="size-5 text-muted-foreground shrink-0" />
                     <div className="min-w-0">
-                      <div className="font-medium truncate">{doc.nome_pdf}</div>
+                      <div className="font-medium truncate">{doc.nome_pdf ?? "Documento sem nome"}</div>
                       <div className="text-sm text-muted-foreground">
-                        {getDocumentTypeLabel(doc.tipo)} - {String(doc.mes).padStart(2, "0")}/{doc.ano}
+                        {getDocumentTypeLabel(doc.tipo)} - {String(doc.mes ?? "").padStart(2, "0")}/{doc.ano ?? "----"}
                       </div>
                     </div>
                   </div>
