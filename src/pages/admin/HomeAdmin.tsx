@@ -252,7 +252,7 @@ export default function AdminHomeAdminPage() {
         whatsapp: editForm.whatsapp.trim() || null,
         cargo: editForm.cargo,
         unidadeId: editForm.unidadeId === "" ? null : editForm.unidadeId,
-        folga_fixa_semana: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa),
+        folgaFixa: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa),
         dataNascimento: editForm.dataNascimento || null,
         dataAdmissao: editForm.dataAdmissao || null,
         ativo: editForm.ativo,
