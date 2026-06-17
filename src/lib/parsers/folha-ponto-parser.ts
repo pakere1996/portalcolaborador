@@ -1,7 +1,7 @@
 import { DocumentParser, PageResult, ProfileForMatching } from "./document-parsers";
-import { PageText } from "./pdf-utils";
-import { extractCPF, findBestProfileMatch } from "./documentos-matching";
-import { extractPeriodo } from "./documentos";
+import { PageText } from "../pdf-utils";
+import { extractCPF, findBestProfileMatch } from "../documentos-matching";
+import { extractPeriodo } from "../documentos";
 
 /**
  * Parser para Folhas de Ponto.
@@ -35,11 +35,8 @@ export class FolhaPontoParser implements DocumentParser {
       const dataAdmissao = this.extractDataAdmissao(text, periodo);
 
       // 7. Matching com perfil existente
-      const match = findBestProfileMatch(nome, cpf, profiles);
+      const match = findBestProfileMatch(nome, cpf, profiles as any);
       const perfilVinculado = match.profile;
-
-      // 8. Verifica se o cargo extraído bate com algum cargo oficial
-      // (a validação contra a base de cargos será feita no componente)
 
       return {
         pageNumber: p.pageNumber,
@@ -55,7 +52,7 @@ export class FolhaPontoParser implements DocumentParser {
         suggestedCargoName: cargoTexto,
         dataAdmissao,
         matchStatus: match.status as "automatico" | "sugerido" | "revisao",
-        matchedProfile: perfilVinculado,
+        matchedProfile: perfilVinculado as any,
         confidence: match.confidence,
         vinculado: false,
         ignorado: false,
@@ -72,7 +69,6 @@ export class FolhaPontoParser implements DocumentParser {
     if (match) {
       return { mes: parseInt(match[1]), ano: parseInt(match[3]) };
     }
-    // Fallback genérico
     return extractPeriodo(text, "folha_ponto");
   }
 
@@ -86,7 +82,6 @@ export class FolhaPontoParser implements DocumentParser {
     let cargoTexto = cargoMatch ? cargoMatch[1].replace(/\u00a0/g, " ").trim() : null;
 
     if (cargoTexto) {
-      // Remove tudo após palavras-chave que indicam fim do cargo
       cargoTexto = cargoTexto.split(
         /(?:setor|dep|unidade|c\.|registro|s[eé]rie|hor[aá]rio|escala|cbo|pis|ctps|data|\s{2,})/i
       )[0].trim();
@@ -101,7 +96,6 @@ export class FolhaPontoParser implements DocumentParser {
     text: string,
     periodo: { mes: number; ano: number } | null
   ): string | null {
-    // Tenta encontrar "Admissão: DD/MM/YYYY" ou similar
     const admissaoDireto = text.match(
       /(?:admiss[ãa]o|admissao|adm)[:\s]*[^0-9/]{0,20}(\d{2})\/(\d{2})\/(\d{4})/i
     );
@@ -110,20 +104,15 @@ export class FolhaPontoParser implements DocumentParser {
       return `${admissaoDireto[3]}-${admissaoDireto[2]}-${admissaoDireto[1]}`;
     }
 
-    // Fallback: pega a data mais antiga que seja anterior ao período do documento
     const todasAsDatas = text.match(/\d{2}\/\d{2}\/\d{4}/g) || [];
     if (todasAsDatas.length > 0 && periodo) {
       const anoPeriodo = periodo.ano;
-      let dataCandidata = null;
-
-      // Procura data com ano anterior ao período
-      dataCandidata = todasAsDatas.find((d) => {
+      let dataCandidata = todasAsDatas.find((d) => {
         const anoData = parseInt(d.split("/")[2]);
         return anoData < anoPeriodo;
       });
 
       if (!dataCandidata) {
-        // Se não achou, pega a mais antiga
         const ordenadas = [...todasAsDatas].sort((a, b) => {
           const [dA, mA, aA] = a.split("/").map(Number);
           const [dB, mB, aB] = b.split("/").map(Number);

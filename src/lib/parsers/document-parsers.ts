@@ -1,4 +1,4 @@
-import { PageText } from "./pdf-utils";
+import { PageText } from "../pdf-utils";
 
 /**
  * Resultado padronizado que cada parser deve retornar por página.

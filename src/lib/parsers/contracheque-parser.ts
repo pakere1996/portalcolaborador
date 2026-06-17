@@ -1,7 +1,7 @@
 import { DocumentParser, PageResult, ProfileForMatching } from "./document-parsers";
-import { PageText } from "./pdf-utils";
-import { extractCPF, findBestProfileMatch } from "./documentos-matching";
-import { extractPeriodo } from "./documentos";
+import { PageText } from "../pdf-utils";
+import { extractCPF, findBestProfileMatch } from "../documentos-matching";
+import { extractPeriodo } from "../documentos";
 
 /**
  * Parser para Contracheques.
@@ -32,7 +32,7 @@ export class ContrachequeParser implements DocumentParser {
       const dataAdmissao = this.extractDataAdmissao(text, periodo);
 
       // 7. Matching com perfil existente
-      const match = findBestProfileMatch(nome, cpf, profiles);
+      const match = findBestProfileMatch(nome, cpf, profiles as any);
       const perfilVinculado = match.profile;
 
       return {
@@ -49,7 +49,7 @@ export class ContrachequeParser implements DocumentParser {
         suggestedCargoName: cargoTexto,
         dataAdmissao,
         matchStatus: match.status as "automatico" | "sugerido" | "revisao",
-        matchedProfile: perfilVinculado,
+        matchedProfile: perfilVinculado as any,
         confidence: match.confidence,
         vinculado: false,
         ignorado: false,
@@ -62,7 +62,6 @@ export class ContrachequeParser implements DocumentParser {
    * Padrões comuns: "Nome: JOÃO SILVA" ou "Colaborador: JOÃO SILVA"
    */
   private extractNome(text: string): string | null {
-    // Tenta vários padrões comuns em contracheques
     const patterns = [
       /Nome\s*[:]\s*([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+)/i,
       /Colaborador\s*[:]\s*([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+)/i,
@@ -77,7 +76,6 @@ export class ContrachequeParser implements DocumentParser {
       }
     }
 
-    // Fallback: tenta pegar nome após CPF
     const cpfMatch = text.match(/\d{3}\.\d{3}\.\d{3}-\d{2}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]{5,})/i);
     if (cpfMatch) {
       return cpfMatch[1].trim().replace(/\s+/g, " ");
@@ -88,7 +86,6 @@ export class ContrachequeParser implements DocumentParser {
 
   /**
    * Extrai período (competência) no contracheque
-   * Padrões: "Janeiro de 2024", "Competência: 01/2024", "Referência: 01/2024"
    */
   private extractPeriodoContracheque(text: string): { mes: number; ano: number } | null {
     const meses: Record<string, number> = {
@@ -96,21 +93,18 @@ export class ContrachequeParser implements DocumentParser {
       julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
     };
 
-    // Padrão 1: "Mês de Ano" (ex: "Janeiro de 2024")
     const regexMesAno = /\b(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})\b/i;
     let match = text.match(regexMesAno);
     if (match) {
       return { mes: meses[match[1].toLowerCase()], ano: parseInt(match[2]) };
     }
 
-    // Padrão 2: "Competência: MM/YYYY" ou "Referência: MM/YYYY"
     const regexCompetencia = /(?:Compet[eê]ncia|Refer[eê]ncia|Per[ií]odo)[:\s]*(\d{2})\/(\d{4})/i;
     match = text.match(regexCompetencia);
     if (match) {
       return { mes: parseInt(match[1]), ano: parseInt(match[2]) };
     }
 
-    // Fallback genérico
     return extractPeriodo(text, "contracheque");
   }
 
@@ -128,7 +122,6 @@ export class ContrachequeParser implements DocumentParser {
       const match = text.match(pattern);
       if (match) {
         let cargo = match[1].replace(/\u00a0/g, " ").trim();
-        // Limpa sufixos comuns
         cargo = cargo.split(/(?:\s{2,}|\n|$)/)[0].trim();
         return cargo;
       }
@@ -144,7 +137,6 @@ export class ContrachequeParser implements DocumentParser {
     text: string,
     periodo: { mes: number; ano: number } | null
   ): string | null {
-    // Padrões comuns: "Admissão: DD/MM/YYYY", "Data Admissão: DD/MM/YYYY"
     const patterns = [
       /(?:Admiss[ãa]o|Data\s+Admiss[ãa]o|Adm)[:\s]*(\d{2})\/(\d{2})\/(\d{4})/i,
       /Ingresso\s*[:]\s*(\d{2})\/(\d{2})\/(\d{4})/i,
@@ -157,13 +149,10 @@ export class ContrachequeParser implements DocumentParser {
       }
     }
 
-    // Fallback similar ao da folha de ponto
     const todasAsDatas = text.match(/\d{2}\/\d{2}\/\d{4}/g) || [];
     if (todasAsDatas.length > 0 && periodo) {
       const anoPeriodo = periodo.ano;
-      let dataCandidata = null;
-
-      dataCandidata = todasAsDatas.find((d) => {
+      let dataCandidata = todasAsDatas.find((d) => {
         const anoData = parseInt(d.split("/")[2]);
         return anoData < anoPeriodo;
       });
