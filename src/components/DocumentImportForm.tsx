@@ -453,7 +453,7 @@ toast.success(
 
 // limpa estados pendentes
 setSuggestedProfile(null);
-setNovoColabForm(null);
+setNovoColabForm({ nome: "", cpf: "", cargo: "", unidadeId: "", senha: "", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", whatsapp: "", perfil_acesso: "colaborador", matricula: "" });
 setShowNovoColab(false);
 
 toast.success("Documento vinculado com sucesso!");
