@@ -74,27 +74,42 @@ export function DocumentImportForm() {
   const documentType = window.location.pathname.includes("ponto") ? "folha_ponto" : "contracheque";
 
   const loadData = useCallback(async () => {
+    console.log("--- INICIANDO AUDITORIA DE CARREGAMENTO ---");
+
+    // 1. Consulta mínima de teste
+    const testRes = await supabase.from("profiles").select("*").limit(1);
+    console.log("TESTE MINIMO (select * limit 1):", {
+      error: testRes.error,
+      data: testRes.data,
+      columns: testRes.data?.[0] ? Object.keys(testRes.data[0]) : "Nenhum dado retornado"
+    });
+
+    // 2. Consulta principal com logs de erro detalhados
+    // Removi 'regime_trabalho' temporariamente para validar se é a causa do 400
     const [pRes, uRes, cRes] = await Promise.all([
-      supabase.from("profiles").select("id, nome, cpf, matricula, cargo, unidade_id, regime_trabalho").eq("ativo", true).order("nome"),
+      supabase.from("profiles").select("id, nome, cpf, matricula, cargo, unidade_id, ativo").eq("ativo", true).order("nome"),
       supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome"),
       supabase.from("cargos").select("id, nome").order("nome")
     ]);
     
-    // DIAGNÓSTICO 1: Verificar carregamento de colaboradores
-    console.log("TOTAL PROFILES:", pRes.data?.length ?? 0);
-    console.log(
-      "PRIMEIROS 5 PROFILES:",
-      (pRes.data ?? []).slice(0, 5).map(p => ({
-        id: p.id,
-        nome: p.nome,
-        unidade_id: p.unidade_id,
-        unidadeId: p.unidadeId
-      }))
-    );
+    console.log("PROFILE ERROR:", pRes.error);
+    console.log("PROFILE DATA:", pRes.data);
     
-    setProfiles(pRes.data ?? []);
+    if (pRes.error) {
+      console.error("ERRO 400 DETECTADO. Provável coluna inexistente na query.");
+      // Tenta carregar apenas o básico se falhar
+      const fallbackRes = await supabase.from("profiles").select("id, nome, cpf").eq("ativo", true).limit(100);
+      console.log("FALLBACK RESULT:", fallbackRes.data?.length ?? 0, "registros");
+      if (fallbackRes.data) setProfiles(fallbackRes.data);
+    } else {
+      setProfiles(pRes.data ?? []);
+    }
+
     setUnidades(uRes.data ?? []);
     setListaCargos(cRes.data ?? []);
+    
+    console.log("TOTAL PROFILES CARREGADOS:", pRes.data?.length ?? 0);
+    console.log("--- FIM DA AUDITORIA ---");
   }, []);
 
   useEffect(() => {
@@ -162,12 +177,6 @@ export function DocumentImportForm() {
     try {
       const pages = await extractTextFromPDF(selectedFile);
       
-      // DIAGNÓSTICO 3: Verificar texto bruto real (página 1)
-      if (pages.length > 0) {
-        console.log("TEXTO BRUTO PÁGINA 1 (JSON):", JSON.stringify(pages[0].text));
-        console.log("TEXTO BRUTO PÁGINA 1 (RAW):", pages[0].text);
-      }
-      
       const parser = documentType === "folha_ponto" ? new FolhaPontoParser() : new ContrachequeParser();
       const results = parser.parse(pages, profiles);
 
@@ -234,7 +243,6 @@ export function DocumentImportForm() {
         matricula: newColabForm.matricula.trim() || null,
         whatsapp: newColabForm.whatsapp.trim() || null,
         unidade_id: newColabForm.unidadeId === "none" ? null : newColabForm.unidadeId,
-        regime_trabalho: newColabForm.regime_trabalho === "none" ? null : newColabForm.regime_trabalho,
         ativo: true,
       }).eq("id", authUser.userId);
 
@@ -266,11 +274,8 @@ export function DocumentImportForm() {
     setShowNewColab(true);
   };
 
-  // DIAGNÓSTICO 2: Verificar filtragem da unidade
   const current = pageResults[currentPage];
   const unidadeId = current?.unidadeId;
-  
-  console.log("UNIDADE DETECTADA:", unidadeId);
   
   const colaboradoresFiltrados = profiles.filter(p => {
     const term = searchTerm.toLowerCase();
@@ -278,22 +283,12 @@ export function DocumentImportForm() {
                          (p.cpf && p.cpf.includes(searchTerm.replace(/\D/g, ""))) ||
                          (p.matricula && p.matricula.includes(term));
     
-    // Filtro por unidade se detectada
     if (unidadeId && p.unidade_id !== unidadeId) {
       return false;
     }
     
     return matchesSearch;
   });
-  
-  console.log("COLABORADORES FILTRADOS:", colaboradoresFiltrados.length);
-  console.log("DETALHE FILTRADOS:", colaboradoresFiltrados.map(p => ({ nome: p.nome, unidade_id: p.unidade_id })));
-
-  // Logs de auditoria solicitados
-  if (pageResults.length > 0) {
-    console.log("UNIDADE DETECTADA NA PÁGINA:", current?.unidadeId);
-    console.log("COLABORADORES FILTRADOS (Busca):", colaboradoresFiltrados.length);
-  }
 
   if (pageResults.length === 0) {
     return (
