@@ -81,7 +81,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   ];
 
   const adminDocsNav: NavItem[] = [
-    { to: "/admin/documentos", label: "Contracheques", icon: FileText, end: true },
+    { to: "/admin/documentos/contracheque", label: "Contracheques", icon: FileText, end: true },
     { to: "/admin/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
     { to: "/admin/documentos/atestados", label: "Atestados", icon: FileWarning },
     { to: "/admin/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },

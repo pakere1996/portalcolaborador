@@ -22,9 +22,9 @@ import Solicitacoes from "./pages/admin/Solicitacoes";
 import Aprovacoes from "./pages/admin/Aprovacoes";
 import TrocasAdmin from "./pages/admin/Trocas";
 import Bloqueios from "./pages/admin/Bloqueios";
-import DocumentosAdmin from "./pages/admin/Documentos";
+import DocumentosHub from "./pages/admin/Documentos";
 import DocumentosContracheque from "./pages/admin/DocumentosContracheque";
-import DocumentosPonto from "./pages/admin/DocumentosPonto";
+import DocumentosPontoAdmin from "./pages/admin/DocumentosPontoAdmin";
 import DocumentosAtestadosAdmin from "./pages/admin/DocumentosAtestadosAdmin";
 import DocumentosDisciplinar from "./pages/admin/DocumentosDisciplinar";
 import SetupAdmin from "./pages/SetupAdmin";
@@ -76,9 +76,9 @@ function AuthenticatedRoutes() {
             <Route path="/admin/bloqueios" element={<Bloqueios />} />
 
             {/* Documentos Group */}
-            <Route path="/admin/documentos" element={<DocumentosAdmin />} />
+            <Route path="/admin/documentos" element={<DocumentosHub />} />
             <Route path="/admin/documentos/contracheque" element={<DocumentosContracheque />} />
-            <Route path="/admin/documentos/ponto" element={<DocumentosPonto />} />
+            <Route path="/admin/documentos/ponto" element={<DocumentosPontoAdmin />} />
             <Route path="/admin/documentos/atestados" element={<DocumentosAtestadosAdmin />} />
             <Route path="/admin/documentos/disciplinar" element={<DocumentosDisciplinar />} />
             
