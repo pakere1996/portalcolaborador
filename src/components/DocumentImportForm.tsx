@@ -80,7 +80,18 @@ export function DocumentImportForm() {
       supabase.from("cargos").select("id, nome").order("nome")
     ]);
     
-    console.log("PROFILES CARREGADOS:", pRes.data?.length || 0);
+    // DIAGNÓSTICO 1: Verificar carregamento de colaboradores
+    console.log("TOTAL PROFILES:", pRes.data?.length ?? 0);
+    console.log(
+      "PRIMEIROS 5 PROFILES:",
+      (pRes.data ?? []).slice(0, 5).map(p => ({
+        id: p.id,
+        nome: p.nome,
+        unidade_id: p.unidade_id,
+        unidadeId: p.unidadeId
+      }))
+    );
+    
     setProfiles(pRes.data ?? []);
     setUnidades(uRes.data ?? []);
     setListaCargos(cRes.data ?? []);
@@ -150,6 +161,13 @@ export function DocumentImportForm() {
     setIsProcessing(true);
     try {
       const pages = await extractTextFromPDF(selectedFile);
+      
+      // DIAGNÓSTICO 3: Verificar texto bruto real (página 1)
+      if (pages.length > 0) {
+        console.log("TEXTO BRUTO PÁGINA 1 (JSON):", JSON.stringify(pages[0].text));
+        console.log("TEXTO BRUTO PÁGINA 1 (RAW):", pages[0].text);
+      }
+      
       const parser = documentType === "folha_ponto" ? new FolhaPontoParser() : new ContrachequeParser();
       const results = parser.parse(pages, profiles);
 
@@ -248,21 +266,33 @@ export function DocumentImportForm() {
     setShowNewColab(true);
   };
 
-  // 8. CORRIGINDO BUSCA MANUAL (Objetivo 8)
+  // DIAGNÓSTICO 2: Verificar filtragem da unidade
   const current = pageResults[currentPage];
-  const filteredProfiles = profiles.filter(p => {
+  const unidadeId = current?.unidadeId;
+  
+  console.log("UNIDADE DETECTADA:", unidadeId);
+  
+  const colaboradoresFiltrados = profiles.filter(p => {
     const term = searchTerm.toLowerCase();
     const matchesSearch = p.nome.toLowerCase().includes(term) || 
                          (p.cpf && p.cpf.includes(searchTerm.replace(/\D/g, ""))) ||
                          (p.matricula && p.matricula.includes(term));
     
+    // Filtro por unidade se detectada
+    if (unidadeId && p.unidade_id !== unidadeId) {
+      return false;
+    }
+    
     return matchesSearch;
   });
+  
+  console.log("COLABORADORES FILTRADOS:", colaboradoresFiltrados.length);
+  console.log("DETALHE FILTRADOS:", colaboradoresFiltrados.map(p => ({ nome: p.nome, unidade_id: p.unidade_id })));
 
   // Logs de auditoria solicitados
   if (pageResults.length > 0) {
     console.log("UNIDADE DETECTADA NA PÁGINA:", current?.unidadeId);
-    console.log("COLABORADORES FILTRADOS (Busca):", filteredProfiles.length);
+    console.log("COLABORADORES FILTRADOS (Busca):", colaboradoresFiltrados.length);
   }
 
   if (pageResults.length === 0) {
@@ -440,10 +470,10 @@ export function DocumentImportForm() {
             />
           </div>
           <div className="max-h-[300px] overflow-y-auto border rounded-xl divide-y divide-border">
-            {filteredProfiles.length === 0 ? (
+            {colaboradoresFiltrados.length === 0 ? (
               <div className="p-8 text-center text-sm text-muted-foreground">Nenhum colaborador encontrado.</div>
             ) : (
-              filteredProfiles.map(p => (
+              colaboradoresFiltrados.map(p => (
                 <button 
                   key={p.id} 
                   className="w-full text-left p-3 hover:bg-muted transition-colors flex items-center justify-between group"
