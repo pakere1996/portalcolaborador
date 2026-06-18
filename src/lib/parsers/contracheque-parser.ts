@@ -1,37 +1,20 @@
-import { DocumentParser, PageResult, ProfileForMatching } from "./document-parsers";
-import { PageText } from "../pdf-utils";
+import type { DocumentParser, PageResult, ProfileForMatching } from "./document-parsers";
+import type { PageText } from "../pdf-utils";
 import { extractCPF, findBestProfileMatch } from "../documentos-matching";
 import { extractPeriodo } from "../documentos";
 
-/**
- * Parser para Contracheques.
- * Extrai: nome, CPF, período (mês/ano - competência), CNPJ/unidade, cargo, data de admissão.
- */
 export class ContrachequeParser implements DocumentParser {
   parse(pages: PageText[], profiles: ProfileForMatching[]): PageResult[] {
     return pages.map((p) => {
       const text = p.text;
 
-      // 1. Nome do colaborador (padrão específico de contracheque)
       const nome = this.extractNome(text);
-
-      // 2. CPF
       const cpf = extractCPF(text);
-
-      // 3. Período (competência) - usa regex específica de contracheque
       const periodo = this.extractPeriodoContracheque(text);
-
-      // 4. CNPJ da unidade
       const cnpjMatch = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
       const cnpj = cnpjMatch ? cnpjMatch[0] : null;
-
-      // 5. Cargo
       const cargoTexto = this.extractCargo(text);
-
-      // 6. Data de admissão
       const dataAdmissao = this.extractDataAdmissao(text, periodo);
-
-      // 7. Matching com perfil existente
       const match = findBestProfileMatch(nome, cpf, profiles as any);
       const perfilVinculado = match.profile;
 
@@ -43,8 +26,8 @@ export class ContrachequeParser implements DocumentParser {
         cnpj,
         mes: periodo?.mes ?? null,
         ano: periodo?.ano ?? null,
-        unidadeId: null, // será preenchido no componente via CNPJ
-        cargo: null,     // será preenchido no componente via matching de cargo
+        unidadeId: null,
+        cargo: null,
         isNewCargo: false,
         suggestedCargoName: cargoTexto,
         dataAdmissao,
@@ -57,10 +40,6 @@ export class ContrachequeParser implements DocumentParser {
     });
   }
 
-  /**
-   * Extrai nome do colaborador no contracheque
-   * Padrões comuns: "Nome: JOÃO SILVA" ou "Colaborador: JOÃO SILVA"
-   */
   private extractNome(text: string): string | null {
     const patterns = [
       /Nome\s*[:]\s*([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+)/i,
@@ -84,9 +63,6 @@ export class ContrachequeParser implements DocumentParser {
     return null;
   }
 
-  /**
-   * Extrai período (competência) no contracheque
-   */
   private extractPeriodoContracheque(text: string): { mes: number; ano: number } | null {
     const meses: Record<string, number> = {
       janeiro: 1, fevereiro: 2, março: 3, abril: 4, maio: 5, junho: 6,
@@ -108,9 +84,6 @@ export class ContrachequeParser implements DocumentParser {
     return extractPeriodo(text, "contracheque");
   }
 
-  /**
-   * Extrai cargo/função do contracheque
-   */
   private extractCargo(text: string): string | null {
     const patterns = [
       /Cargo\s*[:]\s*([A-Za-zÀ-ÿÇç\u00a0\s\./-]+)/i,
@@ -130,9 +103,6 @@ export class ContrachequeParser implements DocumentParser {
     return null;
   }
 
-  /**
-   * Extrai data de admissão do contracheque
-   */
   private extractDataAdmissao(
     text: string,
     periodo: { mes: number; ano: number } | null

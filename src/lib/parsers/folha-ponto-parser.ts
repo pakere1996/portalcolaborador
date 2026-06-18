@@ -1,40 +1,24 @@
-import { DocumentParser, PageResult, ProfileForMatching } from "./document-parsers";
-import { PageText } from "../pdf-utils";
+import type { DocumentParser, PageResult, ProfileForMatching } from "./document-parsers";
+import type { PageText } from "../pdf-utils";
 import { extractCPF, findBestProfileMatch } from "../documentos-matching";
 import { extractPeriodo } from "../documentos";
 
-/**
- * Parser para Folhas de Ponto.
- * Extrai: nome, CPF, período (mês/ano), CNPJ/unidade, cargo, data de admissão.
- */
 export class FolhaPontoParser implements DocumentParser {
   parse(pages: PageText[], profiles: ProfileForMatching[]): PageResult[] {
     return pages.map((p) => {
       const text = p.text;
 
-      // 1. Nome do colaborador (padrão específico da folha de ponto)
       const nameMatch = text.match(
         /\d{2}\/\d{2}\/\d{4}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+?)\s+\d+\s+[A-Z]/
       );
       const nome = nameMatch ? nameMatch[1].trim().replace(/\s+/g, " ") : null;
 
-      // 2. CPF
       const cpf = extractCPF(text);
-
-      // 3. Período (mês/ano) - usa regex específica de folha de ponto
       const periodo = this.extractPeriodoPonto(text);
-
-      // 4. CNPJ da unidade
       const cnpjMatch = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
       const cnpj = cnpjMatch ? cnpjMatch[0] : null;
-
-      // 5. Cargo (tentativa de extração)
       const cargoTexto = this.extractCargo(text);
-
-      // 6. Data de admissão
       const dataAdmissao = this.extractDataAdmissao(text, periodo);
-
-      // 7. Matching com perfil existente
       const match = findBestProfileMatch(nome, cpf, profiles as any);
       const perfilVinculado = match.profile;
 
@@ -46,8 +30,8 @@ export class FolhaPontoParser implements DocumentParser {
         cnpj,
         mes: periodo?.mes ?? null,
         ano: periodo?.ano ?? null,
-        unidadeId: null, // será preenchido no componente via CNPJ
-        cargo: null,     // será preenchido no componente via matching de cargo
+        unidadeId: null,
+        cargo: null,
         isNewCargo: false,
         suggestedCargoName: cargoTexto,
         dataAdmissao,
@@ -60,9 +44,6 @@ export class FolhaPontoParser implements DocumentParser {
     });
   }
 
-  /**
-   * Extrai período no formato "Período de referência: de DD/MM/YYYY a DD/MM/YYYY"
-   */
   private extractPeriodoPonto(text: string): { mes: number; ano: number } | null {
     const regex = /Periodo de referencia:\s*de\s*(\d{2})\/(\d{2})\/(\d{4})/i;
     const match = text.match(regex);
@@ -72,9 +53,6 @@ export class FolhaPontoParser implements DocumentParser {
     return extractPeriodo(text, "folha_ponto");
   }
 
-  /**
-   * Extrai cargo/função do texto da folha de ponto
-   */
   private extractCargo(text: string): string | null {
     const cargoMatch = text.match(
       /(?:cargo|fun[çc][ãa]o|cargo\/fun[çc][ãa]o)[:\s-]*([A-Za-zÀ-ÿÇç\u00a0\s\./-]+)/i
@@ -87,11 +65,8 @@ export class FolhaPontoParser implements DocumentParser {
       )[0].trim();
     }
     return cargoTexto;
-  };
+  }
 
-  /**
-   * Extrai data de admissão do texto
-   */
   private extractDataAdmissao(
     text: string,
     periodo: { mes: number; ano: number } | null
