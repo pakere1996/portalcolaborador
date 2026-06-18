@@ -1,4 +1,3 @@
-CPF > Nome">
 import { Profile } from "@/integrations/supabase/types";
 
 export interface ProfileForMatching {
