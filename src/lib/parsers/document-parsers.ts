@@ -14,6 +14,7 @@ export interface PageResult {
   ano: number | null;
   unidadeId: string | null;
   cargo: string | null;
+  regimeTrabalho: "Horista" | "Mensalista" | null;
   isNewCargo: boolean;
   suggestedCargoName: string | null;
   dataAdmissao: string | null;
@@ -34,6 +35,7 @@ export interface ProfileForMatching {
   matricula: string | null;
   cargo: string | null;
   unidade_id: string | null;
+  regime_trabalho: string | null;
 }
 
 /**

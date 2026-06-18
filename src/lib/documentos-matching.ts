@@ -5,6 +5,7 @@ export interface ProfileForMatching {
   nome: string;
   cpf: string;
   matricula: string | null;
+  regime_trabalho?: string | null;
 }
 
 export interface MatchResult {
@@ -23,6 +24,7 @@ function normalizeText(text: string): string {
 }
 
 export function extractCPF(text: string): string | null {
+  // Suporta 000.000.000-00 ou 00000000000
   const formattedMatch = text.match(/\d{3}\.\d{3}\.\d{3}-\d{2}/);
   if (formattedMatch) return formattedMatch[0];
 
@@ -64,10 +66,12 @@ function calculateNameSimilarity(nomePdf: string, nomeBanco: string): number {
 export function findBestProfileMatch(
   nomePDF: string | null,
   cpfPDF: string | null,
-  profiles: Profile[]
+  profiles: Profile[],
+  matriculaPDF: string | null = null
 ): MatchResult {
   const cpfLimpo = cpfPDF?.replace(/\D/g, "") || "";
   const nomeNormalizado = nomePDF ? normalizeText(nomePDF) : "";
+  const matriculaLimpa = matriculaPDF?.trim() || "";
 
   // 1. CPF EXATO (Prioridade Máxima)
   if (cpfLimpo.length === 11) {
@@ -77,7 +81,15 @@ export function findBestProfileMatch(
     }
   }
 
-  // 2. Busca por similaridade (CPF próximo + Nome compatível)
+  // 2. MATRÍCULA EXATA (Segunda Prioridade)
+  if (matriculaLimpa) {
+    const matriculaExata = profiles.find(p => p.matricula === matriculaLimpa);
+    if (matriculaExata) {
+      return { profile: matriculaExata, matchBy: "matricula", confidence: 1, status: "automatico" };
+    }
+  }
+
+  // 3. Busca por similaridade (CPF próximo + Nome compatível)
   let melhorPerfil: Profile | null = null;
   let maiorConfianca = 0;
   let matchTipo = "novo";

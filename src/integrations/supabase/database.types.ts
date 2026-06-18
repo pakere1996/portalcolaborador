@@ -25,6 +25,7 @@ export interface Database {
           email_contato: string | null
           whatsapp: string | null
           endereco: string | null
+          regime_trabalho: string | null
           updated_at: string | null
           created_at: string | null
         }
@@ -43,6 +44,7 @@ export interface Database {
           email_contato?: string | null
           whatsapp?: string | null
           endereco?: string | null
+          regime_trabalho?: string | null
           updated_at?: string | null
           created_at?: string | null
         }
@@ -61,6 +63,7 @@ export interface Database {
           email_contato?: string | null
           whatsapp?: string | null
           endereco?: string | null
+          regime_trabalho?: string | null
           updated_at?: string | null
           created_at?: string | null
         }
@@ -143,30 +146,30 @@ export interface Database {
       folgas: {
         Row: {
           id: string
-          colaborador_id: string
+          user_id: string
           data: string
-          status: string
-          tipo: string | null
+          mes: string
+          tipo: string
+          criado_por: string | null
           created_at: string | null
-          updated_at: string | null
         }
         Insert: {
           id?: string
-          colaborador_id: string
+          user_id: string
           data: string
-          status?: string
-          tipo?: string | null
+          mes: string
+          tipo: string
+          criado_por?: string | null
           created_at?: string | null
-          updated_at?: string | null
         }
         Update: {
           id?: string
-          colaborador_id?: string
+          user_id?: string
           data?: string
-          status?: string
-          tipo?: string | null
+          mes?: string
+          tipo?: string
+          criado_por?: string | null
           created_at?: string | null
-          updated_at?: string | null
         }
       }
       documentos: {
@@ -303,8 +306,8 @@ export interface Database {
           id: string
           user_id: string
           titulo: string
-          mensagem: string
-          tipo: string | null
+          mensagem: string | null
+          tipo: string
           lida: boolean
           link: string | null
           created_at: string | null
@@ -313,8 +316,8 @@ export interface Database {
           id?: string
           user_id: string
           titulo: string
-          mensagem: string
-          tipo?: string | null
+          mensagem?: string | null
+          tipo: string
           lida?: boolean
           link?: string | null
           created_at?: string | null
@@ -323,8 +326,8 @@ export interface Database {
           id?: string
           user_id?: string
           titulo?: string
-          mensagem?: string
-          tipo?: string | null
+          mensagem?: string | null
+          tipo?: string
           lida?: boolean
           link?: string | null
           created_at?: string | null
@@ -334,195 +337,274 @@ export interface Database {
         Row: {
           id: string
           solicitante_id: string
-          receptor_id: string
-          data_solicitante: string
-          data_receptor: string
+          destinatario_id: string | null
+          data_solicitante: string | null
+          data_destinatario: string
           status: string
+          mensagem: string | null
           created_at: string | null
           updated_at: string | null
+          respondido_em: string | null
         }
         Insert: {
           id?: string
           solicitante_id: string
-          receptor_id: string
-          data_solicitante: string
-          data_receptor: string
+          destinatario_id?: string | null
+          data_solicitante?: string | null
+          data_destinatario: string
           status?: string
+          mensagem?: string | null
           created_at?: string | null
           updated_at?: string | null
+          respondido_em?: string | null
         }
         Update: {
           id?: string
           solicitante_id?: string
-          receptor_id?: string
-          data_solicitante?: string
-          data_receptor?: string
+          destinatario_id?: string | null
+          data_solicitante?: string | null
+          data_destinatario?: string
           status?: string
+          mensagem?: string | null
           created_at?: string | null
           updated_at?: string | null
+          respondido_em?: string | null
         }
       }
       solicitacoes_especiais: {
         Row: {
           id: string
-          colaborador_id: string
+          user_id: string
           data: string
-          motivo: string | null
+          motivo: string
           status: string
+          resposta_admin: string | null
+          respondido_por: string | null
+          respondido_em: string | null
           created_at: string | null
-          updated_at: string | null
         }
         Insert: {
           id?: string
-          colaborador_id: string
+          user_id: string
           data: string
-          motivo?: string | null
+          motivo: string
           status?: string
+          resposta_admin?: string | null
+          respondido_por?: string | null
+          respondido_em?: string | null
           created_at?: string | null
-          updated_at?: string | null
         }
         Update: {
           id?: string
-          colaborador_id?: string
+          user_id?: string
           data?: string
-          motivo?: string | null
+          motivo?: string
           status?: string
+          resposta_admin?: string | null
+          respondido_por?: string | null
+          respondido_em?: string | null
           created_at?: string | null
-          updated_at?: string | null
         }
       }
       dia_config: {
         Row: {
-          id: string
           data: string
           limite_colaboradores: number
-          created_at: string | null
+          observacao: string | null
+          created_at: string
+          updated_at: string
         }
         Insert: {
-          id?: string
           data: string
-          limite_colaboradores: number
-          created_at?: string | null
+          limite_colaboradores?: number
+          observacao?: string | null
+          created_at?: string
+          updated_at?: string
         }
         Update: {
-          id?: string
           data?: string
           limite_colaboradores?: number
-          created_at?: string | null
+          observacao?: string | null
+          created_at?: string
+          updated_at?: string
         }
       }
       bloqueio_regras: {
         Row: {
           id: string
+          descricao: string
           tipo: string
-          descricao: string | null
-          ativo: boolean
           mes: number | null
           dia: number | null
-          dia_semana: number | null
           ordinal: number | null
-          created_at: string | null
+          dia_semana: number | null
+          ativo: boolean
+          created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
+          descricao: string
           tipo: string
-          descricao?: string | null
-          ativo?: boolean
           mes?: number | null
           dia?: number | null
-          dia_semana?: number | null
           ordinal?: number | null
-          created_at?: string | null
+          dia_semana?: number | null
+          ativo?: boolean
+          created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
+          descricao?: string
           tipo?: string
-          descricao?: string | null
-          ativo?: boolean
           mes?: number | null
           dia?: number | null
-          dia_semana?: number | null
           ordinal?: number | null
-          created_at?: string | null
+          dia_semana?: number | null
+          ativo?: boolean
+          created_at?: string
+          updated_at?: string
         }
       }
       datas_bloqueadas: {
         Row: {
           id: string
           data: string
-          motivo: string | null
+          motivo: string
+          auto: boolean
           liberada: boolean
-          auto: boolean | null
-          created_at: string | null
+          created_at: string
         }
         Insert: {
-          id: string
+          id?: string
           data: string
-          motivo: string | null
-          liberada: boolean
-          auto: boolean | null
-          created_at: string | null
+          motivo: string
+          auto?: boolean
+          liberada?: boolean
+          created_at?: string
         }
         Update: {
-          id: string
-          data: string
-          motivo: string | null
-          liberada: boolean
-          auto: boolean | null
-          created_at: string | null
+          id?: string
+          data?: string
+          motivo?: string
+          auto?: boolean
+          liberada?: boolean
+          created_at?: string
         }
       }
       prioridade_aniversario: {
         Row: {
           id: string
-          colaborador_id: string
+          user_id: string
           data: string
           status: string
-          created_at: string | null
+          created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
-          colaborador_id: string
+          user_id: string
           data: string
           status?: string
-          created_at?: string | null
+          created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
-          colaborador_id?: string
+          user_id?: string
           data?: string
           status?: string
-          created_at?: string | null
+          created_at?: string
+          updated_at?: string
         }
       }
       suggested_profiles: {
         Row: {
           id: string
-          nome: string
-          cpf: string | null
-          created_at: string | null
+          document_id: string
+          extracted_data: Json
+          status: string
+          created_at: string
         }
         Insert: {
           id?: string
-          nome: string
-          cpf?: string | null
-          created_at?: string | null
+          document_id: string
+          extracted_data: Json
+          status?: string
+          created_at?: string
         }
         Update: {
           id?: string
-          nome?: string
-          cpf?: string | null
+          document_id?: string
+          extracted_data?: Json
+          status?: string
+          created_at?: string
+        }
+      }
+      documentos_importacao: {
+        Row: {
+          id: string
+          nome_arquivo: string
+          tamanho_bytes: number
+          caminho_arquivo: string
+          importado_por: string
+          status: string
+          data_importacao: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          nome_arquivo: string
+          tamanho_bytes: number
+          caminho_arquivo: string
+          importado_por: string
+          status?: string
+          data_importacao?: string | null
           created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          nome_arquivo?: string
+          tamanho_bytes?: number
+          caminho_arquivo?: string
+          importado_por?: string
+          status?: string
+          data_importacao?: string | null
+          created_at?: string | null
+          updated_at?: string | null
         }
       }
     }
     Views: {
-      [_ in never]: never
+      v_trocas_disponiveis: {
+        Row: {
+          id: string | null
+          data_destinatario: string | null
+          mensagem: string | null
+          status: string | null
+          created_at: string | null
+        }
+      }
     }
     Functions: {
       check_is_admin: {
         Args: { user_id: string }
         Returns: boolean
+      }
+      is_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+      has_any_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+      gerar_bloqueios_ano: {
+        Args: { _ano: number }
+        Returns: number
       }
     }
     Enums: {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
@@ -23,13 +23,17 @@ import {
   ChevronRight, 
   UserPlus,
   Search,
-  Check
+  Check,
+  Building,
+  Briefcase,
+  Clock
 } from "lucide-react";
 import { extractTextFromPDF } from "@/lib/pdf-utils";
 import { FolhaPontoParser, ContrachequeParser, PageResult } from "@/lib/parsers";
-import { cn } from "@/lib/utils";
+import { cn, cleanCNPJ } from "@/lib/utils";
 import { PDFDocument } from "pdf-lib";
 import { adminApi } from "@/lib/admin-api";
+import { ColaboradorFormDialog } from "./ColaboradorFormDialog";
 
 interface Unidade {
   id: string;
@@ -42,6 +46,15 @@ interface Cargo {
   nome: string;
 }
 
+const blankColabForm = {
+  nome: "", cpf: "", matricula: "", email: "", whatsapp: "",
+  cargo: "", unidadeId: "none", folgaFixa: "none",
+  dataAdmissao: "", dataNascimento: "", perfil_acesso: "colaborador",
+  regime_trabalho: "none",
+  ativo: true,
+  senha: "",
+};
+
 export function DocumentImportForm() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -52,37 +65,29 @@ export function DocumentImportForm() {
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [listaCargos, setListaCargos] = useState<Cargo[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [manualProfileId, setManualProfileId] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [showNewColab, setShowNewColab] = useState(false);
+  const [newColabForm, setNewColabForm] = useState(blankColabForm);
+  const [busyNewColab, setBusyNewColab] = useState(false);
   const { user } = useAuth();
 
   const documentType = window.location.pathname.includes("ponto") ? "folha_ponto" : "contracheque";
 
-  useEffect(() => {
-    if (!user) return;
+  const loadData = useCallback(async () => {
+    const [pRes, uRes, cRes] = await Promise.all([
+      supabase.from("profiles").select("id, nome, cpf, matricula, cargo, unidade_id, regime_trabalho").eq("ativo", true).order("nome"),
+      supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome"),
+      supabase.from("cargos").select("id, nome").order("nome")
+    ]);
     
-    const loadData = async () => {
-      const [pRes, uRes, cRes] = await Promise.all([
-        supabase.from("profiles").select("id, nome, cpf, matricula, cargo, unidade_id").eq("ativo", true).order("nome"),
-        supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome"),
-        supabase.from("cargos").select("id, nome").order("nome")
-      ]);
-      
-      setProfiles(pRes.data ?? []);
-      setUnidades(uRes.data ?? []);
-      setListaCargos(cRes.data ?? []);
-    };
+    setProfiles(pRes.data ?? []);
+    setUnidades(uRes.data ?? []);
+    setListaCargos(cRes.data ?? []);
+  }, []);
 
-    loadData();
-  }, [user?.id]);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setSelectedFile(file);
-    setPageResults([]);
-    setCurrentPage(0);
-  };
+  useEffect(() => {
+    if (user) loadData();
+  }, [user?.id, loadData]);
 
   const extractPageAsBlob = async (file: File, pageIndex: number): Promise<Blob> => {
     const arrayBuffer = await file.arrayBuffer();
@@ -94,9 +99,9 @@ export function DocumentImportForm() {
     return new Blob([pdfBytes], { type: "application/pdf" });
   };
 
-  const handleVinculo = async (profileId: string, result: PageResult) => {
+  const handleVinculo = async (profileId: string, result: PageResult, silent = false) => {
     if (!selectedFile || isUploading) return;
-    setIsUploading(true);
+    if (!silent) setIsUploading(true);
 
     try {
       const pageBlob = await extractPageAsBlob(selectedFile, result.pageNumber - 1);
@@ -121,18 +126,21 @@ export function DocumentImportForm() {
 
       if (dbError) throw dbError;
 
-      setPageResults(prev => prev.map((r, idx) => 
-        idx === currentPage ? { ...r, vinculado: true, matchedProfile: profiles.find(p => p.id === profileId) } : r
+      setPageResults(prev => prev.map((r) => 
+        r.pageNumber === result.pageNumber ? { ...r, vinculado: true, matchedProfile: profiles.find(p => p.id === profileId) || r.matchedProfile } : r
       ));
 
-      toast.success("Documento vinculado com sucesso!");
-      if (currentPage < pageResults.length - 1) {
-        setCurrentPage(prev => prev + 1);
+      if (!silent) {
+        toast.success("Documento vinculado com sucesso!");
+        if (currentPage < pageResults.length - 1) {
+          setCurrentPage(prev => prev + 1);
+        }
       }
     } catch (err) {
-      toast.error("Erro ao vincular documento", { description: (err as Error).message });
+      if (!silent) toast.error("Erro ao vincular documento", { description: (err as Error).message });
+      console.error("Erro no vínculo:", err);
     } finally {
-      setIsUploading(false);
+      if (!silent) setIsUploading(false);
     }
   };
 
@@ -144,13 +152,103 @@ export function DocumentImportForm() {
       const parser = documentType === "folha_ponto" ? new FolhaPontoParser() : new ContrachequeParser();
       const results = parser.parse(pages, profiles);
 
-      setPageResults(results);
+      // Identificar Unidade pelo CNPJ e Cargo
+      const processedResults = results.map(r => {
+        let unitId = null;
+        if (r.cnpj) {
+          const cleanPdfCnpj = cleanCNPJ(r.cnpj);
+          const unit = unidades.find(u => u.cnpj && cleanCNPJ(u.cnpj) === cleanPdfCnpj);
+          if (unit) unitId = unit.id;
+        }
+
+        // Verificar se o cargo existe
+        let isNew = false;
+        if (r.suggestedCargoName) {
+          const normalizedSuggested = r.suggestedCargoName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+          const cargoExists = listaCargos.some(c => 
+            c.nome.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim() === normalizedSuggested
+          );
+          isNew = !cargoExists;
+        }
+
+        return { ...r, unidadeId: unitId, isNewCargo: isNew };
+      });
+
+      setPageResults(processedResults);
       toast.success(`${pages.length} páginas processadas.`);
+
+      // Vínculo Automático para Match Exato
+      let autoCount = 0;
+      for (const r of processedResults) {
+        if (r.matchStatus === "automatico" && r.matchedProfile && r.mes && r.ano) {
+          await handleVinculo(r.matchedProfile.id, r, true);
+          autoCount++;
+        }
+      }
+
+      if (autoCount > 0) {
+        toast.success(`${autoCount} documentos vinculados automaticamente.`);
+      }
+
     } catch (err) {
       toast.error("Erro ao processar PDF", { description: (err as Error).message });
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleCreateColab = async () => {
+    setBusyNewColab(true);
+    try {
+      const { data: authUser, error: authErr } = await adminApi.createUser({
+        nome: newColabForm.nome.trim(),
+        cpf: newColabForm.cpf.replace(/\D/g, ""),
+        email: newColabForm.email.trim().toLowerCase() || `${newColabForm.cpf.replace(/\D/g, "")}@pakere.com.br`,
+        senha: newColabForm.senha || newColabForm.cpf.replace(/\D/g, "").slice(-6),
+        cargo: newColabForm.cargo,
+        dataAdmissao: newColabForm.dataAdmissao,
+        dataNascimento: newColabForm.dataNascimento,
+        folgaFixaSemana: newColabForm.folgaFixa === "none" ? null : Number(newColabForm.folgaFixa),
+        role: newColabForm.perfil_acesso,
+      });
+
+      if (authErr) throw authErr;
+
+      await supabase.from("profiles").update({
+        matricula: newColabForm.matricula.trim() || null,
+        whatsapp: newColabForm.whatsapp.trim() || null,
+        unidade_id: newColabForm.unidadeId === "none" ? null : newColabForm.unidadeId,
+        regime_trabalho: newColabForm.regime_trabalho === "none" ? null : newColabForm.regime_trabalho,
+        ativo: true,
+      }).eq("id", authUser.userId);
+
+      toast.success("Colaborador criado!");
+      setShowNewColab(false);
+      await loadData();
+      
+      // Tenta vincular imediatamente
+      const current = pageResults[currentPage];
+      handleVinculo(authUser.userId, current);
+
+    } catch (e) {
+      toast.error("Erro ao criar colaborador", { description: (e as Error).message });
+    } finally {
+      setBusyNewColab(false);
+    }
+  };
+
+  const openNewColab = () => {
+    const current = pageResults[currentPage];
+    setNewColabForm({
+      ...blankColabForm,
+      nome: current.nome || "",
+      cpf: current.cpf || "",
+      cargo: current.suggestedCargoName || "",
+      dataAdmissao: current.dataAdmissao || "",
+      unidadeId: current.unidadeId || "none",
+      regime_trabalho: current.regimeTrabalho || "none",
+    });
+    setShowNewColab(true);
   };
 
   const filteredProfiles = profiles.filter(p => 
@@ -171,7 +269,7 @@ export function DocumentImportForm() {
           onDragLeave={() => setIsDragging(false)}
           onClick={() => document.getElementById("file-import-input")?.click()}
         >
-          <Input id="file-import-input" type="file" accept=".pdf" onChange={handleFileChange} className="hidden" />
+          <Input id="file-import-input" type="file" accept=".pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) setSelectedFile(f); }} className="hidden" />
           <Upload className="size-10 text-muted-foreground mx-auto mb-3" />
           <p className="text-sm text-muted-foreground font-medium">Arraste um PDF ou clique para selecionar</p>
           <p className="text-xs text-muted-foreground mt-1">O arquivo será dividido por páginas para cada colaborador</p>
@@ -231,9 +329,9 @@ export function DocumentImportForm() {
               <Search className="size-4" /> Dados Extraídos
             </h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
+              <div className="col-span-2">
                 <Label className="text-[10px] uppercase text-muted-foreground">Nome no PDF</Label>
-                <div className="font-medium truncate">{current.nome || "Não identificado"}</div>
+                <div className="font-bold text-base truncate">{current.nome || "Não identificado"}</div>
               </div>
               <div>
                 <Label className="text-[10px] uppercase text-muted-foreground">CPF no PDF</Label>
@@ -244,8 +342,27 @@ export function DocumentImportForm() {
                 <div className="font-medium">{current.mes && current.ano ? `${String(current.mes).padStart(2, '0')}/${current.ano}` : "Não identificada"}</div>
               </div>
               <div>
-                <Label className="text-[10px] uppercase text-muted-foreground">Cargo Sugerido</Label>
-                <div className="font-medium truncate">{current.suggestedCargoName || "—"}</div>
+                <Label className="text-[10px] uppercase text-muted-foreground flex items-center gap-1">
+                  <Briefcase className="size-3" /> Cargo
+                </Label>
+                <div className="font-medium truncate">
+                  {current.suggestedCargoName || "—"}
+                  {current.isNewCargo && <Badge variant="outline" className="ml-2 text-[8px] h-4 bg-amber-50 text-amber-600 border-amber-200">Novo</Badge>}
+                </div>
+              </div>
+              <div>
+                <Label className="text-[10px] uppercase text-muted-foreground flex items-center gap-1">
+                  <Clock className="size-3" /> Regime
+                </Label>
+                <div className="font-medium">{current.regimeTrabalho || "—"}</div>
+              </div>
+              <div className="col-span-2">
+                <Label className="text-[10px] uppercase text-muted-foreground flex items-center gap-1">
+                  <Building className="size-3" /> Unidade (via CNPJ)
+                </Label>
+                <div className="font-medium">
+                  {current.unidadeId ? unidades.find(u => u.id === current.unidadeId)?.nome : (current.cnpj || "CNPJ não identificado")}
+                </div>
               </div>
             </div>
           </div>
@@ -268,8 +385,8 @@ export function DocumentImportForm() {
               {current.matchedProfile ? (
                 <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl space-y-3">
                   <div className="flex items-center justify-between">
-                    <Badge className={cn(current.confidence === 1 ? "bg-emerald-500" : "bg-amber-500")}>
-                      {current.confidence === 1 ? "Match Exato" : "Sugestão"}
+                    <Badge className={cn(current.matchStatus === "automatico" ? "bg-emerald-500" : "bg-amber-500")}>
+                      {current.matchStatus === "automatico" ? "Match Exato" : "Sugestão"}
                     </Badge>
                     <span className="text-[10px] font-bold text-muted-foreground uppercase">Confiança: {Math.round(current.confidence * 100)}%</span>
                   </div>
@@ -281,9 +398,14 @@ export function DocumentImportForm() {
                   </Button>
                 </div>
               ) : (
-                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3">
-                  <AlertTriangle className="size-5 text-rose-500 shrink-0 mt-0.5" />
-                  <p className="text-sm text-rose-800 font-medium">Nenhum colaborador correspondente encontrado automaticamente.</p>
+                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="size-5 text-rose-500 shrink-0 mt-0.5" />
+                    <p className="text-sm text-rose-800 font-medium">Nenhum colaborador correspondente encontrado automaticamente.</p>
+                  </div>
+                  <Button variant="outline" className="w-full border-rose-200 text-rose-700 hover:bg-rose-100" onClick={openNewColab}>
+                    <UserPlus className="size-4 mr-2" /> Cadastrar Novo Colaborador
+                  </Button>
                 </div>
               )}
             </div>
@@ -325,6 +447,18 @@ export function DocumentImportForm() {
           </div>
         </div>
       </div>
+
+      <ColaboradorFormDialog
+        open={showNewColab}
+        onOpenChange={setShowNewColab}
+        form={newColabForm as any}
+        setForm={setNewColabForm as any}
+        unidades={unidades}
+        cargos={listaCargos}
+        busy={busyNewColab}
+        isEdit={false}
+        onSave={handleCreateColab}
+      />
     </div>
   );
 }

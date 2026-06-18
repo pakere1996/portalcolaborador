@@ -148,22 +148,21 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
           </Select>
         </div>
 
-        {/* Folga Fixa */}
+        {/* Regime de Trabalho */}
         <div className="space-y-2">
-          <Label htmlFor="folga_fixa_semana">Folga Fixa Semanal *</Label>
+          <Label htmlFor="regime_trabalho">Regime de Trabalho</Label>
           <Select 
-            value={form.folga_fixa_semana || "null"} 
-            onValueChange={(value) => handleFormChange('folga_fixa_semana', value)}
+            value={form.regime_trabalho || "null"} 
+            onValueChange={(value) => handleFormChange('regime_trabalho', value)}
             disabled={busy}
           >
-            <SelectTrigger id="folga_fixa_semana">
-              <SelectValue placeholder="Nenhuma Folga Fixa" />
+            <SelectTrigger id="regime_trabalho">
+              <SelectValue placeholder="Selecione o Regime" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="null">Nenhuma Folga Fixa</SelectItem>
-              {Object.entries(dayOfWeekMap).map(([key, value]) => (
-                <SelectItem key={key} value={key}>{value}</SelectItem>
-              ))}
+              <SelectItem value="null">Não informado</SelectItem>
+              <SelectItem value="Horista">Horista</SelectItem>
+              <SelectItem value="Mensalista">Mensalista</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -191,6 +190,28 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
           />
         </div>
         
+        {/* Folga Fixa */}
+        <div className="space-y-2">
+          <Label htmlFor="folga_fixa_semana">Folga Fixa Semanal *</Label>
+          <Select 
+            value={form.folga_fixa_semana || "null"} 
+            onValueChange={(value) => handleFormChange('folga_fixa_semana', value)}
+            disabled={busy}
+          >
+            <SelectTrigger id="folga_fixa_semana">
+              <SelectValue placeholder="Nenhuma Folga Fixa" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="null">Nenhuma Folga Fixa</SelectItem>
+              {Object.entries(dayOfWeekMap).map(([key, value]) => (
+                <SelectItem key={key} value={key}>{value}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Perfil de Acesso */}
         <div className="space-y-2">
           <Label htmlFor="perfil_acesso">Perfil de Acesso *</Label>

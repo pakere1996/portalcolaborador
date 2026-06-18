@@ -35,6 +35,7 @@ interface ColaboradorForm {
   dataAdmissao: string;
   dataNascimento: string;
   perfil_acesso: string;
+  regime_trabalho: string;
   ativo: boolean;
   senha: string;
 }
@@ -158,6 +159,35 @@ export function ColaboradorFormDialog({
             </div>
           </div>
 
+          {/* Regime de Trabalho e Perfil de Acesso */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Regime de Trabalho</Label>
+              <Select value={form.regime_trabalho} onValueChange={(v) => setForm({ ...form, regime_trabalho: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o regime" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Não informado</SelectItem>
+                  <SelectItem value="Horista">Horista</SelectItem>
+                  <SelectItem value="Mensalista">Mensalista</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Perfil de Acesso</Label>
+              <Select value={form.perfil_acesso} onValueChange={(v) => setForm({ ...form, perfil_acesso: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="colaborador">Colaborador</SelectItem>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
           {/* Datas */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -180,20 +210,6 @@ export function ColaboradorFormDialog({
               <Label>WhatsApp</Label>
               <Input value={form.whatsapp} onChange={set("whatsapp")} placeholder="(00) 00000-0000" />
             </div>
-          </div>
-
-          {/* Perfil de Acesso */}
-          <div className="space-y-2">
-            <Label>Perfil de Acesso</Label>
-            <Select value={form.perfil_acesso} onValueChange={(v) => setForm({ ...form, perfil_acesso: v })}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="colaborador">Colaborador</SelectItem>
-                <SelectItem value="admin">Administrador</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
           {/* Senha (só no cadastro) */}

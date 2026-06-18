@@ -32,6 +32,7 @@ export class FolhaPontoParser implements DocumentParser {
         ano: periodo?.ano ?? null,
         unidadeId: null,
         cargo: null,
+        regimeTrabalho: null,
         isNewCargo: false,
         suggestedCargoName: cargoTexto,
         dataAdmissao,
