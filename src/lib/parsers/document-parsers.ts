@@ -13,10 +13,10 @@ export interface PageResult {
   mes: number | null;
   ano: number | null;
   unidadeId: string | null;
-  cargo: string | null;           // ID do cargo oficial (se encontrado na base)
-  isNewCargo: boolean;            // true se o cargo lido no PDF não existe na base
-  suggestedCargoName: string | null; // Nome sugerido para cadastro na base
-  dataAdmissao: string | null;    // YYYY-MM-DD
+  cargo: string | null;
+  isNewCargo: boolean;
+  suggestedCargoName: string | null;
+  dataAdmissao: string | null;
   matchStatus: "automatico" | "sugerido" | "revisao";
   matchedProfile: ProfileForMatching | null;
   confidence: number;
