@@ -8,27 +8,36 @@ export class ContrachequeParser implements DocumentParser {
     return pages.map((p) => {
       const text = p.text;
 
+      // DIAGNÓSTICO: Texto Bruto
+      console.log("=================================");
+      console.log("TEXTO BRUTO CONTRACHEQUE (Pág " + p.pageNumber + ")");
+      console.log(text);
+      console.log("=================================");
+
       const nome = this.extractNome(text);
       const cpf = extractCPF(text);
       const matricula = this.extractMatricula(text);
       const periodo = this.extractPeriodoContracheque(text);
       const cnpj = this.extractCNPJ(text);
       const cargoTexto = this.extractCargo(text);
+      const cbo = this.extractCBO(text); // Novo para diagnóstico
       const regimeTrabalho = this.extractRegimeTrabalho(text);
       const dataAdmissao = this.extractDataAdmissao(text, periodo);
       
       const match = findBestProfileMatch(nome, cpf, profiles as any, matricula);
       const perfilVinculado = match.profile;
 
-      // Logs para diagnóstico conforme solicitado
-      console.log("--- PÁGINA " + p.pageNumber + " ---");
-      console.log("NOME EXTRAÍDO:", nome);
-      console.log("CPF EXTRAÍDO:", cpf);
-      console.log("MATRÍCULA EXTRAÍDA:", matricula);
-      console.log("CARGO EXTRAÍDO:", cargoTexto);
-      console.log("REGIME EXTRAÍDO:", regimeTrabalho);
-      console.log("CNPJ EXTRAÍDO:", cnpj);
-      console.log("MATCH ENCONTRADO:", match);
+      // DIAGNÓSTICO: Campos Extraídos
+      console.log("RESULTADO DA EXTRAÇÃO:", {
+        nomeExtraido: nome,
+        cargoExtraido: cargoTexto,
+        cboExtraido: cbo,
+        regimeExtraido: regimeTrabalho,
+        cnpjExtraido: cnpj,
+        competenciaExtraida: periodo,
+        matchEncontrado: match.status,
+        perfilNome: perfilVinculado?.nome
+      });
 
       return {
         pageNumber: p.pageNumber,
@@ -38,7 +47,7 @@ export class ContrachequeParser implements DocumentParser {
         cnpj,
         mes: periodo?.mes ?? null,
         ano: periodo?.ano ?? null,
-        unidadeId: null, // Será preenchido no frontend via matching de CNPJ
+        unidadeId: null,
         cargo: null,
         regimeTrabalho,
         isNewCargo: false,
@@ -69,13 +78,17 @@ export class ContrachequeParser implements DocumentParser {
       }
     }
 
-    // Fallback: Nome após o CPF
     const cpfMatch = text.match(/\d{3}\.\d{3}\.\d{3}-\d{2}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]{5,})/i);
     if (cpfMatch) {
       return cpfMatch[1].trim().replace(/\s+/g, " ");
     }
 
     return null;
+  }
+
+  private extractCBO(text: string): string | null {
+    const match = text.match(/CBO\s*[:]?\s*(\d+)/i);
+    return match ? match[1] : null;
   }
 
   private extractMatricula(text: string): string | null {
@@ -135,7 +148,6 @@ export class ContrachequeParser implements DocumentParser {
       const match = text.match(pattern);
       if (match) {
         let cargo = match[1].replace(/\u00a0/g, " ").trim();
-        // Pega apenas a primeira parte antes de múltiplos espaços ou quebra de linha
         cargo = cargo.split(/(?:\s{2,}|\n|$)/)[0].trim();
         return cargo;
       }
