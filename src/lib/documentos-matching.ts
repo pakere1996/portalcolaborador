@@ -1,3 +1,4 @@
+CPF > Nome">
 import { Profile } from "@/integrations/supabase/types";
 
 export interface ProfileForMatching {
@@ -24,7 +25,6 @@ function normalizeText(text: string): string {
 }
 
 export function extractCPF(text: string): string | null {
-  // Suporta 000.000.000-00 ou 00000000000
   const formattedMatch = text.match(/\d{3}\.\d{3}\.\d{3}-\d{2}/);
   if (formattedMatch) return formattedMatch[0];
 
@@ -73,23 +73,25 @@ export function findBestProfileMatch(
   const nomeNormalizado = nomePDF ? normalizeText(nomePDF) : "";
   const matriculaLimpa = matriculaPDF?.trim() || "";
 
-  // 1. CPF EXATO (Prioridade Máxima)
-  if (cpfLimpo.length === 11) {
-    const cpfExato = profiles.find(p => p.cpf?.replace(/\D/g, "") === cpfLimpo);
-    if (cpfExato) {
-      return { profile: cpfExato, matchBy: "cpf", confidence: 1, status: "automatico" };
-    }
-  }
-
-  // 2. MATRÍCULA EXATA (Segunda Prioridade)
+  // 1. MATRÍCULA EXATA (Prioridade Máxima conforme auditoria)
   if (matriculaLimpa) {
     const matriculaExata = profiles.find(p => p.matricula === matriculaLimpa);
     if (matriculaExata) {
+      console.log(`[Matching] Match por Matrícula: ${matriculaLimpa}`);
       return { profile: matriculaExata, matchBy: "matricula", confidence: 1, status: "automatico" };
     }
   }
 
-  // 3. Busca por similaridade (CPF próximo + Nome compatível)
+  // 2. CPF EXATO (Segunda Prioridade)
+  if (cpfLimpo.length === 11) {
+    const cpfExato = profiles.find(p => p.cpf?.replace(/\D/g, "") === cpfLimpo);
+    if (cpfExato) {
+      console.log(`[Matching] Match por CPF: ${cpfLimpo}`);
+      return { profile: cpfExato, matchBy: "cpf", confidence: 1, status: "automatico" };
+    }
+  }
+
+  // 3. Busca por similaridade de Nome
   let melhorPerfil: Profile | null = null;
   let maiorConfianca = 0;
   let matchTipo = "novo";

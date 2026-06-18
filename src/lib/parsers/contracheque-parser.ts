@@ -8,10 +8,10 @@ export class ContrachequeParser implements DocumentParser {
     return pages.map((p) => {
       const text = p.text;
 
-      // DIAGNÓSTICO: Texto Bruto
+      // 1. LOGS COMPLETOS DE DIAGNÓSTICO (Objetivo 1)
       console.log("=================================");
-      console.log("TEXTO BRUTO CONTRACHEQUE (Pág " + p.pageNumber + ")");
-      console.log(text);
+      console.log(`TEXTO BRUTO CONTRACHEQUE (Pág ${p.pageNumber})`);
+      console.log(text.substring(0, 3000));
       console.log("=================================");
 
       const nome = this.extractNome(text);
@@ -20,23 +20,25 @@ export class ContrachequeParser implements DocumentParser {
       const periodo = this.extractPeriodoContracheque(text);
       const cnpj = this.extractCNPJ(text);
       const cargoTexto = this.extractCargo(text);
-      const cbo = this.extractCBO(text); // Novo para diagnóstico
+      const cbo = this.extractCBO(text);
       const regimeTrabalho = this.extractRegimeTrabalho(text);
       const dataAdmissao = this.extractDataAdmissao(text, periodo);
       
+      // 2. VÍNCULO AUTOMÁTICO (Objetivo 7)
       const match = findBestProfileMatch(nome, cpf, profiles as any, matricula);
       const perfilVinculado = match.profile;
 
-      // DIAGNÓSTICO: Campos Extraídos
+      // 3. DIAGNÓSTICO COMPLETO (Objetivo 6)
       console.log("RESULTADO DA EXTRAÇÃO:", {
         nomeExtraido: nome,
+        matriculaExtraida: matricula,
         cargoExtraido: cargoTexto,
         cboExtraido: cbo,
         regimeExtraido: regimeTrabalho,
         cnpjExtraido: cnpj,
         competenciaExtraida: periodo,
-        matchEncontrado: match.status,
-        perfilNome: perfilVinculado?.nome
+        matchStatus: match.status,
+        perfilEncontrado: perfilVinculado?.nome || "NENHUM"
       });
 
       return {
@@ -44,6 +46,7 @@ export class ContrachequeParser implements DocumentParser {
         text,
         nome,
         cpf,
+        matricula,
         cnpj,
         mes: periodo?.mes ?? null,
         ano: periodo?.ano ?? null,
@@ -63,24 +66,29 @@ export class ContrachequeParser implements DocumentParser {
   }
 
   private extractNome(text: string): string | null {
+    // Estratégia: Procurar por labels específicos e evitar palavras reservadas
     const patterns = [
       /Nome\s*do\s*Funcion[aá]rio\s*[:]?\s*([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+)/i,
       /Nome\s*[:]\s*([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+)/i,
       /Colaborador\s*[:]\s*([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+)/i,
-      /Funcion[aá]rio\s*[:]\s*([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+)/i,
-      /Empregado\s*[:]\s*([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+)/i,
     ];
 
     for (const pattern of patterns) {
       const match = text.match(pattern);
       if (match) {
-        return match[1].trim().replace(/\s+/g, " ");
+        const capturado = match[1].trim().replace(/\s+/g, " ");
+        // Filtro de segurança: Se capturou apenas labels técnicos, ignorar
+        if (/^(CBO|MENSALISTA|HORISTA|CARGO|FUNCAO|MATRICULA|REGISTRO)$/i.test(capturado)) continue;
+        if (capturado.length < 5) continue;
+        return capturado;
       }
     }
 
-    const cpfMatch = text.match(/\d{3}\.\d{3}\.\d{3}-\d{2}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]{5,})/i);
+    // Fallback: Tentar capturar texto em caixa alta após o CPF
+    const cpfMatch = text.match(/\d{3}\.\d{3}\.\d{3}-\d{2}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]{10,})/i);
     if (cpfMatch) {
-      return cpfMatch[1].trim().replace(/\s+/g, " ");
+      const capturado = cpfMatch[1].trim().replace(/\s+/g, " ");
+      if (!/^(CBO|MENSALISTA|HORISTA)/i.test(capturado)) return capturado;
     }
 
     return null;
@@ -95,12 +103,16 @@ export class ContrachequeParser implements DocumentParser {
     const patterns = [
       /Matr[ií]cula\s*[:]?\s*(\d+)/i,
       /Registro\s*[:]?\s*(\d+)/i,
-      /C[oó]digo\s*[:]?\s*(\d+)/i,
+      /C[oó]digo\s*(?:do\s*)?(?:Funcion[aá]rio|Empregado)\s*[:]?\s*(\d+)/i,
+      /\bC[oó]digo\s*[:]?\s*(\d+)\b/i,
     ];
 
     for (const pattern of patterns) {
       const match = text.match(pattern);
-      if (match) return match[1];
+      if (match) {
+        console.log("MATRICULA EXTRAIDA:", match[1]);
+        return match[1];
+      }
     }
     return null;
   }
@@ -111,8 +123,8 @@ export class ContrachequeParser implements DocumentParser {
   }
 
   private extractRegimeTrabalho(text: string): "Horista" | "Mensalista" | null {
-    if (/Horista/i.test(text)) return "Horista";
-    if (/Mensalista/i.test(text)) return "Mensalista";
+    if (/\bHorista\b/i.test(text)) return "Horista";
+    if (/\bMensalista\b/i.test(text)) return "Mensalista";
     return null;
   }
 
@@ -141,15 +153,16 @@ export class ContrachequeParser implements DocumentParser {
     const patterns = [
       /Cargo\s*[:]?\s*([A-Za-zÀ-ÿÇç\u00a0\s\./-]+)/i,
       /Fun[çc][ãa]o\s*[:]?\s*([A-Za-zÀ-ÿÇç\u00a0\s\./-]+)/i,
-      /Categoria\s*[:]?\s*([A-Za-zÀ-ÿÇç\u00a0\s\./-]+)/i,
+      /Descri[çc][ãa]o\s*do\s*Cargo\s*[:]?\s*([A-Za-zÀ-ÿÇç\u00a0\s\./-]+)/i,
     ];
 
     for (const pattern of patterns) {
       const match = text.match(pattern);
       if (match) {
         let cargo = match[1].replace(/\u00a0/g, " ").trim();
-        cargo = cargo.split(/(?:\s{2,}|\n|$)/)[0].trim();
-        return cargo;
+        // Limpar se capturou labels de outros campos
+        cargo = cargo.split(/(?:\s{2,}|CBO|Data|Dep|Unidade|\n|$)/i)[0].trim();
+        if (cargo.length > 3) return cargo;
       }
     }
 

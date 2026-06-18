@@ -80,6 +80,7 @@ export function DocumentImportForm() {
       supabase.from("cargos").select("id, nome").order("nome")
     ]);
     
+    console.log("PROFILES CARREGADOS:", pRes.data?.length || 0);
     setProfiles(pRes.data ?? []);
     setUnidades(uRes.data ?? []);
     setListaCargos(cRes.data ?? []);
@@ -152,7 +153,6 @@ export function DocumentImportForm() {
       const parser = documentType === "folha_ponto" ? new FolhaPontoParser() : new ContrachequeParser();
       const results = parser.parse(pages, profiles);
 
-      // Identificar Unidade pelo CNPJ e Cargo
       const processedResults = results.map(r => {
         let unitId = null;
         if (r.cnpj) {
@@ -161,7 +161,6 @@ export function DocumentImportForm() {
           if (unit) unitId = unit.id;
         }
 
-        // Verificar se o cargo existe
         let isNew = false;
         if (r.suggestedCargoName) {
           const normalizedSuggested = r.suggestedCargoName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
@@ -177,7 +176,6 @@ export function DocumentImportForm() {
       setPageResults(processedResults);
       toast.success(`${pages.length} páginas processadas.`);
 
-      // Vínculo Automático para Match Exato
       let autoCount = 0;
       for (const r of processedResults) {
         if (r.matchStatus === "automatico" && r.matchedProfile && r.mes && r.ano) {
@@ -226,7 +224,6 @@ export function DocumentImportForm() {
       setShowNewColab(false);
       await loadData();
       
-      // Tenta vincular imediatamente
       const current = pageResults[currentPage];
       handleVinculo(authUser.userId, current);
 
@@ -251,10 +248,22 @@ export function DocumentImportForm() {
     setShowNewColab(true);
   };
 
-  const filteredProfiles = profiles.filter(p => 
-    p.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.cpf.includes(searchTerm.replace(/\D/g, ""))
-  );
+  // 8. CORRIGINDO BUSCA MANUAL (Objetivo 8)
+  const current = pageResults[currentPage];
+  const filteredProfiles = profiles.filter(p => {
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = p.nome.toLowerCase().includes(term) || 
+                         (p.cpf && p.cpf.includes(searchTerm.replace(/\D/g, ""))) ||
+                         (p.matricula && p.matricula.includes(term));
+    
+    return matchesSearch;
+  });
+
+  // Logs de auditoria solicitados
+  if (pageResults.length > 0) {
+    console.log("UNIDADE DETECTADA NA PÁGINA:", current?.unidadeId);
+    console.log("COLABORADORES FILTRADOS (Busca):", filteredProfiles.length);
+  }
 
   if (pageResults.length === 0) {
     return (
@@ -297,7 +306,6 @@ export function DocumentImportForm() {
     );
   }
 
-  const current = pageResults[currentPage];
   const totalPages = pageResults.length;
   const vinculados = pageResults.filter(r => r.vinculado).length;
 
@@ -336,6 +344,10 @@ export function DocumentImportForm() {
               <div>
                 <Label className="text-[10px] uppercase text-muted-foreground">CPF no PDF</Label>
                 <div className="font-mono">{current.cpf || "Não identificado"}</div>
+              </div>
+              <div>
+                <Label className="text-[10px] uppercase text-muted-foreground">Matrícula no PDF</Label>
+                <div className="font-mono">{current.matricula || "Não identificada"}</div>
               </div>
               <div>
                 <Label className="text-[10px] uppercase text-muted-foreground">Competência</Label>
@@ -391,7 +403,9 @@ export function DocumentImportForm() {
                     <span className="text-[10px] font-bold text-muted-foreground uppercase">Confiança: {Math.round(current.confidence * 100)}%</span>
                   </div>
                   <div className="font-bold text-lg">{current.matchedProfile.nome}</div>
-                  <div className="text-xs text-muted-foreground">CPF: {current.matchedProfile.cpf} • Cargo: {current.matchedProfile.cargo}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Matrícula: {current.matchedProfile.matricula || "—"} • CPF: {current.matchedProfile.cpf}
+                  </div>
                   <Button className="w-full" onClick={() => handleVinculo(current.matchedProfile!.id, current)} disabled={isUploading}>
                     {isUploading ? <Loader2 className="size-4 animate-spin mr-2" /> : <Check className="size-4 mr-2" />}
                     Confirmar e Vincular
@@ -419,7 +433,7 @@ export function DocumentImportForm() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input 
-              placeholder="Buscar por nome ou CPF..." 
+              placeholder="Buscar por nome, CPF ou matrícula..." 
               className="pl-10" 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -438,7 +452,9 @@ export function DocumentImportForm() {
                 >
                   <div>
                     <div className="font-bold text-sm group-hover:text-primary transition-colors">{p.nome}</div>
-                    <div className="text-[10px] text-muted-foreground uppercase">{p.cargo || "Sem cargo"} • {p.cpf}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase">
+                      Matrícula: {p.matricula || "—"} • {p.cargo || "Sem cargo"} • {p.cpf}
+                    </div>
                   </div>
                   <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all" />
                 </button>

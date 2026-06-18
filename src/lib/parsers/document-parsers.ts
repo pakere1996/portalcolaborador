@@ -9,6 +9,7 @@ export interface PageResult {
   text: string;
   nome: string | null;
   cpf: string | null;
+  matricula: string | null; // Adicionado para prioridade de vínculo
   cnpj: string | null;
   mes: number | null;
   ano: number | null;
