@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Users, Calendar, ClipboardList, ArrowLeftRight, Ban, Sparkles, Cake, AlertTriangle, TrendingUp, ChevronRight } from "lucide-react";
+import { Shield, Users, Calendar, CalendarCheck, ClipboardList, ArrowLeftRight, Ban, Sparkles, Cake, AlertTriangle, ChevronRight } from "lucide-react";
 import { formatBR, parseYMD } from "@/lib/folga-rules";
 import { Button } from "@/components/ui/button";
 import { adminApi } from "@/lib/admin-api";
@@ -15,6 +15,7 @@ export default function AdminDashboard() {
     pendentes: 0,
     bloqueadas: 0,
     trocasPendentes: 0,
+    ocupacaoHoje: "0/1",
   });
   const [proximasFolgas, setProximasFolgas] = useState<{ data: string; ocupacao: number; limite: number; temAniversario?: boolean; status: string; percentual: number }[]>([]);
   const [aniversariantes, setAniversariantes] = useState<{ id: string; nome: string; data_nascimento: string; idade: number }[]>([]);
@@ -26,19 +27,20 @@ export default function AdminDashboard() {
     const start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
     const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     const end = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
     const [
-      funcs, 
-      folgasC, 
-      pend, 
-      blocC, 
-      trocasP, 
-      configRes, 
+      funcs,
+      folgasC,
+      pend,
+      blocC,
+      trocasP,
+      configRes,
       priosRes,
       folgasDataRes,
       profilesRes
     ] = await Promise.all([
-      supabase.from("profiles").select("*", { count: "exact", head: true }).eq("ativo", true),
+      supabase.from("profiles").select("id, nome, data_nascimento, folga_fixa_semana, ativo").eq("ativo", true),
       supabase.from("folgas").select("*", { count: "exact", head: true }).gte("data", start).lte("data", end),
       supabase.from("solicitacoes_especiais").select("*", { count: "exact", head: true }).eq("status", "pendente"),
       supabase.from("datas_bloqueadas").select("*", { count: "exact", head: true }).eq("liberada", false),
@@ -46,22 +48,27 @@ export default function AdminDashboard() {
       supabase.from("dia_config").select("data, limite_colaboradores").gte("data", start).lte("data", end),
       supabase.from("prioridade_aniversario").select("data").eq("status", "ativa").gte("data", start).lte("data", end),
       supabase.from("folgas").select("data").gte("data", start).lte("data", end),
-      supabase.from("profiles").select("id, nome, data_nascimento").eq("ativo", true),
+      supabase.from("profiles").select("id, nome, data_nascimento, folga_fixa_semana").eq("ativo", true),
     ]);
 
+    const profilesAtivos = profilesRes.data ?? [];
+    const todayLimit = (configRes.data ?? []).find((c) => c.data === todayIso)?.limite_colaboradores ?? 1;
+    const todayMonthly = (folgasDataRes.data ?? []).filter((f) => f.data === todayIso).length;
+    const todayFixed = profilesAtivos.filter((p) => p.folga_fixa_semana === now.getDay()).length;
+
     setStats({
-      funcionarios: funcs.count ?? 0,
+      funcionarios: (funcs.data ?? []).length,
       folgasMes: folgasC.count ?? 0,
       pendentes: pend.count ?? 0,
       bloqueadas: blocC.count ?? 0,
       trocasPendentes: trocasP.count ?? 0,
+      ocupacaoHoje: `${todayMonthly + todayFixed}/${todayLimit}`,
     });
 
-    // Processar aniversariantes do mês
     const currentMonth = now.getMonth() + 1;
-    const bdays = (profilesRes.data ?? [])
-      .filter(p => p.data_nascimento && new Date(p.data_nascimento + "T00:00:00").getMonth() + 1 === currentMonth)
-      .map(p => {
+    const bdays = profilesAtivos
+      .filter((p) => p.data_nascimento && new Date(p.data_nascimento + "T00:00:00").getMonth() + 1 === currentMonth)
+      .map((p) => {
         const bdate = new Date(p.data_nascimento + "T00:00:00");
         return {
           id: p.id,
@@ -70,23 +77,23 @@ export default function AdminDashboard() {
           idade: now.getFullYear() - bdate.getFullYear()
         };
       })
-      .sort((a, b) => new Date(a.data_nascimento).getDate() - new Date(b.data_nascimento).getDate());
-    
+      .sort((a, b) => new Date(a.data_nascimento + "T00:00:00").getDate() - new Date(b.data_nascimento + "T00:00:00").getDate());
+
     setAniversariantes(bdays);
 
     const { data: folgasData } = folgasDataRes;
     const counts = new Map<string, number>();
-    folgasData?.forEach(f => counts.set(f.data, (counts.get(f.data) || 0) + 1));
-    
-    const limits = new Map<string, number>();
-    configRes.data?.forEach(c => limits.set(c.data, c.limite_colaboradores));
+    folgasData?.forEach((f) => counts.set(f.data, (counts.get(f.data) || 0) + 1));
 
-    const prioDates = new Set(priosRes.data?.map(p => p.data));
+    const limits = new Map<string, number>();
+    configRes.data?.forEach((c) => limits.set(c.data, c.limite_colaboradores));
+
+    const prioDates = new Set(priosRes.data?.map((p) => p.data));
 
     const proximos: any[] = [];
     let d = new Date();
     while (proximos.length < 5 && proximos.length < 30) {
-      const iso = d.toISOString().split('T')[0];
+      const iso = d.toISOString().split("T")[0];
       const w = d.getDay();
       if (w === 0 || w === 6) {
         const ocupacao = counts.get(iso) || 0;
@@ -97,35 +104,34 @@ export default function AdminDashboard() {
           limite,
           temAniversario: prioDates.has(iso),
           percentual: Math.round((ocupacao / limite) * 100),
-          status: ocupacao >= limite ? 'lotado' : ocupacao >= limite * 0.7 ? 'quase_lotado' : 'disponivel'
+          status: ocupacao >= limite ? "lotado" : ocupacao >= limite * 0.7 ? "quase_lotado" : "disponivel"
         });
       }
       d.setDate(d.getDate() + 1);
     }
     setProximasFolgas(proximos);
 
-    // Gerar alertas inteligentes
     const novosAlertas: any[] = [];
-    
-    proximos.filter(p => p.status === 'quase_lotado').forEach(p => {
+
+    proximos.filter((p) => p.status === "quase_lotado").forEach((p) => {
       novosAlertas.push({
-        tipo: 'quase_lotado',
+        tipo: "quase_lotado",
         mensagem: `${formatBR(parseYMD(p.data))} está com ${p.ocupacao}/${p.limite} vagas ocupadas (${p.percentual}%)`,
         data: p.data
       });
     });
 
-    proximos.filter(p => p.status === 'lotado').forEach(p => {
+    proximos.filter((p) => p.status === "lotado").forEach((p) => {
       novosAlertas.push({
-        tipo: 'lotado',
+        tipo: "lotado",
         mensagem: `${formatBR(parseYMD(p.data))} atingiu o limite máximo (${p.ocupacao}/${p.limite})`,
         data: p.data
       });
     });
 
-    proximos.filter(p => p.temAniversario).forEach(p => {
+    proximos.filter((p) => p.temAniversario).forEach((p) => {
       novosAlertas.push({
-        tipo: 'aniversario',
+        tipo: "aniversario",
         mensagem: `${formatBR(parseYMD(p.data))} tem aniversariante com prioridade`,
         data: p.data
       });
@@ -170,17 +176,17 @@ export default function AdminDashboard() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'lotado': return 'bg-red-100 text-red-700 border-red-200';
-      case 'quase_lotado': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-      default: return 'bg-green-100 text-green-700 border-green-200';
+      case "lotado": return "bg-red-100 text-red-700 border-red-200";
+      case "quase_lotado": return "bg-yellow-100 text-yellow-700 border-yellow-200";
+      default: return "bg-green-100 text-green-700 border-green-200";
     }
   };
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case 'lotado': return 'Lotado';
-      case 'quase_lotado': return 'Quase lotado';
-      default: return 'Disponível';
+      case "lotado": return "Lotado";
+      case "quase_lotado": return "Quase lotado";
+      default: return "Disponível";
     }
   };
 
@@ -193,26 +199,25 @@ export default function AdminDashboard() {
           </h1>
           <p className="text-muted-foreground mt-1">Visão geral das escalas e solicitações.</p>
         </div>
-        <Button 
-          onClick={handleSorteio} 
+        <Button
+          onClick={handleSorteio}
           disabled={busySorteio}
           className="rounded-full bg-primary hover:bg-primary/90 text-white shadow-lg"
         >
-          <Sparkles className="size-4 mr-2" /> 
+          <Sparkles className="size-4 mr-2" />
           {busySorteio ? "Sorteando..." : "Realizar Sorteio Próximo Mês"}
         </Button>
       </div>
 
-      {/* KPI Cards Row */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         <StatCard icon={Users} label="Equipe Ativa" value={stats.funcionarios} accent="text-blue-600" iconBg="bg-blue-100" />
+        <StatCard icon={CalendarCheck} label="Ocupação Hoje" value={stats.ocupacaoHoje} accent="text-violet-600" iconBg="bg-violet-100" />
         <StatCard icon={Calendar} label="Folgas no Mês" value={stats.folgasMes} accent="text-emerald-600" iconBg="bg-emerald-100" />
         <StatCard icon={ClipboardList} label="Pedidos Especiais" value={stats.pendentes} accent="text-orange-600" iconBg="bg-orange-100" />
         <StatCard icon={ArrowLeftRight} label="Trocas Pendentes" value={stats.trocasPendentes} accent="text-purple-600" iconBg="bg-purple-100" />
         <StatCard icon={Ban} label="Dias Bloqueados" value={stats.bloqueadas} accent="text-red-600" iconBg="bg-red-100" />
       </div>
 
-      {/* Alertas Inteligentes */}
       {alertas.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
           <div className="flex items-center gap-2 mb-3">
@@ -223,15 +228,15 @@ export default function AdminDashboard() {
             {alertas.map((alerta, idx) => (
               <div key={idx} className={`
                 p-3 rounded-xl text-sm border-l-4 ${
-                  alerta.tipo === 'lotado' ? 'bg-red-50 border-red-400 text-red-800' :
-                  alerta.tipo === 'quase_lotado' ? 'bg-yellow-50 border-yellow-400 text-yellow-800' :
-                  'bg-blue-50 border-blue-400 text-blue-800'
+                  alerta.tipo === "lotado" ? "bg-red-50 border-red-400 text-red-800" :
+                  alerta.tipo === "quase_lotado" ? "bg-yellow-50 border-yellow-400 text-yellow-800" :
+                  "bg-blue-50 border-blue-400 text-blue-800"
                 }
               `}>
                 <div className="flex items-center gap-2">
-                  {alerta.tipo === 'lotado' && <span className="text-red-500">●</span>}
-                  {alerta.tipo === 'quase_lotado' && <span className="text-yellow-500">●</span>}
-                  {alerta.tipo === 'aniversario' && <Cake className="size-3.5 text-amber-500" />}
+                  {alerta.tipo === "lotado" && <span className="text-red-500">●</span>}
+                  {alerta.tipo === "quase_lotado" && <span className="text-yellow-500">●</span>}
+                  {alerta.tipo === "aniversario" && <Cake className="size-3.5 text-amber-500" />}
                   <span className="font-medium">{alerta.mensagem}</span>
                 </div>
               </div>
@@ -241,7 +246,6 @@ export default function AdminDashboard() {
       )}
 
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Próximos Fins de Semana com Ocupação Detalhada */}
         <Card className="shadow-sm border-border">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -265,10 +269,10 @@ export default function AdminDashboard() {
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className={`h-full transition-all ${
-                          p.status === 'lotado' ? 'bg-red-500' : 
-                          p.status === 'quase_lotado' ? 'bg-yellow-500' : 'bg-emerald-500'
+                          p.status === "lotado" ? "bg-red-500" :
+                          p.status === "quase_lotado" ? "bg-yellow-500" : "bg-emerald-500"
                         }`}
                         style={{ width: `${Math.min(100, p.percentual)}%` }}
                       />
@@ -282,11 +286,10 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Aniversariantes do Mês */}
         <Card className="shadow-sm border-border">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              <Cake className="size-4 text-primary" /> Aniversariantes de {new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date())}
+              <Cake className="size-4 text-primary" /> Aniversariantes de {new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date())}
             </CardTitle>
             <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">{aniversariantes.length}</Badge>
           </CardHeader>
@@ -306,7 +309,7 @@ export default function AdminDashboard() {
                         <div className="text-xs text-muted-foreground">Completa {a.idade} anos</div>
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="text-amber-600 hover:bg-amber-100" onClick={() => window.location.href = '/admin/calendario'}>
+                    <Button variant="ghost" size="icon" className="text-amber-600 hover:bg-amber-100" onClick={() => window.location.href = "/admin/calendario"}>
                       <ChevronRight className="size-4" />
                     </Button>
                   </div>
@@ -322,7 +325,7 @@ export default function AdminDashboard() {
 
 function StatCard({
   icon: Icon, label, value, accent, iconBg,
-}: { icon: any; label: string; value: number; accent: string; iconBg: string }) {
+}: { icon: any; label: string; value: number | string; accent: string; iconBg: string }) {
   return (
     <Card className="shadow-sm hover:shadow-md transition-shadow border-border">
       <CardContent className="p-5">
