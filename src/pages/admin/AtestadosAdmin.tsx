@@ -30,7 +30,6 @@ export default function AtestadosAdmin() {
       }}
       formatarStatus={formatAtestadoStatus}
       statusClass={statusClass}
-      // Campos extras no formulário de importação
       camposExtras={(form, setForm, busy) => (
         <>
           <div className="space-y-2">
@@ -47,28 +46,22 @@ export default function AtestadosAdmin() {
           {form.data_documento && form.dias_afastamento && parseInt(form.dias_afastamento) > 0 && (
             <div className="rounded-xl bg-muted/30 p-3 text-sm">
               <span className="font-semibold">Data de retorno:</span>{" "}
-              {new Date(
-                new Date(form.data_documento).getTime() +
-                  parseInt(form.dias_afastamento) * 24 * 60 * 60 * 1000
-              ).toLocaleDateString("pt-BR")}
+              {(() => {
+                const dt = new Date(form.data_documento + 'T00:00:00');
+                dt.setDate(dt.getDate() + parseInt(form.dias_afastamento));
+                return dt.toLocaleDateString('pt-BR');
+              })()}
             </div>
           )}
         </>
       )}
-      // Colunas extras na tabela
       colunasExtras={(doc) => {
         const dias = (doc as any).dias_afastamento || 0;
+        const dataRetorno = new Date(new Date(doc.data + 'T00:00:00').getTime() + dias * 24 * 60 * 60 * 1000);
         return (
           <div className="text-sm space-y-1">
             <div><span className="font-semibold">Dias:</span> {dias}</div>
-            {dias > 0 && (
-              <div>
-                <span className="font-semibold">Retorno:</span>{" "}
-                {new Date(
-                  new Date(doc.data).getTime() + dias * 24 * 60 * 60 * 1000
-                ).toLocaleDateString("pt-BR")}
-              </div>
-            )}
+            <div><span className="font-semibold">Retorno:</span> {dataRetorno.toLocaleDateString('pt-BR')}</div>
             {doc.status && (
               <Badge className={statusClass(doc.status)}>
                 {formatAtestadoStatus(doc.status)}
