@@ -100,12 +100,15 @@ const adminModules = [
   },
 ];
 
+// 🔥 Adicionados campos regime_trabalho e data_demissao
 const blankEditForm = {
   nome: "", cpf: "", matricula: "", email: "", whatsapp: "",
   cargo: "", unidadeId: "", folgaFixa: "none",
   dataNascimento: "", dataAdmissao: "", perfil_acesso: "colaborador",
   ativo: true,
   senha: "",
+  regime_trabalho: "none",   // <-- NOVO
+  data_demissao: "",          // <-- NOVO
 };
 
 export default function AdminHomeAdminPage() {
@@ -119,22 +122,19 @@ export default function AdminHomeAdminPage() {
   const [filtroStatus, setFiltroStatus] = useState("all");
   const [filtroCargo, setFiltroCargo] = useState("all");
 
-  // New Dialog
   const [openNewDialog, setOpenNewDialog] = useState(false);
   const [newForm, setNewForm] = useState(blankEditForm);
-  // Edit Dialog
   const [editingProfile, setEditingProfile] = useState<any | null>(null);
   const [editForm, setEditForm] = useState(blankEditForm);
-  // Delete Confirmation
   const [confirmDelete, setConfirmDelete] = useState<any | null>(null);
-  // Reset Password
   const [resetPasswordDialog, setResetPasswordDialog] = useState<{ profile: any; senha: string; confirmar: string } | null>(null);
 
   const loadData = async () => {
     setLoading(true);
     try {
+      // 🔥 Adicionados regime_trabalho e data_demissao no SELECT
       const [pRes, uRes, cRes] = await Promise.all([
-        supabase.from("profiles").select("*").order("nome"),
+        supabase.from("profiles").select("id, nome, cpf, cargo, matricula, unidade_id, folga_fixa_semana, regime_trabalho, perfil_acesso, data_admissao, data_nascimento, email_contato, whatsapp, ativo, data_demissao, created_at, updated_at").order("nome"),
         supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
         supabase.from("cargos").select("*").eq("ativo", true).order("nome"),
       ]);
@@ -168,7 +168,7 @@ export default function AdminHomeAdminPage() {
 
   const filteredProfiles = profiles.filter(p => {
     const matchesSearch = p.nome.toLowerCase().includes(search.toLowerCase()) || p.cpf.includes(search.replace(/\D/g, ""));
-    const matchesUnidade = filtroUnidade === "all" || p.unidadeId === filtroUnidade;
+    const matchesUnidade = filtroUnidade === "all" || p.unidade_id === filtroUnidade;
     const matchesStatus = filtroStatus === "all" || (filtroStatus === "ativo" ? p.ativo : !p.ativo);
     const matchesCargo = filtroCargo === "all" || p.cargo === filtroCargo;
     return matchesSearch && matchesUnidade && matchesStatus && matchesCargo;
@@ -190,18 +190,20 @@ export default function AdminHomeAdminPage() {
         cargo: newForm.cargo,
         dataAdmissao: newForm.dataAdmissao,
         dataNascimento: newForm.dataNascimento,
-        folgaFixaSemana: newForm.folgaFixa === "" ? null : Number(newForm.folgaFixa),
+        folgaFixaSemana: newForm.folgaFixa === "" || newForm.folgaFixa === "none" ? null : Number(newForm.folgaFixa),
         role: newForm.perfil_acesso,
       });
 
       if (authErr) throw authErr;
 
-      // Update profile with additional fields
+      // 🔥 Incluindo regime_trabalho e data_demissao no update
       const { error: profErr } = await supabase.from("profiles").update({
         matricula: newForm.matricula.trim() || null,
         whatsapp: newForm.whatsapp.trim() || null,
-        unidadeId: newForm.unidadeId === "" ? null : newForm.unidadeId,
+        unidade_id: newForm.unidadeId === "" ? null : newForm.unidadeId,
         ativo: true,
+        regime_trabalho: newForm.regime_trabalho === "none" ? null : newForm.regime_trabalho,
+        data_demissao: newForm.data_demissao || null,
       }).eq("id", authUser.userId);
 
       if (profErr) throw profErr;
@@ -217,7 +219,7 @@ export default function AdminHomeAdminPage() {
     }
   };
 
-    const openEdit = (p: any) => {
+  const openEdit = (p: any) => {
     setEditingProfile(p);
     setEditForm({
       nome: p.nome,
@@ -226,13 +228,15 @@ export default function AdminHomeAdminPage() {
       email: p.email_contato ?? "",
       whatsapp: p.whatsapp ?? "",
       cargo: p.cargo,
-      unidadeId: p.unidadeId ?? "",
-      folgaFixa: p.folgaFixa?.toString() ?? "none",
-      dataNascimento: p.dataNascimento ?? "",
-      dataAdmissao: p.dataAdmissao ?? "",
+      unidadeId: p.unidade_id ?? "",
+      folgaFixa: p.folga_fixa_semana?.toString() ?? "none",
+      dataNascimento: p.data_nascimento ?? "",
+      dataAdmissao: p.data_admissao ?? "",
       perfil_acesso: p.role ?? "colaborador",
       ativo: p.ativo,
       senha: "",
+      regime_trabalho: p.regime_trabalho ?? "none",   // <-- NOVO
+      data_demissao: p.data_demissao ?? "",            // <-- NOVO
     });
   };
 
@@ -243,7 +247,7 @@ export default function AdminHomeAdminPage() {
       const cleanCpf = onlyDigits(editForm.cpf);
       if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
 
-      // Update profile
+      // 🔥 Incluindo regime_trabalho e data_demissao no update
       const { error: profErr } = await supabase.from("profiles").update({
         nome: editForm.nome.trim(),
         cpf: cleanCpf,
@@ -251,17 +255,18 @@ export default function AdminHomeAdminPage() {
         email_contato: editForm.email.trim() || null,
         whatsapp: editForm.whatsapp.trim() || null,
         cargo: editForm.cargo,
-        unidadeId: editForm.unidadeId === "" ? null : editForm.unidadeId,
-        folgaFixa: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa),
-        dataNascimento: editForm.dataNascimento || null,
-        dataAdmissao: editForm.dataAdmissao || null,
+        unidade_id: editForm.unidadeId === "" ? null : editForm.unidadeId,
+        folga_fixa_semana: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa),
+        data_nascimento: editForm.dataNascimento || null,
+        data_admissao: editForm.dataAdmissao || null,
         ativo: editForm.ativo,
         updated_at: new Date().toISOString(),
+        regime_trabalho: editForm.regime_trabalho === "none" ? null : editForm.regime_trabalho,
+        data_demissao: editForm.data_demissao || null,
       }).eq("id", editingProfile.id);
 
       if (profErr) throw profErr;
 
-      // Update role if changed
       const currentRole = editingProfile.role;
       const newRole = editForm.perfil_acesso;
       if (currentRole !== newRole) {
@@ -356,7 +361,7 @@ export default function AdminHomeAdminPage() {
         </div>
       ))}
 
-      {/* Dialogs for quick collaborator management from dashboard */}
+      {/* Dialog para criar colaborador */}
       <Dialog open={openNewDialog} onOpenChange={setOpenNewDialog}>
         <DialogTrigger asChild>
           <Button variant="outline" className="justify-start gap-2" onClick={() => { setNewForm(blankEditForm); setOpenNewDialog(true); }}>
@@ -377,6 +382,7 @@ export default function AdminHomeAdminPage() {
         />
       </Dialog>
 
+      {/* Dialog para editar colaborador */}
       <ColaboradorFormDialog
         open={!!editingProfile}
         onOpenChange={(open) => { if (!open) setEditingProfile(null); }}
