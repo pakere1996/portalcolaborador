@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -56,6 +56,27 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
   };
 
   const cargoOptions = getCargoOptions(cargos);
+
+  // 🔥 Efeito para controlar o switch "possui_folha_ponto" baseado na unidade selecionada
+  useEffect(() => {
+    // Se não for edição, ou se for edição mas o campo ainda não foi definido
+    if (!isEdit) {
+      const unidadeSelecionada = unidades.find(u => u.id === form.unidade_id);
+      if (unidadeSelecionada) {
+        // Se a unidade tem relógio de ponto, ativa o switch por padrão; senão, desativa e desabilita
+        const possuiFolhaPonto = unidadeSelecionada.possui_relogio_ponto || false;
+        // Se o valor atual for diferente, atualiza
+        if (form.possui_folha_ponto !== possuiFolhaPonto) {
+          setForm((prev: any) => ({ ...prev, possui_folha_ponto: possuiFolhaPonto }));
+        }
+      }
+    }
+    // A dependência inclui form.unidade_id, unidades e isEdit
+  }, [form.unidade_id, unidades, isEdit, setForm]);
+
+  // 🔥 Verifica se a unidade selecionada possui relógio de ponto
+  const unidadeSelecionada = unidades.find(u => u.id === form.unidade_id);
+  const unidadeTemRelogio = unidadeSelecionada?.possui_relogio_ponto || false;
 
   return (
     <div className="space-y-4">
@@ -266,16 +287,19 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
         </div>
       </div>
 
-      {/* 🔥 Switch para Folha de Ponto */}
+      {/* 🔥 Switch para Folha de Ponto – controlado pela unidade */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
           <Switch 
             id="possui_folha_ponto" 
             checked={form.possui_folha_ponto || false} 
             onCheckedChange={(checked) => handleFormChange('possui_folha_ponto', checked)} 
-            disabled={busy}
+            disabled={busy || !unidadeTemRelogio} // 🔥 Desabilitado se a unidade NÃO tem relógio
           />
-          <Label htmlFor="possui_folha_ponto">Possui acesso a Folha de Ponto</Label>
+          <Label htmlFor="possui_folha_ponto" className={!unidadeTemRelogio ? "text-muted-foreground" : ""}>
+            Possui acesso a Folha de Ponto
+            {!unidadeTemRelogio && <span className="ml-1 text-xs text-muted-foreground">(unidade sem relógio)</span>}
+          </Label>
         </div>
       </div>
 
