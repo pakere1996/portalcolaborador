@@ -22,6 +22,7 @@ export class ContrachequeParser implements DocumentParser {
       console.log("[Parser][Contracheque] Matrícula candidata:", matricula);
       console.log("[Parser][Contracheque] Cargo candidato:", cargo);
       console.log("[Parser][Contracheque] CPF candidato:", cpf);
+      console.log("[Parser][Contracheque] CNPJ candidato:", cnpj);
       console.log("[Parser][Contracheque] Competência candidata:", competencia);
 
       // Match profile using existing logic (unchanged)
@@ -167,15 +168,5 @@ export class ContrachequeParser implements DocumentParser {
       return { mes: parseInt(match[1]), ano: parseInt(match[2]) };
     }
     return null;
-  }
-
-  // ---------- Helper ----------
-  private isInvalidHeaderTerm(term: string): boolean {
-    const INVALID_HEADER_TERMS = [
-      "SALARIO","SALÁRIO","EMPREGADO","REFLEXO","HORAS","ADICIONAL",
-      "NOTURNO","INTER","REFERENCIA","REFERÊNCIA","PROVENTOS","DESCONTOS",
-      "INSS","FGTS","BASE","LIQUIDO","LÍQUIDO","TOTAL"
-    ];
-    return INVALID_HEADER_TERMS.some(bad => term.includes(bad));
   }
 }
