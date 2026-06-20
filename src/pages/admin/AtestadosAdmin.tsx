@@ -21,6 +21,17 @@ export default function AtestadosAdmin() {
       icone={<FileWarning className="size-6 text-primary" />}
       descricao="Gerencie todos os atestados médicos dos colaboradores."
       importTitle="Importar Atestado"
+      campoData="data_atestado"
+      // Gerar storage path usando helpers
+      gerarStoragePath={async (colaboradorId, data, id, file) => {
+        const path = atestadoStoragePath(colaboradorId, data, id, file);
+        const kind = getFileKind(file);
+        if (!kind) throw new Error("Tipo de arquivo não suportado");
+        return { path, kind };
+      }}
+      // Formatar status (exibe "Pendente", "Aprovado", etc.)
+      formatarStatus={formatAtestadoStatus}
+      statusClass={statusClass}
       // Campos extras no formulário de importação
       camposExtras={(form, setForm, busy) => (
         <>
@@ -46,11 +57,11 @@ export default function AtestadosAdmin() {
           )}
         </>
       )}
-      // Colunas extras na tabela (status, dias, data retorno)
+      // Colunas extras na tabela (dias, retorno, status)
       colunasExtras={(doc) => {
         const dias = (doc as any).dias_afastamento || 0;
         const dataRetorno = new Date(
-          new Date(doc.data_documento).getTime() + dias * 24 * 60 * 60 * 1000
+          new Date(doc.data).getTime() + dias * 24 * 60 * 60 * 1000
         );
         return (
           <div className="text-sm space-y-1">
@@ -89,7 +100,7 @@ export default function AtestadosAdmin() {
             </select>
           </div>
           <div className="space-y-1 mt-2">
-            <Label className="text-xs">Observação do Admin (para rejeição)</Label>
+            <Label className="text-xs">Observação do Admin</Label>
             <Textarea
               rows={2}
               value={editForm.observacao_admin || ""}
@@ -106,26 +117,7 @@ export default function AtestadosAdmin() {
         }
         return null;
       }}
-      // Geração do caminho usando helpers existentes
-      gerarStoragePath={async (form, file) => {
-        const id = newDocumentId();
-        const path = atestadoStoragePath(form.colaborador_id, form.data_documento, id, file);
-        const kind = getFileKind(file);
-        if (!kind) throw new Error("Tipo de arquivo não suportado");
-        return { path, kind };
-      }}
-      // Verificação de duplicata
-      verificarDuplicata={async (form) => {
-        if (!form.colaborador_id || !form.data_documento) return null;
-        const { data } = await supabase
-          .from("atestados")
-          .select("*")
-          .eq("colaborador_id", form.colaborador_id)
-          .eq("data_atestado", form.data_documento)
-          .maybeSingle();
-        return data || null;
-      }}
-      // Montagem dos dados para inserção (usa user logado como criador)
+      // Montagem dos dados para inserção
       beforeInsert={async (form, path, kind) => {
         const { data: userData } = await supabase.auth.getUser();
         return {
