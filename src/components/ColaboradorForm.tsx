@@ -29,14 +29,13 @@ const dayOfWeekMap: Record<number, string> = {
   6: "Sábado",
 };
 
-// 🔥 Lista fixa com "Sócio" + cargos do banco
-const getCargoOptions = (cargos: Cargo[]) => {
-  const cargoNomes = cargos.map(c => c.nome);
-  // Adiciona "Sócio" se não existir
-  if (!cargoNomes.includes("Sócio") && !cargoNomes.includes("SÓCIO")) {
-    return [...cargoNomes, "Sócio"];
+// 🔥 Retorna lista de cargos em MAIÚSCULAS + garante "SÓCIO"
+const getCargoOptions = (cargos: Cargo[]): string[] => {
+  const nomes = cargos.map(c => c.nome.trim().toUpperCase());
+  if (!nomes.includes("SÓCIO")) {
+    nomes.push("SÓCIO");
   }
-  return cargoNomes;
+  return nomes.sort();
 };
 
 export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit = false }: ColaboradorFormProps) {
@@ -247,9 +246,7 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
             min={form.data_admissao || undefined}
             disabled={busy}
           />
-          <p className="text-xs text-muted-foreground">
-            Preencha apenas se o colaborador já foi desligado.
-          </p>
+          <p className="text-xs text-muted-foreground">Preencha apenas se o colaborador já foi desligado.</p>
         </div>
 
         <div className="space-y-2">
