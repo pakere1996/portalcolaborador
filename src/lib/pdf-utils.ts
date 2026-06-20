@@ -38,3 +38,27 @@ export async function extractTextFromPDF(file: File): Promise<PageText[]> {
 
   return results;
 }
+
+/**
+ * Renderiza uma página específica do PDF como imagem (data URL), para preview visual.
+ */
+export async function renderPdfPageAsImage(file: File, pageNumber: number): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+  const pdf = await loadingTask.promise;
+  const page = await pdf.getPage(pageNumber);
+
+  const scale = 1.5;
+  const viewport = page.getViewport({ scale });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const context = canvas.getContext("2d");
+
+  if (!context) throw new Error("Não foi possível criar o contexto do canvas.");
+
+  await page.render({ canvasContext: context, viewport }).promise;
+
+  return canvas.toDataURL("image/png");
+}
