@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,7 +53,8 @@ export default function Colaboradores() {
   const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
   const [resetPasswordDialog, setResetPasswordDialog] = useState<{ profile: Profile; senha: string; confirmar: string } | null>(null);
 
-  const loadData = async () => {
+  // 🔥 Carregar dados com useCallback para evitar recriações
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [pRes, uRes, cRes] = await Promise.all([
@@ -81,17 +82,12 @@ export default function Colaboradores() {
         role: rolesMap.get(p.id)?.[0] ?? null,
       }));
 
-      // 🔥 Ordenação: Unidade → Status (ativo primeiro) → Nome
+      // 🔥 Ordenação local: Unidade → Status (ativo primeiro) → Nome
       const sortedProfiles = profilesWithRoles.sort((a, b) => {
-        // 1. Unidade (nome da unidade)
-        const nomeUnidadeA = unidades.find(u => u.id === a.unidade_id)?.nome || "";
-        const nomeUnidadeB = unidades.find(u => u.id === b.unidade_id)?.nome || "";
-        if (nomeUnidadeA !== nomeUnidadeB) return nomeUnidadeA.localeCompare(nomeUnidadeB);
-
-        // 2. Status (ativos primeiro)
+        const unidadeA = uRes.data?.find(u => u.id === a.unidade_id)?.nome || "";
+        const unidadeB = uRes.data?.find(u => u.id === b.unidade_id)?.nome || "";
+        if (unidadeA !== unidadeB) return unidadeA.localeCompare(unidadeB);
         if (a.ativo !== b.ativo) return a.ativo ? -1 : 1;
-
-        // 3. Nome
         return a.nome.localeCompare(b.nome);
       });
 
@@ -104,19 +100,27 @@ export default function Colaboradores() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { loadData(); }, [unidades]); // Recarregar quando unidades mudar
+  // 🔥 useEffect com dependências corretas (sem unidades)
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  const filteredProfiles = profiles.filter(p => {
-    const matchesSearch = p.nome.toLowerCase().includes(search.toLowerCase()) || p.cpf.includes(search.replace(/\D/g, ""));
-    const matchesUnidade = filtroUnidade === "all" || p.unidade_id === filtroUnidade;
-    const matchesStatus = filtroStatus === "all" || (filtroStatus === "ativo" ? p.ativo : !p.ativo);
-    const matchesCargo = filtroCargo === "all" || p.cargo === filtroCargo;
-    return matchesSearch && matchesUnidade && matchesStatus && matchesCargo;
-  });
+  // 🔥 Filtrar perfis (useMemo para evitar recálculos desnecessários)
+  const filteredProfiles = useMemo(() => {
+    return profiles.filter(p => {
+      const matchesSearch = p.nome.toLowerCase().includes(search.toLowerCase()) || p.cpf.includes(search.replace(/\D/g, ""));
+      const matchesUnidade = filtroUnidade === "all" || p.unidade_id === filtroUnidade;
+      const matchesStatus = filtroStatus === "all" || (filtroStatus === "ativo" ? p.ativo : !p.ativo);
+      const matchesCargo = filtroCargo === "all" || p.cargo === filtroCargo;
+      return matchesSearch && matchesUnidade && matchesStatus && matchesCargo;
+    });
+  }, [profiles, search, filtroUnidade, filtroStatus, filtroCargo]);
 
-  const uniqueCargos = [...new Set(profiles.map(p => p.cargo).filter(Boolean))];
+  const uniqueCargos = useMemo(() => {
+    return [...new Set(profiles.map(p => p.cargo).filter(Boolean))];
+  }, [profiles]);
 
   const toUpperCaseTrim = (str: string) => str.trim().toUpperCase();
 
@@ -133,7 +137,6 @@ export default function Colaboradores() {
   };
 
   const handleCreate = async () => {
-    // 🔥 Validação
     const errors = validateForm(newForm);
     if (errors.length > 0) {
       toast.error("Campos obrigatórios pendentes", {
@@ -154,15 +157,14 @@ export default function Colaboradores() {
         email: newForm.email.trim().toLowerCase() || `${cleanCpf}@pakere.com.br`,
         senha: newForm.senha || cleanCpf.slice(-6),
         cargo: toUpperCaseTrim(newForm.cargo),
-        dataAdmissao: newForm.dataAdmissao || null, // ← enviar null se vazio
-        dataNascimento: newForm.dataNascimento || null, // ← enviar null se vazio
+        dataAdmissao: newForm.dataAdmissao || null,
+        dataNascimento: newForm.dataNascimento || null,
         folgaFixaSemana: newForm.folgaFixa === "none" ? null : Number(newForm.folgaFixa),
         role: newForm.perfil_acesso,
       });
 
       if (authErr) throw authErr;
 
-      // Verifica se a unidade selecionada tem relógio para definir o default
       const unidadeSelecionada = unidades.find(u => u.id === newForm.unidadeId);
       const possuiFolhaPontoDefault = unidadeSelecionada?.possui_relogio_ponto || false;
 
@@ -214,7 +216,6 @@ export default function Colaboradores() {
   };
 
   const handleUpdate = async () => {
-    // 🔥 Validação para edição (mesmos campos obrigatórios)
     const errors = validateForm(editForm);
     if (errors.length > 0) {
       toast.error("Campos obrigatórios pendentes", {
