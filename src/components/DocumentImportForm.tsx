@@ -90,7 +90,19 @@ export function DocumentImportForm() {
   useEffect(() => {
     setShowNovoColab(false);
     setManualProfileId("");
-  }, [currentPage]);
+    setPageImageUrl(null);
+
+    if (selectedFile && pageResults.length > 0) {
+      const pageNum = pageResults[currentPage]?.pageNumber;
+      if (pageNum) {
+        setLoadingPageImage(true);
+        renderPdfPageAsImage(selectedFile, pageNum)
+          .then(setPageImageUrl)
+          .catch(() => setPageImageUrl(null))
+          .finally(() => setLoadingPageImage(false));
+      }
+    }
+  }, [currentPage, selectedFile, pageResults.length]);
 
   const cleanCNPJ = (cnpj: string) => cnpj.replace(/\D/g, "");
 
