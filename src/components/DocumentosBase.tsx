@@ -24,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2, Eye, ChevronRight } from "lucide-react";
+import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 interface Documento {
@@ -82,24 +82,20 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [loading, setLoading] = useState(false);
   
-  // Filtros
   const [filtroColab, setFiltroColab] = useState("todos");
   const [filtroMes, setFiltroMes] = useState("todos");
   const [filtroAno, setFiltroAno] = useState("todos");
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [filtroUnidade, setFiltroUnidade] = useState("todos");
 
-  // Estados de edição
   const [editando, setEditando] = useState<string | null>(null);
   const [editMes, setEditMes] = useState("");
   const [editAno, setEditAno] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Estado para popout de detalhes (mobile)
   const [selectedDoc, setSelectedDoc] = useState<Documento | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
-  // Exclusão
   const [excluirDialogOpen, setExcluirDialogOpen] = useState(false);
   const [documentoParaExcluir, setDocumentoParaExcluir] = useState<Documento | null>(null);
   const [excluindo, setExcluindo] = useState(false);
@@ -151,7 +147,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
       setProfiles(profs ?? []);
       setUnidades(units ?? []);
     } catch (error) {
-      console.error("Erro ao carregar documentos:", error);
+      console.error("Erro ao carregar:", error);
       toast.error("Erro ao carregar histórico");
     } finally {
       setLoading(false);
@@ -228,7 +224,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
     setIsDetailOpen(true);
   }, []);
 
-  // Exclusão
   const handleExcluir = useCallback((doc: Documento) => {
     setDocumentoParaExcluir(doc);
     setExcluirDialogOpen(true);
@@ -311,7 +306,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
 
       {aba === "historico" && (
         <div className="space-y-4">
-          {/* Filtros */}
           <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             <div className="space-y-1 col-span-2 md:col-span-1">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Colaborador</Label>
@@ -383,7 +377,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
               Nenhum documento encontrado com os filtros selecionados.
             </div>
           ) : isMobile ? (
-            // VERSÃO MOBILE: cards
+            // 🔥 VERSÃO MOBILE – COM BOTÃO DOWNLOAD NO CARD
             <div className="grid gap-3">
               {filtrados.map((doc) => {
                 const profile = profiles.find((p) => p.id === doc.colaborador_id);
@@ -401,29 +395,44 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                           {unidade?.nome && <span>{unidade.nome} • </span>}
                           {String(doc.mes).padStart(2, "0")}/{doc.ano}
                         </div>
-                        <Badge
-                          className={
-                            doc.status === "disponivel" || doc.status === "vinculado"
-                              ? "bg-green-100 text-green-700 border-green-200 mt-1"
-                              : "bg-muted text-muted-foreground mt-1"
-                          }
-                        >
-                          {doc.status}
-                        </Badge>
-                        {!profile?.ativo && (
-                          <Badge variant="outline" className="ml-1 text-[10px] bg-red-50 text-red-600 border-red-200 mt-1">
-                            Inativo
+                        <div className="flex flex-wrap items-center gap-1 mt-1">
+                          <Badge
+                            className={
+                              doc.status === "disponivel" || doc.status === "vinculado"
+                                ? "bg-green-100 text-green-700 border-green-200"
+                                : "bg-muted text-muted-foreground"
+                            }
+                          >
+                            {doc.status}
                           </Badge>
-                        )}
+                          {!profile?.ativo && (
+                            <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200">
+                              Inativo
+                            </Badge>
+                          )}
+                        </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 shrink-0"
-                        onClick={() => openDetail(doc)}
-                      >
-                        <ChevronRight className="size-4" />
-                      </Button>
+                      <div className="flex gap-1 shrink-0">
+                        {/* 🔥 Botão Download no card */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          title="Baixar"
+                          onClick={() => handleDownload(doc)}
+                        >
+                          <Download className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          title="Detalhes"
+                          onClick={() => openDetail(doc)}
+                        >
+                          <ChevronRight className="size-4" />
+                        </Button>
+                      </div>
                     </div>
                     {isEditing ? (
                       <div className="flex items-center gap-2 mt-2">
@@ -453,7 +462,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
               })}
             </div>
           ) : (
-            // VERSÃO DESKTOP: tabela
+            // VERSÃO DESKTOP – TABELA (sem alterações)
             <div className="bg-card border border-border rounded-2xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 border-b border-border">
@@ -531,31 +540,13 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                         </td>
                         <td className="p-4 text-right whitespace-nowrap">
                           <div className="flex justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8"
-                              title="Editar competência"
-                              onClick={() => startEditing(doc)}
-                            >
+                            <Button variant="ghost" size="icon" className="size-8" title="Editar competência" onClick={() => startEditing(doc)}>
                               <Pencil className="size-4" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8"
-                              title="Baixar"
-                              onClick={() => handleDownload(doc)}
-                            >
+                            <Button variant="ghost" size="icon" className="size-8" title="Baixar" onClick={() => handleDownload(doc)}>
                               <Download className="size-4" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                              title="Excluir documento"
-                              onClick={() => handleExcluir(doc)}
-                            >
+                            <Button variant="ghost" size="icon" className="size-8 text-red-500 hover:text-red-700 hover:bg-red-50" title="Excluir" onClick={() => handleExcluir(doc)}>
                               <Trash2 className="size-4" />
                             </Button>
                           </div>
