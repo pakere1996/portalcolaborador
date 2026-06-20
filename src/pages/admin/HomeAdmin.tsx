@@ -108,6 +108,7 @@ const blankEditForm = {
   senha: "",
   regime_trabalho: "none",
   data_demissao: "",
+  tipo_vinculo: "CLT", // 🔥 NOVO
 };
 
 export default function AdminHomeAdminPage() {
@@ -131,7 +132,6 @@ export default function AdminHomeAdminPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // 🔥 USE SELECT * para evitar erro de coluna inexistente
       const [pRes, uRes, cRes] = await Promise.all([
         supabase.from("profiles").select("*").order("nome"),
         supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
@@ -204,6 +204,7 @@ export default function AdminHomeAdminPage() {
         ativo: true,
         regime_trabalho: newForm.regime_trabalho === "none" ? null : newForm.regime_trabalho,
         data_demissao: newForm.data_demissao || null,
+        tipo_vinculo: newForm.tipo_vinculo || "CLT", // 🔥 NOVO
       }).eq("id", authUser.userId);
 
       if (profErr) throw profErr;
@@ -237,6 +238,7 @@ export default function AdminHomeAdminPage() {
       senha: "",
       regime_trabalho: p.regime_trabalho ?? "none",
       data_demissao: p.data_demissao ?? "",
+      tipo_vinculo: p.tipo_vinculo ?? "CLT", // 🔥 NOVO
     });
   };
 
@@ -262,6 +264,7 @@ export default function AdminHomeAdminPage() {
         updated_at: new Date().toISOString(),
         regime_trabalho: editForm.regime_trabalho === "none" ? null : editForm.regime_trabalho,
         data_demissao: editForm.data_demissao || null,
+        tipo_vinculo: editForm.tipo_vinculo || "CLT", // 🔥 NOVO
       }).eq("id", editingProfile.id);
 
       if (profErr) throw profErr;
