@@ -111,20 +111,25 @@ export function DocumentImportForm() {
     return null;
   };
 
-  // Extrai o nome do colaborador do texto do PDF (formato cartão de ponto/contracheque)
-  const extractNomePDF = (text: string): string | null => {
-    const nameMatch = text.match(/\d{2}\/\d{2}\/\d{4}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+?)\s+\d+\s+[A-Z]/);
-    if (nameMatch) return nameMatch[1].trim().replace(/\s+/g, " ");
-    return null;
-  };
+  // Varre o texto inteiro do PDF procurando o nome exato de algum colaborador cadastrado.
+  // Funciona independente do layout do documento (contracheque, ponto, etc).
+  const findExactMatchInText = (text: string, profilesList: ProfileForMatching[]): { profile: ProfileForMatching | null; nomeEncontrado: string | null } => {
+    const textoNormalizado = normalizeNome(text);
 
-  // Match exato por nome (ignorando acentos e caixa). Retorna null se 0 ou 2+ matches.
-  const findExactMatch = (nomePDF: string | null, profilesList: ProfileForMatching[]): ProfileForMatching | null => {
-    if (!nomePDF) return null;
-    const nomeNormalizado = normalizeNome(nomePDF);
-    const matches = profilesList.filter(p => normalizeNome(p.nome) === nomeNormalizado);
-    if (matches.length === 1) return matches[0];
-    return null; // 0 ou ambíguo (2+) -> revisão manual
+    const matches = profilesList.filter(p => {
+      const nomeNormalizado = normalizeNome(p.nome);
+      // Garante que o nome aparece como sequência completa de palavras no texto
+      // (usa espaço normalizado como delimitador para evitar match parcial de palavra)
+      return textoNormalizado.includes(` ${nomeNormalizado} `) ||
+             textoNormalizado.startsWith(`${nomeNormalizado} `) ||
+             textoNormalizado.endsWith(` ${nomeNormalizado}`) ||
+             textoNormalizado === nomeNormalizado;
+    });
+
+    if (matches.length === 1) {
+      return { profile: matches[0], nomeEncontrado: matches[0].nome };
+    }
+    return { profile: null, nomeEncontrado: null };
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
