@@ -62,10 +62,11 @@ export default function RegistrosDisciplinaresAdmin() {
           {form.data_documento && form.dias_afastamento && parseInt(form.dias_afastamento) > 0 && (
             <div className="rounded-xl bg-muted/30 p-3 text-sm">
               <span className="font-semibold">Data de retorno:</span>{" "}
-              {new Date(
-                new Date(form.data_documento).getTime() +
-                  parseInt(form.dias_afastamento) * 24 * 60 * 60 * 1000
-              ).toLocaleDateString("pt-BR")}
+              {(() => {
+                const dt = new Date(form.data_documento + 'T00:00:00');
+                dt.setDate(dt.getDate() + parseInt(form.dias_afastamento));
+                return dt.toLocaleDateString('pt-BR');
+              })()}
             </div>
           )}
         </>
