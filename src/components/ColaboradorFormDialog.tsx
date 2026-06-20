@@ -39,7 +39,7 @@ interface ColaboradorForm {
   ativo: boolean;
   senha: string;
   data_demissao: string;
-  tipo_vinculo: string; // 🔥 NOVO
+  tipo_vinculo: string;
 }
 
 interface ColaboradorFormDialogProps {
@@ -65,6 +65,15 @@ const DIAS_SEMANA = [
   { value: "6", label: "Sábado" },
 ];
 
+// 🔥 Lista fixa com "Sócio" + cargos do banco
+const getCargoOptions = (cargos: Cargo[]) => {
+  const cargoNomes = cargos.map(c => c.nome);
+  if (!cargoNomes.includes("Sócio") && !cargoNomes.includes("SÓCIO")) {
+    return [...cargoNomes, "Sócio"];
+  }
+  return cargoNomes;
+};
+
 export function ColaboradorFormDialog({
   open,
   onOpenChange,
@@ -79,6 +88,8 @@ export function ColaboradorFormDialog({
   const set = (field: keyof ColaboradorForm) => (
     e: React.ChangeEvent<HTMLInputElement>
   ) => setForm({ ...form, [field]: e.target.value });
+
+  const cargoOptions = getCargoOptions(cargos);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -104,20 +115,16 @@ export function ColaboradorFormDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Cargo *</Label>
-              {cargos.length > 0 ? (
-                <Select value={form.cargo} onValueChange={(v) => setForm({ ...form, cargo: v })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o cargo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cargos.map((c) => (
-                      <SelectItem key={c.id} value={c.nome}>{c.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input value={form.cargo} onChange={set("cargo")} placeholder="Ex: Atendente" />
-              )}
+              <Select value={form.cargo} onValueChange={(v) => setForm({ ...form, cargo: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o cargo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cargoOptions.map(cargoNome => (
+                    <SelectItem key={cargoNome} value={cargoNome}>{cargoNome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>Matrícula (Opcional)</Label>
