@@ -128,49 +128,45 @@ export default function AdminHomeAdminPage() {
   const [confirmDelete, setConfirmDelete] = useState<any | null>(null);
   const [resetPasswordDialog, setResetPasswordDialog] = useState<{ profile: any; senha: string; confirmar: string } | null>(null);
 
-const loadData = async () => {
-  setLoading(true);
-  try {
-    const [pRes, uRes, cRes] = await Promise.all([
-      supabase.from("profiles").select("*").order("nome"),  // <-- SELECT * para evitar erro de coluna
-      supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
-      supabase.from("cargos").select("*").eq("ativo", true).order("nome"),
-    ]);
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      // 🔥 USE SELECT * para evitar erro de coluna inexistente
+      const [pRes, uRes, cRes] = await Promise.all([
+        supabase.from("profiles").select("*").order("nome"),
+        supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
+        supabase.from("cargos").select("*").eq("ativo", true).order("nome"),
+      ]);
 
-    if (pRes.error) {
-      console.error("Erro ao buscar profiles:", pRes.error);
-      throw pRes.error;
+      if (pRes.error) throw pRes.error;
+
+      const profileIds = (pRes.data ?? []).map(p => p.id);
+      let rolesMap = new Map<string, string[]>();
+      if (profileIds.length > 0) {
+        const { data: rolesData } = await supabase.from("user_roles").select("user_id, role").in("user_id", profileIds);
+        rolesData?.forEach(r => {
+          if (!rolesMap.has(r.user_id)) rolesMap.set(r.user_id, []);
+          rolesMap.get(r.user_id)!.push(r.role);
+        });
+      }
+
+      const profilesWithRoles = (pRes.data ?? []).map(p => ({
+        ...p,
+        role: rolesMap.get(p.id)?.[0] ?? null,
+      }));
+
+      setProfiles(profilesWithRoles);
+      setUnidades(uRes.data ?? []);
+      setCargos(cRes.data ?? []);
+    } catch (e) {
+      toast.error("Erro ao carregar dados", { description: (e as Error).message });
+    } finally {
+      setLoading(false);
     }
-
-    const profileIds = (pRes.data ?? []).map(p => p.id);
-    let rolesMap = new Map<string, string[]>();
-    if (profileIds.length > 0) {
-      const { data: rolesData } = await supabase.from("user_roles").select("user_id, role").in("user_id", profileIds);
-      rolesData?.forEach(r => {
-        if (!rolesMap.has(r.user_id)) rolesMap.set(r.user_id, []);
-        rolesMap.get(r.user_id)!.push(r.role);
-      });
-    }
-
-    const profilesWithRoles = (pRes.data ?? []).map(p => ({
-      ...p,
-      role: rolesMap.get(p.id)?.[0] ?? null,
-    }));
-
-    setProfiles(profilesWithRoles);
-    setUnidades(uRes.data ?? []);
-    setCargos(cRes.data ?? []);
-  } catch (e) {
-    console.error("Erro ao carregar dados:", e);
-    toast.error("Erro ao carregar dados", { description: (e as Error).message });
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   useEffect(() => { loadData(); }, []);
 
-  // 🔥 Ajusta o filtro para usar unidade_id (ou unidadeId, que foi mapeado)
   const filteredProfiles = profiles.filter(p => {
     const matchesSearch = p.nome.toLowerCase().includes(search.toLowerCase()) || p.cpf.includes(search.replace(/\D/g, ""));
     const matchesUnidade = filtroUnidade === "all" || p.unidade_id === filtroUnidade;
@@ -195,20 +191,20 @@ const loadData = async () => {
         cargo: newForm.cargo,
         dataAdmissao: newForm.dataAdmissao,
         dataNascimento: newForm.dataNascimento,
-        folgaFixaSemana: newForm.folgaFixa === "none" ? null : Number(newForm.folgaFixa),
+        folgaFixaSemana: newForm.folgaFixa === "" || newForm.folgaFixa === "none" ? null : Number(newForm.folgaFixa),
         role: newForm.perfil_acesso,
       });
 
       if (authErr) throw authErr;
 
       const { error: profErr } = await supabase.from("profiles").update({
-  matricula: newForm.matricula.trim() || null,
-  whatsapp: newForm.whatsapp.trim() || null,
-  unidade_id: newForm.unidadeId === "" ? null : newForm.unidadeId,  // <-- nome correto
-  ativo: true,
-  regime_trabalho: newForm.regime_trabalho === "none" ? null : newForm.regime_trabalho,
-  data_demissao: newForm.data_demissao || null,
-}).eq("id", authUser.userId);
+        matricula: newForm.matricula.trim() || null,
+        whatsapp: newForm.whatsapp.trim() || null,
+        unidade_id: newForm.unidadeId === "" ? null : newForm.unidadeId,
+        ativo: true,
+        regime_trabalho: newForm.regime_trabalho === "none" ? null : newForm.regime_trabalho,
+        data_demissao: newForm.data_demissao || null,
+      }).eq("id", authUser.userId);
 
       if (profErr) throw profErr;
 
@@ -224,25 +220,25 @@ const loadData = async () => {
   };
 
   const openEdit = (p: any) => {
-  setEditingProfile(p);
-  setEditForm({
-    nome: p.nome,
-    cpf: formatCPF(p.cpf),
-    matricula: p.matricula ?? "",
-    email: p.email_contato ?? "",
-    whatsapp: p.whatsapp ?? "",
-    cargo: p.cargo,
-    unidadeId: p.unidade_id ?? "",                     // <-- vem do banco como unidade_id
-    folgaFixa: p.folga_fixa_semana?.toString() ?? "none", // <-- vem do banco como folga_fixa_semana
-    dataNascimento: p.data_nascimento ?? "",
-    dataAdmissao: p.data_admissao ?? "",
-    perfil_acesso: p.role ?? "colaborador",
-    ativo: p.ativo,
-    senha: "",
-    regime_trabalho: p.regime_trabalho ?? "none",
-    data_demissao: p.data_demissao ?? "",
-  });
-};
+    setEditingProfile(p);
+    setEditForm({
+      nome: p.nome,
+      cpf: formatCPF(p.cpf),
+      matricula: p.matricula ?? "",
+      email: p.email_contato ?? "",
+      whatsapp: p.whatsapp ?? "",
+      cargo: p.cargo,
+      unidadeId: p.unidade_id ?? "",
+      folgaFixa: p.folga_fixa_semana?.toString() ?? "none",
+      dataNascimento: p.data_nascimento ?? "",
+      dataAdmissao: p.data_admissao ?? "",
+      perfil_acesso: p.role ?? "colaborador",
+      ativo: p.ativo,
+      senha: "",
+      regime_trabalho: p.regime_trabalho ?? "none",
+      data_demissao: p.data_demissao ?? "",
+    });
+  };
 
   const handleUpdate = async () => {
     if (!editingProfile) return;
@@ -252,22 +248,21 @@ const loadData = async () => {
       if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
 
       const { error: profErr } = await supabase.from("profiles").update({
-  nome: editForm.nome.trim(),
-  cpf: cleanCpf,
-  matricula: editForm.matricula.trim() || null,
-  email_contato: editForm.email.trim() || null,
-  whatsapp: editForm.whatsapp.trim() || null,
-  cargo: editForm.cargo,
-  unidade_id: editForm.unidadeId === "" ? null : editForm.unidadeId,  // <-- nome correto
-  folga_fixa_semana: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa), // <-- nome correto
-  data_nascimento: editForm.dataNascimento || null,
-  data_admissao: editForm.dataAdmissao || null,
-  ativo: editForm.ativo,
-  updated_at: new Date().toISOString(),
-  regime_trabalho: editForm.regime_trabalho === "none" ? null : editForm.regime_trabalho,
-  data_demissao: editForm.data_demissao || null,
-}).eq("id", editingProfile.id);
-
+        nome: editForm.nome.trim(),
+        cpf: cleanCpf,
+        matricula: editForm.matricula.trim() || null,
+        email_contato: editForm.email.trim() || null,
+        whatsapp: editForm.whatsapp.trim() || null,
+        cargo: editForm.cargo,
+        unidade_id: editForm.unidadeId === "" ? null : editForm.unidadeId,
+        folga_fixa_semana: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa),
+        data_nascimento: editForm.dataNascimento || null,
+        data_admissao: editForm.dataAdmissao || null,
+        ativo: editForm.ativo,
+        updated_at: new Date().toISOString(),
+        regime_trabalho: editForm.regime_trabalho === "none" ? null : editForm.regime_trabalho,
+        data_demissao: editForm.data_demissao || null,
+      }).eq("id", editingProfile.id);
 
       if (profErr) throw profErr;
 
