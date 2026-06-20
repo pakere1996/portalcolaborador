@@ -110,20 +110,50 @@ export default function AtestadosAdmin() {
         }
         return null;
       }}
+      // 🔥 beforeInsert com auto‑aprovação para admin
       beforeInsert={async (form, path, kind) => {
         const { data: userData } = await supabase.auth.getUser();
-        return {
+        const userId = userData?.user?.id;
+
+        // Verifica se o usuário é admin
+        const { data: roles } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', userId)
+          .eq('role', 'admin')
+          .maybeSingle();
+
+        const isAdmin = !!roles;
+
+        const baseData = {
           colaborador_id: form.colaborador_id,
           unidade_id: form.unidade_id,
           data_atestado: form.data_documento,
           dias_afastamento: parseInt(form.dias_afastamento) || 0,
           observacao: form.observacao || null,
-          observacao_admin: null,
-          status: "pendente",
           storage_path: path,
           storage_type: kind,
-          criado_por: userData?.user?.id,
+          criado_por: userId,
+          observacao_admin: null,
         };
+
+        if (isAdmin) {
+          // Admin cadastra como aprovado automaticamente
+          return {
+            ...baseData,
+            status: 'aprovado',
+            respondido_em: new Date().toISOString(),
+            respondido_por: userId,
+          };
+        } else {
+          // Caso não seja admin (nunca deve ocorrer no admin, mas por segurança)
+          return {
+            ...baseData,
+            status: 'pendente',
+            respondido_em: null,
+            respondido_por: null,
+          };
+        }
       }}
     />
   );
