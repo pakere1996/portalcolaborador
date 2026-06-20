@@ -32,6 +32,7 @@ const blankEditForm = {
   regime_trabalho: "none",
   data_demissao: "",
   tipo_vinculo: "CLT",
+  possui_folha_ponto: false, // 🔥 NOVO
 };
 
 export default function Colaboradores() {
@@ -100,7 +101,6 @@ export default function Colaboradores() {
 
   const uniqueCargos = [...new Set(profiles.map(p => p.cargo).filter(Boolean))];
 
-  // 🔥 Função auxiliar para converter para maiúsculas
   const toUpperCaseTrim = (str: string) => str.trim().toUpperCase();
 
   const handleCreate = async () => {
@@ -131,6 +131,7 @@ export default function Colaboradores() {
         regime_trabalho: newForm.regime_trabalho === "none" ? null : newForm.regime_trabalho,
         data_demissao: newForm.data_demissao || null,
         tipo_vinculo: newForm.tipo_vinculo || "CLT",
+        possui_folha_ponto: newForm.possui_folha_ponto || false, // 🔥 NOVO
       }).eq("id", authUser.userId);
 
       if (profErr) throw profErr;
@@ -165,6 +166,7 @@ export default function Colaboradores() {
       regime_trabalho: p.regime_trabalho ?? "none",
       data_demissao: p.data_demissao ?? "",
       tipo_vinculo: p.tipo_vinculo ?? "CLT",
+      possui_folha_ponto: p.possui_folha_ponto ?? false, // 🔥 NOVO
     });
   };
 
@@ -191,6 +193,7 @@ export default function Colaboradores() {
         regime_trabalho: editForm.regime_trabalho === "none" ? null : editForm.regime_trabalho,
         data_demissao: editForm.data_demissao || null,
         tipo_vinculo: editForm.tipo_vinculo || "CLT",
+        possui_folha_ponto: editForm.possui_folha_ponto || false, // 🔥 NOVO
       }).eq("id", editingProfile.id);
 
       if (profErr) throw profErr;
@@ -333,6 +336,7 @@ export default function Colaboradores() {
                   <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Vínculo</th>
                   <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
                   <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Perfil</th>
+                  <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Folha Ponto</th> {/* 🔥 NOVO */}
                   <th className="text-right p-4 font-bold uppercase tracking-wider text-[10px]">Ações</th>
                 </tr>
               </thead>
@@ -360,6 +364,13 @@ export default function Colaboradores() {
                       <Badge className={p.role === "admin" ? "bg-primary/10 text-primary border-primary/20" : "bg-muted text-muted-foreground border-border"}>
                         {p.role === "admin" ? "Admin" : "Colaborador"}
                       </Badge>
+                    </td>
+                    <td className="p-4 text-center">
+                      {p.possui_folha_ponto ? (
+                        <Badge className="bg-green-100 text-green-700 border-green-200">Sim</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">Não</Badge>
+                      )}
                     </td>
                     <td className="p-4 text-right whitespace-nowrap">
                       <div className="flex justify-end gap-1">
