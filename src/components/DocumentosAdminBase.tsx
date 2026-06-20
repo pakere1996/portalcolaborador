@@ -610,7 +610,7 @@ export function DocumentosAdminBase({
                                     rows={2}
                                     value={editForm.observacao_admin || ""}
                                     onChange={(e) => setEditForm({ ...editForm, observacao_admin: e.target.value })}
-                                    placeholder="Observação para o colaborador"
+                                    placeholder="Retorno ao Colaborador"
                                     className="w-full"
                                   />
                                 </>
