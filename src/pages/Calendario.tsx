@@ -22,7 +22,9 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Clock, AlertCircle, ArrowLeftRight, ShieldAlert, Info, RefreshCw, Send } from "lucide-react";
+import { Calendar as CalIcon, Clock, AlertCircle, ArrowLeftRight, ShieldAlert, Info, RefreshCw, Send, ChevronLeft, ChevronRight } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 interface Solic {
   id: string;
@@ -33,10 +35,21 @@ interface Solic {
   user_id: string;
 }
 
+// Hook para detectar mobile
+const useMediaQuery = (query: string) => {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    if (media.matches !== matches) setMatches(media.matches);
+    const listener = () => setMatches(media.matches);
+    media.addEventListener('change', listener);
+    return () => media.removeEventListener('change', listener);
+  }, [matches, query]);
+  return matches;
+};
+
 export default function CalendarioPage() {
   const { user, profile: rawProfile } = useAuth();
-  
-  // Intercepta e estende a tipagem do perfil para incluir a unidade_id sem quebrar o build
   const profile = rawProfile as (Exclude<typeof rawProfile, null> & { unidade_id?: string | null }) | null;
 
   const today = new Date();
@@ -58,15 +71,16 @@ export default function CalendarioPage() {
   const [reqMotivo, setReqMotivo] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const isMobile = useMediaQuery('(max-width: 768px)');
+
   const load = async () => {
-    if (!user || !profile?.unidade_id) return; // Verifica se a unidade está definida
+    if (!user || !profile?.unidade_id) return;
     
     const unidadeId = profile.unidade_id;
     const start = `${year}-${String(month0 + 1).padStart(2, "0")}-01`;
     const endDate = new Date(year, month0 + 1, 0);
     const end = ymd(endDate);
 
-    // 1. Buscar todos os perfis da unidade
     const { data: profilesData, error: profilesError } = await supabase
       .from("profiles")
       .select("id, nome, folga_fixa_semana, data_nascimento, unidade_id")
@@ -81,7 +95,6 @@ export default function CalendarioPage() {
     const profileIds = profilesData.map(p => p.id);
     setAllProfiles(profilesData);
 
-    // 2. Buscar dados filtrados pela unidade (ou por IDs de perfil)
     const [allFolgasRes, blockRes, limRes, prioRes, pendingRes, canceledRes] = await Promise.all([
       supabase.from("folgas").select("*").in("user_id", profileIds).gte("data", start).lte("data", end),
       supabase.from("datas_bloqueadas").select("*").gte("data", start).lte("data", end),
@@ -99,7 +112,7 @@ export default function CalendarioPage() {
     setCanceledFolgas(canceledRes.data ?? []);
   };
 
-  useEffect(() => { load(); }, [year, month0, user, profile?.unidade_id]); // Dependência adicionada
+  useEffect(() => { load(); }, [year, month0, user, profile?.unidade_id]);
 
   useEffect(() => {
     const ch = supabase.channel("calendario-realtime")
@@ -109,7 +122,7 @@ export default function CalendarioPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "folgas_canceladas" }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [year, month0, user?.id, profile?.unidade_id]); // Dependência adicionada
+  }, [year, month0, user?.id, profile?.unidade_id]);
 
   const manualMap = useMemo(() => {
     const m = new Map<string, { reason: string; liberada: boolean }>();
@@ -133,12 +146,10 @@ export default function CalendarioPage() {
   const unlock = unlockDateForMonth(year, month0);
   const mk = monthKey(new Date(year, month0, 1));
 
-  const onSelectDay = async (iso: string) => {
-    if (!user) return;
-    
-    const statusInfo = calculateDateStatus({
+  const getDayStatus = (iso: string) => {
+    return calculateDateStatus({
       date: parseYMD(iso),
-      myUserId: user.id,
+      myUserId: user?.id || '',
       allFolgas: folgas,
       allProfiles,
       manualBlocked: manualMap,
@@ -149,6 +160,12 @@ export default function CalendarioPage() {
       isAdmin: false,
       locked: unlocked ? null : { unlockDateBR: formatBR(unlock) }
     });
+  };
+
+  const onSelectDay = async (iso: string) => {
+    if (!user) return;
+    
+    const statusInfo = getDayStatus(iso);
 
     if (statusInfo.status === "available") {
       const myFolgaThisMonth = folgas.find((f) => 
@@ -244,6 +261,167 @@ export default function CalendarioPage() {
     }
   };
 
+  // 🔥 Função para renderizar calendário mobile com dia da semana abreviado
+  const renderMobileCalendar = () => {
+    const daysInMonth = [];
+    const daysInWeek = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const date = new Date(year, month0, 1);
+    const monthName = date.toLocaleString('pt-BR', { month: 'long' });
+
+    // Determinar o primeiro dia da semana (0=Dom, 1=Seg...)
+    const firstDay = date.getDay();
+    
+    // Preencher dias do mês
+    const totalDays = new Date(year, month0 + 1, 0).getDate();
+    for (let i = 0; i < totalDays; i++) {
+      const d = new Date(year, month0, i + 1);
+      const iso = ymd(d);
+      const isWeekend = dayType(d);
+      const statusInfo = getDayStatus(iso);
+      const isBlocked = manualMap.get(iso)?.liberada === false || autoBlockedDatesForMonth(year, month0).some(b => b.date === iso);
+      
+      let occupantNames: string[] = [];
+      // Buscar ocupantes do dia (folgas)
+      const dayFolgas = folgas.filter(f => f.data === iso);
+      const profileMap = new Map(allProfiles.map(p => [p.id, p.nome]));
+      dayFolgas.forEach(f => {
+        const nome = profileMap.get(f.user_id);
+        if (nome) occupantNames.push(nome);
+      });
+      // Incluir folgas fixas
+      const fixedProfiles = allProfiles.filter(p => p.folga_fixa_semana === d.getDay());
+      fixedProfiles.forEach(p => {
+        if (!occupantNames.includes(p.nome)) occupantNames.push(p.nome);
+      });
+
+      // Limitar exibição a 3 nomes + contador
+      const displayNames = occupantNames.slice(0, 3);
+      const remaining = occupantNames.length - 3;
+
+      daysInMonth.push({
+        day: i + 1,
+        iso,
+        weekday: daysInWeek[d.getDay()],
+        isWeekend: !!isWeekend,
+        isBlocked,
+        occupants: occupantNames,
+        displayNames,
+        remaining,
+        limit: dayLimits.get(iso) || 1,
+        status: statusInfo.status,
+        isMine: statusInfo.status === 'mine' || statusInfo.status === 'swapped',
+        isPending: statusInfo.status === 'pending',
+        isAvailable: statusInfo.status === 'available',
+      });
+    }
+
+    return (
+      <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+        {/* Cabeçalho */}
+        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="size-8 rounded-full" onClick={() => { const d = new Date(year, month0 - 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); }}>
+              <ChevronLeft className="size-4" />
+            </Button>
+            <span className="font-bold text-sm capitalize">{monthName} {year}</span>
+            <Button variant="ghost" size="icon" className="size-8 rounded-full" onClick={() => { const d = new Date(year, month0 + 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); }}>
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            {daysInMonth.filter(d => d.isWeekend).length} dias úteis
+          </span>
+        </div>
+
+        {/* Lista de dias */}
+        <div className="divide-y divide-slate-100 max-h-[70vh] overflow-y-auto">
+          {daysInMonth.map((item) => {
+            const hasFolga = item.occupants.length > 0;
+            const isOccupied = hasFolga || item.isBlocked;
+            // Determinar cor de fundo baseado no status
+            let bgClass = 'hover:bg-slate-50/50';
+            if (item.isMine) bgClass = 'bg-green-50/50 hover:bg-green-50';
+            else if (item.isPending) bgClass = 'bg-amber-50/50 hover:bg-amber-50';
+            else if (item.isBlocked) bgClass = 'bg-rose-50/50 hover:bg-rose-50';
+
+            return (
+              <div
+                key={item.day}
+                className={`px-4 py-3 transition-colors cursor-pointer ${bgClass}`}
+                onClick={() => onSelectDay(item.iso)}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-slate-900">
+                        {item.day}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        {item.weekday}
+                      </span>
+                      {item.isBlocked && (
+                        <Badge variant="outline" className="text-[9px] bg-rose-50 text-rose-600 border-rose-200 px-1.5 py-0 h-5">
+                          Bloqueado
+                        </Badge>
+                      )}
+                      {!item.isWeekend && (
+                        <Badge variant="outline" className="text-[9px] bg-slate-100 text-slate-500 border-slate-200 px-1.5 py-0 h-5">
+                          Dia útil
+                        </Badge>
+                      )}
+                      {item.isMine && (
+                        <Badge className="text-[9px] bg-green-100 text-green-700 border-green-200 px-1.5 py-0 h-5">
+                          Minha folga
+                        </Badge>
+                      )}
+                      {item.isPending && (
+                        <Badge className="text-[9px] bg-amber-100 text-amber-700 border-amber-200 px-1.5 py-0 h-5">
+                          Pendente
+                        </Badge>
+                      )}
+                      {hasFolga && !item.isMine && !item.isPending && (
+                        <Badge className="text-[9px] bg-primary/10 text-primary border-primary/20 px-1.5 py-0 h-5">
+                          {item.occupants.length}/{item.limit}
+                        </Badge>
+                      )}
+                    </div>
+                    {/* 🔥 Exibe nomes dos ocupantes (apenas primeiro nome) */}
+                    {hasFolga ? (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {item.displayNames.map((nome, idx) => {
+                          const primeiroNome = nome.split(' ')[0];
+                          return (
+                            <span
+                              key={idx}
+                              className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-primary/10 text-primary truncate max-w-[100px]"
+                              title={nome}
+                            >
+                              {primeiroNome}
+                            </span>
+                          );
+                        })}
+                        {item.remaining > 0 && (
+                          <span className="text-[10px] text-muted-foreground">
+                            +{item.remaining}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-slate-400">
+                        {item.isWeekend && !item.isBlocked ? 'Disponível' : 'Nenhum colaborador'}
+                      </span>
+                    )}
+                  </div>
+                  <ChevronRight className="size-4 text-slate-300 shrink-0 mt-0.5" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
@@ -253,18 +431,23 @@ export default function CalendarioPage() {
         <p className="text-muted-foreground mt-1">Escolha sua folga ou solicite uma troca.</p>
       </div>
 
-      <FolgaCalendar
-        year={year} month0={month0}
-        manualBlocked={manualMap} dayLimits={dayLimits}
-        birthdayByDate={birthdayByDate as any}
-        myUserId={user?.id ?? null}
-        allFolgas={folgas} allProfiles={allProfiles}
-        pendingRequests={pendingSolics}
-        onPrev={() => { const d = new Date(year, month0 - 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); }}
-        onNext={() => { const d = new Date(year, month0 + 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); }}
-        onSelectDay={onSelectDay}
-        locked={unlocked ? null : { unlockDateBR: formatBR(unlock) }}
-      />
+      {/* 🔥 Renderização condicional: mobile vs desktop */}
+      {isMobile ? (
+        renderMobileCalendar()
+      ) : (
+        <FolgaCalendar
+          year={year} month0={month0}
+          manualBlocked={manualMap} dayLimits={dayLimits}
+          birthdayByDate={birthdayByDate as any}
+          myUserId={user?.id ?? null}
+          allFolgas={folgas} allProfiles={allProfiles}
+          pendingRequests={pendingSolics}
+          onPrev={() => { const d = new Date(year, month0 - 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); }}
+          onNext={() => { const d = new Date(year, month0 + 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); }}
+          onSelectDay={onSelectDay}
+          locked={unlocked ? null : { unlockDateBR: formatBR(unlock) }}
+        />
+      )}
 
       {/* Diálogo de Mudança de Folga */}
       <Dialog open={!!changeFolgaDialog} onOpenChange={(o) => !o && setChangeFolgaDialog(null)}>
