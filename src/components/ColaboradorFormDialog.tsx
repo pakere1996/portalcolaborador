@@ -36,9 +36,9 @@ interface ColaboradorForm {
   dataNascimento: string;
   perfil_acesso: string;
   regime_trabalho: string;
-  data_demissao: string; // 🔥 NOVO CAMPO
   ativo: boolean;
   senha: string;
+  data_demissao: string; // 🔥 NOVO
 }
 
 interface ColaboradorFormDialogProps {
@@ -89,7 +89,6 @@ export function ColaboradorFormDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Nome e CPF */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Nome Completo *</Label>
@@ -101,7 +100,6 @@ export function ColaboradorFormDialog({
             </div>
           </div>
 
-          {/* Cargo e Matrícula */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Cargo *</Label>
@@ -126,7 +124,6 @@ export function ColaboradorFormDialog({
             </div>
           </div>
 
-          {/* Unidade e Folga Fixa */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Unidade *</Label>
@@ -160,7 +157,6 @@ export function ColaboradorFormDialog({
             </div>
           </div>
 
-          {/* Regime de Trabalho e Perfil de Acesso */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Regime de Trabalho</Label>
@@ -189,8 +185,7 @@ export function ColaboradorFormDialog({
             </div>
           </div>
 
-          {/* Datas */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Data de Admissão</Label>
               <Input type="date" value={form.dataAdmissao} onChange={set("dataAdmissao")} />
@@ -199,34 +194,33 @@ export function ColaboradorFormDialog({
               <Label>Data de Nascimento</Label>
               <Input type="date" value={form.dataNascimento} onChange={set("dataNascimento")} />
             </div>
-            {/* 🔥 NOVO CAMPO: Data de Demissão */}
+          </div>
+
+          {/* 🔥 NOVO CAMPO: Data de Demissão */}
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Data de Demissão</Label>
               <Input 
                 type="date" 
-                value={form.data_demissao || ""} 
-                onChange={set("data_demissao")} 
+                value={form.data_demissao} 
+                onChange={set("data_demissao")}
                 min={form.dataAdmissao || undefined}
               />
-              <p className="text-xs text-muted-foreground">
-                Preencha apenas se desligado.
-              </p>
+              <p className="text-xs text-muted-foreground">Preencha se já desligado.</p>
             </div>
-          </div>
-
-          {/* Email e WhatsApp */}
-          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Email de Contato</Label>
               <Input type="email" value={form.email} onChange={set("email")} placeholder="email@exemplo.com" />
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>WhatsApp</Label>
               <Input value={form.whatsapp} onChange={set("whatsapp")} placeholder="(00) 00000-0000" />
             </div>
           </div>
 
-          {/* Senha (só no cadastro) */}
           {!isEdit && (
             <div className="space-y-2">
               <Label>Senha Inicial</Label>
@@ -239,7 +233,6 @@ export function ColaboradorFormDialog({
             </div>
           )}
 
-          {/* Ativo */}
           {isEdit && (
             <div className="flex items-center gap-3 rounded-xl border border-border p-4">
               <Switch
