@@ -1,16 +1,35 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Users, Calendar, CalendarCheck, ClipboardList, ArrowLeftRight, Ban, Sparkles, Cake, AlertTriangle, ChevronRight, Building2 } from "lucide-react";
+import { Shield, Users, Calendar, CalendarCheck, ClipboardList, ArrowLeftRight, Ban, Sparkles, Cake, AlertTriangle, ChevronRight, Building2, MessageCircle } from "lucide-react";
 import { formatBR, parseYMD } from "@/lib/folga-rules";
 import { Button } from "@/components/ui/button";
 import { adminApi } from "@/lib/admin-api";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 interface Unidade {
   id: string;
   nome: string;
+}
+
+interface Aniversariante {
+  id: string;
+  nome: string;
+  data_nascimento: string;
+  idade: number;
+  unidade: string;
+  whatsapp: string | null;
 }
 
 export default function AdminDashboard() {
@@ -23,10 +42,18 @@ export default function AdminDashboard() {
     ocupacaoHoje: "0/1",
   });
   const [proximasFolgas, setProximasFolgas] = useState<{ data: string; ocupacao: number; limite: number; temAniversario?: boolean; status: string; percentual: number }[]>([]);
-  const [aniversariantes, setAniversariantes] = useState<{ id: string; nome: string; data_nascimento: string; idade: number; unidade: string }[]>([]);
+  const [aniversariantes, setAniversariantes] = useState<Aniversariante[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [busySorteio, setBusySorteio] = useState(false);
   const [alertas, setAlertas] = useState<{ tipo: string; mensagem: string; data?: string }[]>([]);
+
+  // Estado para o modal de envio de mensagem
+  const [msgDialog, setMsgDialog] = useState<{ open: boolean; colaborador: Aniversariante | null; mensagem: string }>({
+    open: false,
+    colaborador: null,
+    mensagem: "",
+  });
+  const [sending, setSending] = useState(false);
 
   const load = async () => {
     const now = new Date();
@@ -47,7 +74,7 @@ export default function AdminDashboard() {
       profilesRes,
       unidadesRes
     ] = await Promise.all([
-      supabase.from("profiles").select("id, nome, data_nascimento, folga_fixa_semana, ativo, unidade_id").eq("ativo", true),
+      supabase.from("profiles").select("id, nome, data_nascimento, folga_fixa_semana, ativo, unidade_id, whatsapp").eq("ativo", true),
       supabase.from("folgas").select("*", { count: "exact", head: true }).gte("data", start).lte("data", end),
       supabase.from("solicitacoes_especiais").select("*", { count: "exact", head: true }).eq("status", "pendente"),
       supabase.from("datas_bloqueadas").select("*", { count: "exact", head: true }).eq("liberada", false),
@@ -55,7 +82,7 @@ export default function AdminDashboard() {
       supabase.from("dia_config").select("data, limite_colaboradores").gte("data", start).lte("data", end),
       supabase.from("prioridade_aniversario").select("data").eq("status", "ativa").gte("data", start).lte("data", end),
       supabase.from("folgas").select("data").gte("data", start).lte("data", end),
-      supabase.from("profiles").select("id, nome, data_nascimento, folga_fixa_semana, unidade_id").eq("ativo", true),
+      supabase.from("profiles").select("id, nome, data_nascimento, folga_fixa_semana, unidade_id, whatsapp").eq("ativo", true),
       supabase.from("unidades").select("id, nome").eq("ativo", true),
     ]);
 
@@ -63,7 +90,6 @@ export default function AdminDashboard() {
     const unidadesList = unidadesRes.data ?? [];
     setUnidades(unidadesList);
 
-    // 🔥 Mapa de unidade_id -> nome
     const unidadeMap = new Map(unidadesList.map(u => [u.id, u.nome]));
 
     const todayLimit = (configRes.data ?? []).find((c) => c.data === todayIso)?.limite_colaboradores ?? 1;
@@ -79,11 +105,9 @@ export default function AdminDashboard() {
       ocupacaoHoje: `${todayMonthly + todayFixed}/${todayLimit}`,
     });
 
-    // 🔥 Aniversariantes dos próximos 30 dias
+    // Aniversariantes dos próximos 30 dias
     const anoAtual = now.getFullYear();
-    const mesAtual = now.getMonth();
-    const diaAtual = now.getDate();
-    const hoje = new Date(anoAtual, mesAtual, diaAtual);
+    const hoje = new Date(anoAtual, now.getMonth(), now.getDate());
     const limite = new Date(hoje);
     limite.setDate(limite.getDate() + 30);
 
@@ -91,7 +115,6 @@ export default function AdminDashboard() {
       .filter(p => p.data_nascimento)
       .map(p => {
         const nasc = new Date(p.data_nascimento + "T00:00:00");
-        // Calcula o próximo aniversário
         let proximoAniversario = new Date(anoAtual, nasc.getMonth(), nasc.getDate());
         if (proximoAniversario < hoje) {
           proximoAniversario = new Date(anoAtual + 1, nasc.getMonth(), nasc.getDate());
@@ -106,7 +129,8 @@ export default function AdminDashboard() {
           mes: nasc.getMonth() + 1,
           proximoAniversario,
           idade,
-          unidade: unidadeNome
+          unidade: unidadeNome,
+          whatsapp: p.whatsapp || null,
         };
       })
       .filter(item => item.proximoAniversario >= hoje && item.proximoAniversario <= limite)
@@ -117,10 +141,11 @@ export default function AdminDashboard() {
       nome: a.nome,
       data_nascimento: a.data_nascimento,
       idade: a.idade,
-      unidade: a.unidade
+      unidade: a.unidade,
+      whatsapp: a.whatsapp,
     })));
 
-    // 🔥 Próximos fins de semana
+    // Próximos fins de semana
     const { data: folgasData } = folgasDataRes;
     const counts = new Map<string, number>();
     folgasData?.forEach((f) => counts.set(f.data, (counts.get(f.data) || 0) + 1));
@@ -153,7 +178,6 @@ export default function AdminDashboard() {
     }
     setProximasFolgas(proximos);
 
-    // 🔥 Alertas de ocupação: só quando ocupacao > limite
     const novosAlertas: any[] = [];
     proximos.filter((p) => p.ocupacao > p.limite).forEach((p) => {
       novosAlertas.push({
@@ -197,6 +221,55 @@ export default function AdminDashboard() {
       toast.error("Erro ao realizar sorteio", { description: (e as Error).message });
     } finally {
       setBusySorteio(false);
+    }
+  };
+
+  // 🔥 Função para abrir o modal de envio de mensagem
+  const openMsgDialog = (colaborador: Aniversariante) => {
+    const mensagemPadrao = `🎉 Feliz Aniversário, ${colaborador.nome.split(' ')[0]}! 🎂
+
+A equipe Pakerê deseja a você um dia especial, cheio de alegria e realizações. Que este novo ano de vida seja repleto de sucesso e felicidade!
+
+Atenciosamente,
+Equipe Pakerê`;
+
+    setMsgDialog({
+      open: true,
+      colaborador,
+      mensagem: mensagemPadrao,
+    });
+  };
+
+  // 🔥 Função para enviar a mensagem via WhatsApp
+  const sendWhatsAppMessage = async () => {
+    if (!msgDialog.colaborador) return;
+    if (!msgDialog.colaborador.whatsapp) {
+      toast.error("Colaborador não possui WhatsApp cadastrado.");
+      return;
+    }
+
+    setSending(true);
+    try {
+      // Formata o número (remove tudo que não é dígito)
+      const numero = msgDialog.colaborador.whatsapp.replace(/\D/g, '');
+      // Verifica se tem 11 dígitos (DDD + 9 dígitos)
+      if (numero.length < 10) {
+        toast.error("Número de WhatsApp inválido.");
+        return;
+      }
+
+      // Abre o WhatsApp Web com a mensagem pré-preenchida
+      const mensagemEncoded = encodeURIComponent(msgDialog.mensagem);
+      const url = `https://wa.me/55${numero}?text=${mensagemEncoded}`;
+      window.open(url, '_blank');
+
+      toast.success("Mensagem aberta no WhatsApp!");
+      setMsgDialog({ open: false, colaborador: null, mensagem: "" });
+    } catch (error) {
+      console.error("Erro ao enviar mensagem:", error);
+      toast.error("Erro ao enviar mensagem.");
+    } finally {
+      setSending(false);
     }
   };
 
@@ -317,7 +390,7 @@ export default function AdminDashboard() {
                 <div className="text-center py-8 text-muted-foreground text-sm">Nenhum aniversariante nos próximos 30 dias.</div>
               ) : (
                 aniversariantes.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between p-3 rounded-xl bg-amber-50/30 border border-amber-100/50">
+                  <div key={a.id} className="flex items-center justify-between p-3 rounded-xl bg-amber-50/30 border border-amber-100/50 gap-2">
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       <div className="size-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 font-bold shrink-0">
                         {new Date(a.data_nascimento + "T00:00:00").getDate()}
@@ -333,8 +406,17 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="text-amber-600 hover:bg-amber-100 shrink-0" onClick={() => window.location.href = "/admin/calendario"}>
-                      <ChevronRight className="size-4" />
+                    {/* 🔥 Botão de enviar mensagem (WhatsApp) */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 gap-1.5 text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700"
+                      onClick={() => openMsgDialog(a)}
+                      disabled={!a.whatsapp}
+                      title={a.whatsapp ? "Enviar mensagem de aniversário" : "Sem WhatsApp cadastrado"}
+                    >
+                      <MessageCircle className="size-4" />
+                      <span className="hidden sm:inline text-xs">Mensagem</span>
                     </Button>
                   </div>
                 ))
@@ -343,6 +425,49 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 🔥 Modal de envio de mensagem */}
+      <Dialog open={msgDialog.open} onOpenChange={(open) => !open && setMsgDialog({ open: false, colaborador: null, mensagem: "" })}>
+        <DialogContent className="max-w-lg rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageCircle className="size-5 text-primary" />
+              Enviar mensagem para {msgDialog.colaborador?.nome}
+            </DialogTitle>
+            <DialogDescription>
+              A mensagem será aberta no WhatsApp Web. Verifique o número antes de enviar.
+              <br />
+              <span className="text-xs text-muted-foreground">
+                WhatsApp: {msgDialog.colaborador?.whatsapp || "Não cadastrado"}
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="mensagem">Mensagem</Label>
+              <Textarea
+                id="mensagem"
+                value={msgDialog.mensagem}
+                onChange={(e) => setMsgDialog({ ...msgDialog, mensagem: e.target.value })}
+                rows={8}
+                className="resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setMsgDialog({ open: false, colaborador: null, mensagem: "" })} disabled={sending}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={sendWhatsAppMessage}
+              disabled={sending || !msgDialog.colaborador?.whatsapp}
+              className="gap-2"
+            >
+              {sending ? "Enviando..." : <><MessageCircle className="size-4" /> Enviar via WhatsApp</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
