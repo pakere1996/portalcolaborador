@@ -11,23 +11,69 @@ import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { session } = useAuth();
-  // detect existing session
+  const { session, loading } = useAuth();
   const [cpf, setCpf] = useState("");
   const [senha, setSenha] = useState("");
   const [busy, setBusy] = useState(false);
-  // If the user is already authenticated, send them to the main app
-  useEffect(() => {
-    if (session) {
-      // Redireciona para a home correta se já estiver logado
-      const role = localStorage.getItem('user_role');
-      if (role === 'admin') {
+
+  // 🔥 Função para buscar o role e redirecionar
+  const redirectUser = async (userId: string) => {
+    try {
+      const { data: rolesData, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (rolesError) {
+        console.error("Erro ao buscar roles:", rolesError);
+        toast.error("Erro ao verificar permissões");
+        return;
+      }
+
+      const role = rolesData?.role;
+      console.log('🔍 Role encontrado:', role);
+
+      // Armazena no localStorage para uso futuro
+      if (role) {
+        localStorage.setItem('user_role', role);
+      } else {
+        localStorage.removeItem('user_role');
+      }
+
+      // Redireciona com base no role
+      if (role === "admin") {
         navigate("/admin/home", { replace: true });
       } else {
         navigate("/home", { replace: true });
       }
+    } catch (error) {
+      console.error("Erro ao redirecionar:", error);
+      toast.error("Erro ao verificar permissões");
     }
-  }, [session, navigate]);
+  };
+
+  // 🔥 Se já houver sessão ativa, redireciona automaticamente (evita ficar na tela de login)
+  useEffect(() => {
+    if (loading) return;
+
+    if (session?.user?.id) {
+      // Verifica se já tem role no localStorage (para redirecionamento rápido)
+      const savedRole = localStorage.getItem('user_role');
+      if (savedRole) {
+        console.log('🔍 Role do localStorage:', savedRole);
+        if (savedRole === "admin") {
+          navigate("/admin/home", { replace: true });
+        } else {
+          navigate("/home", { replace: true });
+        }
+        return;
+      }
+
+      // Se não tiver role salvo, busca e redireciona
+      redirectUser(session.user.id);
+    }
+  }, [session, loading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,35 +88,14 @@ export default function LoginPage() {
         body: { cpf: cleanCpf, senha },
       });
       if (error) throw error;
-      // login‑with-cpf returns { success: true, session, user }
+
       if (data?.session) {
         await supabase.auth.setSession(data.session);
         toast.success("Login realizado com sucesso!");
         
-        // Consulta a tabela user_roles para verificar o cargo do usuário
-        const { data: rolesData, error: rolesError } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", data.user?.id)
-          .maybeSingle();
-        
-        console.log('ROLES DATA:', rolesData, 'ERROR:', rolesError);
-
-        if (rolesError) {
-          console.error("Erro ao buscar roles:", rolesError);
-          toast.error("Erro ao verificar permissões");
-          return;
-        }
-        
-        const role = rolesData?.role;
-        
-        // Armazena o role para uso no useEffect (redirecionamento de sessão existente)
-        if (role) {
-            localStorage.setItem('user_role', role);
-        }
-
-        if (role === "admin") {
-          navigate("/admin/home", { replace: true });
+        // 🔥 Redireciona após o login
+        if (data.user?.id) {
+          await redirectUser(data.user.id);
         } else {
           navigate("/home", { replace: true });
         }
@@ -96,20 +121,35 @@ export default function LoginPage() {
             <Label htmlFor="cpf" className="flex items-center gap-2">
               <IdCard className="size-4 text-muted-foreground" /> CPF
             </Label>
-            <Input id="cpf" value={cpf} onChange={(e) => setCpf(formatCPF(e.target.value))} placeholder="000.000.000-00" maxLength={14} inputMode="numeric" />
+            <Input
+              id="cpf"
+              value={cpf}
+              onChange={(e) => setCpf(formatCPF(e.target.value))}
+              placeholder="000.000.000-00"
+              maxLength={14}
+              inputMode="numeric"
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="senha" className="flex items-center gap-2">
               <Lock className="size-4 text-muted-foreground" /> Senha
             </Label>
-            <Input id="senha" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••••••" />
+            <Input
+              id="senha"
+              type="password"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              placeholder="••••••••"
+            />
           </div>
           <Button type="submit" className="w-full h-12" disabled={busy}>
             {busy ? "Entrando..." : "Entrar"}
           </Button>
         </form>
         <div className="text-center pt-4">
-          <p className="text-xs text-muted-foreground"> Esqueceu sua senha? Entre em contato com o administrador. </p>
+          <p className="text-xs text-muted-foreground">
+            Esqueceu sua senha? Entre em contato com o administrador.
+          </p>
         </div>
       </div>
     </div>
