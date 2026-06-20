@@ -115,7 +115,7 @@ export function DocumentImportForm() {
   // Varre o texto inteiro do PDF procurando o nome exato de algum colaborador cadastrado.
   // Funciona independente do layout do documento (contracheque, ponto, etc).
   const findExactMatchInText = (text: string, profilesList: ProfileForMatching[]): { profile: ProfileForMatching | null; nomeEncontrado: string | null } => {
-    const textoNormalizado = normalizeNome(text);
+    const textoNormalizado = ` ${normalizeNome(text)} `;
 
     const matches = profilesList.filter(p => {
       const nomeNormalizado = normalizeNome(p.nome);
