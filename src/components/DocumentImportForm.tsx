@@ -267,8 +267,9 @@ toast.success(`Página vinculada a ${profile.nome}. Próxima página pendente...
     setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, ignorado: true, resolvido: true } : r));
     setConfirmIgnorar(false);
     const next = pageResults.findIndex((r, i) => i > currentPage && !r.resolvido && !r.ignorado);
-    if (next !== -1) setCurrentPage(next);
-  };
+if (next !== -1) {
+  setTimeout(() => setCurrentPage(next), 150);
+}
 
   const handleCriarColab = async () => {
     if (!novoColabForm.nome || !novoColabForm.cpf || !novoColabForm.cargo || !novoColabForm.unidadeId) {
