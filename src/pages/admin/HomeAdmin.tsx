@@ -254,21 +254,22 @@ const loadData = async () => {
       if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
 
       const { error: profErr } = await supabase.from("profiles").update({
-        nome: editForm.nome.trim(),
-        cpf: cleanCpf,
-        matricula: editForm.matricula.trim() || null,
-        email_contato: editForm.email.trim() || null,
-        whatsapp: editForm.whatsapp.trim() || null,
-        cargo: editForm.cargo,
-        unidade_id: editForm.unidadeId === "" ? null : editForm.unidadeId,
-        folga_fixa_semana: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa),
-        data_nascimento: editForm.dataNascimento || null,
-        data_admissao: editForm.dataAdmissao || null,
-        ativo: editForm.ativo,
-        updated_at: new Date().toISOString(),
-        regime_trabalho: editForm.regime_trabalho === "none" ? null : editForm.regime_trabalho,
-        data_demissao: editForm.data_demissao || null,
-      }).eq("id", editingProfile.id);
+  nome: editForm.nome.trim(),
+  cpf: cleanCpf,
+  matricula: editForm.matricula.trim() || null,
+  email_contato: editForm.email.trim() || null,
+  whatsapp: editForm.whatsapp.trim() || null,
+  cargo: editForm.cargo,
+  unidade_id: editForm.unidadeId === "" ? null : editForm.unidadeId,  // <-- nome correto
+  folga_fixa_semana: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa), // <-- nome correto
+  data_nascimento: editForm.dataNascimento || null,
+  data_admissao: editForm.dataAdmissao || null,
+  ativo: editForm.ativo,
+  updated_at: new Date().toISOString(),
+  regime_trabalho: editForm.regime_trabalho === "none" ? null : editForm.regime_trabalho,
+  data_demissao: editForm.data_demissao || null,
+}).eq("id", editingProfile.id);
+
 
       if (profErr) throw profErr;
 
