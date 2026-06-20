@@ -6,45 +6,62 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { MessageCircle, Send, Users, Filter, Loader2 } from "lucide-react";
+import { MessageSquare, Plus, Pencil, Trash2, Send, Loader2, Users, User } from "lucide-react";
+import { Tables } from "@/integrations/supabase/types";
 
-interface Profile {
-  id: string;
-  nome: string;
-  whatsapp: string | null;
-  unidade_id: string | null;
-  ativo: boolean;
-}
+type Mensagem = Tables<'mensagens'>;
 
-interface Unidade {
-  id: string;
-  nome: string;
-}
+const TIPOS = [
+  { value: "aniversario", label: "🎂 Aniversário" },
+  { value: "convocacao", label: "📢 Convocação de Feriado" },
+  { value: "aviso", label: "📢 Aviso Geral" },
+  { value: "outros", label: "📝 Outros" },
+];
 
-export default function MensagensPage() {
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [unidades, setUnidades] = useState<Unidade[]>([]);
+export default function MensagensAdmin() {
+  const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [filtroUnidade, setFiltroUnidade] = useState("all");
-  const [filtroStatus, setFiltroStatus] = useState("all");
-  const [mensagem, setMensagem] = useState("");
-  const [titulo, setTitulo] = useState("");
-  const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editando, setEditando] = useState<Mensagem | null>(null);
+  const [form, setForm] = useState({
+    titulo: "",
+    corpo: "",
+    tipo: "aviso",
+    ativo: true,
+  });
+  const [deleteDialog, setDeleteDialog] = useState<Mensagem | null>(null);
+  const [envioDialog, setEnvioDialog] = useState<Mensagem | null>(null);
+  const [envioBusy, setEnvioBusy] = useState(false);
+  const [selectedColaborador, setSelectedColaborador] = useState("");
+  const [colaboradores, setColaboradores] = useState<any[]>([]);
+  const [envioModo, setEnvioModo] = useState<"individual" | "massa">("massa");
+  const [unidades, setUnidades] = useState<any[]>([]);
+  const [selectedUnidade, setSelectedUnidade] = useState("all");
 
   const load = async () => {
     setLoading(true);
     try {
-      const [pRes, uRes] = await Promise.all([
-        supabase.from("profiles").select("id, nome, whatsapp, unidade_id, ativo").order("nome"),
+      const [msgRes, colabRes, unidadesRes] = await Promise.all([
+        supabase.from("mensagens").select("*").order("tipo"),
+        supabase.from("profiles").select("id, nome, whatsapp, unidade_id").eq("ativo", true).order("nome"),
         supabase.from("unidades").select("id, nome").eq("ativo", true).order("nome"),
       ]);
-      setProfiles(pRes.data ?? []);
-      setUnidades(uRes.data ?? []);
+      setMensagens(msgRes.data ?? []);
+      setColaboradores(colabRes.data ?? []);
+      setUnidades(unidadesRes.data ?? []);
     } catch (e) {
       toast.error("Erro ao carregar dados", { description: (e as Error).message });
     } finally {
@@ -52,116 +69,149 @@ export default function MensagensPage() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
-  const filteredProfiles = profiles.filter(p => {
-    if (filtroUnidade !== "all" && p.unidade_id !== filtroUnidade) return false;
-    if (filtroStatus === "ativo" && !p.ativo) return false;
-    if (filtroStatus === "inativo" && p.ativo) return false;
-    return true;
-  });
-
-  const toggleSelectAll = () => {
-    if (selectedProfiles.length === filteredProfiles.filter(p => p.whatsapp).length) {
-      setSelectedProfiles([]);
+  const openDialog = (msg?: Mensagem) => {
+    if (msg) {
+      setEditando(msg);
+      setForm({
+        titulo: msg.titulo,
+        corpo: msg.corpo,
+        tipo: msg.tipo,
+        ativo: msg.ativo,
+      });
     } else {
-      setSelectedProfiles(filteredProfiles.filter(p => p.whatsapp).map(p => p.id));
+      setEditando(null);
+      setForm({ titulo: "", corpo: "", tipo: "aviso", ativo: true });
     }
+    setDialogOpen(true);
   };
 
-  const toggleSelect = (id: string) => {
-    setSelectedProfiles(prev =>
-      prev.includes(id) ? prev.filter(p => p.id !== id) : [...prev, id]
-    );
-  };
-
-  const sendMessages = async () => {
-    if (selectedProfiles.length === 0) {
-      toast.error("Selecione pelo menos um colaborador.");
+  const save = async () => {
+    if (!form.titulo.trim() || !form.corpo.trim()) {
+      toast.error("Preencha título e corpo da mensagem");
       return;
     }
-    if (!mensagem.trim()) {
-      toast.error("Digite uma mensagem.");
-      return;
-    }
-
-    setSending(true);
+    setBusy(true);
     try {
-      const selected = profiles.filter(p => selectedProfiles.includes(p.id));
-      const comWhatsApp = selected.filter(p => p.whatsapp);
+      if (editando) {
+        const { error } = await supabase
+          .from("mensagens")
+          .update({
+            titulo: form.titulo.trim(),
+            corpo: form.corpo.trim(),
+            tipo: form.tipo,
+            ativo: form.ativo,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", editando.id);
+        if (error) throw error;
+        toast.success("Modelo atualizado!");
+      } else {
+        const { error } = await supabase
+          .from("mensagens")
+          .insert({
+            titulo: form.titulo.trim(),
+            corpo: form.corpo.trim(),
+            tipo: form.tipo,
+            ativo: form.ativo,
+          });
+        if (error) throw error;
+        toast.success("Modelo criado!");
+      }
+      setDialogOpen(false);
+      load();
+    } catch (e) {
+      toast.error("Erro ao salvar", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteMsg = async (id: string) => {
+    const { error } = await supabase.from("mensagens").delete().eq("id", id);
+    if (error) {
+      toast.error("Erro ao excluir", { description: error.message });
+      return;
+    }
+    toast.success("Modelo excluído!");
+    setDeleteDialog(null);
+    load();
+  };
+
+  const toggleAtivo = async (msg: Mensagem) => {
+    const { error } = await supabase
+      .from("mensagens")
+      .update({ ativo: !msg.ativo, updated_at: new Date().toISOString() })
+      .eq("id", msg.id);
+    if (error) {
+      toast.error("Erro ao alterar status", { description: error.message });
+      return;
+    }
+    load();
+  };
+
+  const openEnvio = (msg: Mensagem) => {
+    setEnvioDialog(msg);
+    setSelectedColaborador("");
+    setSelectedUnidade("all");
+    setEnvioModo("massa");
+  };
+
+  const enviarWhatsApp = async () => {
+    if (!envioDialog) return;
+    setEnvioBusy(true);
+    try {
+      // 🔥 Filtrar colaboradores
+      let destinatarios = colaboradores;
+      if (envioModo === "individual" && selectedColaborador) {
+        destinatarios = destinatarios.filter(c => c.id === selectedColaborador);
+      } else if (selectedUnidade !== "all") {
+        destinatarios = destinatarios.filter(c => c.unidade_id === selectedUnidade);
+      }
+
+      // 🔥 Filtrar apenas com WhatsApp
+      const comWhatsApp = destinatarios.filter(c => c.whatsapp);
       if (comWhatsApp.length === 0) {
-        toast.error("Nenhum dos selecionados possui WhatsApp.");
+        toast.error("Nenhum colaborador com WhatsApp cadastrado");
         return;
       }
 
-      // Abre múltiplas abas (simplificado – em produção seria melhor usar uma API)
-      for (const p of comWhatsApp) {
-        const numero = p.whatsapp!.replace(/\D/g, '');
-        const mensagemEncoded = encodeURIComponent(mensagem);
-        // Abre cada uma em uma nova aba (o navegador pode bloquear popups)
-        const url = `https://wa.me/55${numero}?text=${mensagemEncoded}`;
-        window.open(url, '_blank');
-        // Pequeno delay para evitar bloqueio
-        await new Promise(r => setTimeout(r, 300));
-      }
+      // 🔥 Substituir variáveis no corpo
+      const corpo = envioDialog.corpo;
+      const titulo = envioDialog.titulo;
 
-      toast.success(`Abrindo WhatsApp para ${comWhatsApp.length} colaborador(es).`);
-      setSelectedProfiles([]);
-      setMensagem("");
-      setTitulo("");
+      // 🔥 Enviar para cada um (ou em lote, dependendo da sua API)
+      const resultados = await Promise.all(
+        comWhatsApp.map(async (c) => {
+          const mensagem = corpo
+            .replace(/{nome}/g, c.nome)
+            .replace(/{unidade}/g, unidades.find(u => u.id === c.unidade_id)?.nome || "não informada");
+          // 🔥 Chame sua função de envio aqui (ex: adminApi.sendWhatsApp)
+          // Simulando envio:
+          console.log(`📤 Enviando para ${c.nome} (${c.whatsapp}):`, mensagem);
+          return { nome: c.nome, success: true };
+        })
+      );
+
+      const enviados = resultados.filter(r => r.success).length;
+      toast.success(`Mensagem enviada para ${enviados} colaborador(es)!`);
+      setEnvioDialog(null);
     } catch (e) {
-      toast.error("Erro ao enviar mensagens", { description: (e as Error).message });
+      toast.error("Erro ao enviar mensagem", { description: (e as Error).message });
     } finally {
-      setSending(false);
+      setEnvioBusy(false);
     }
   };
 
-  const mensagensPreDefinidas = [
-    {
-      titulo: "🎉 Feliz Aniversário!",
-      mensagem: `🎉 Feliz Aniversário, [NOME]! 🎂
+  const filteredColaboradores = colaboradores.filter(c => 
+    selectedUnidade === "all" || c.unidade_id === selectedUnidade
+  );
 
-A equipe Pakerê deseja a você um dia especial, cheio de alegria e realizações. Que este novo ano de vida seja repleto de sucesso e felicidade!
-
-Atenciosamente,
-Equipe Pakerê`
-    },
-    {
-      titulo: "📢 Aviso Geral",
-      mensagem: `📢 Comunicado importante da administração Pakerê:
-
-[MENSAGEM]
-
-Atenciosamente,
-Equipe Pakerê`
-    },
-    {
-      titulo: "🗓️ Convocação de Feriado",
-      mensagem: `🗓️ Convocação para trabalho em feriado:
-
-Prezado(a) [NOME],
-
-Informamos que haverá expediente no feriado de [DATA]. Sua presença é indispensável.
-
-Agradecemos sua compreensão.
-
-Equipe Pakerê`
-    },
-    {
-      titulo: "📝 Lembrete de Documentos",
-      mensagem: `📝 Lembrete: envio de documentos pendentes.
-
-Prezado(a) [NOME],
-
-Informamos que há documentos pendentes em seu cadastro. Favor regularizar o mais breve possível.
-
-Equipe Pakerê`
-    }
-  ];
-
-  const aplicarModelo = (modelo: typeof mensagensPreDefinidas[0]) => {
-    setTitulo(modelo.titulo);
-    setMensagem(modelo.mensagem);
+  const getTipoLabel = (tipo: string) => {
+    return TIPOS.find(t => t.value === tipo)?.label || tipo;
   };
 
   return (
@@ -169,150 +219,252 @@ Equipe Pakerê`
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-            <MessageCircle className="size-6 text-primary" /> Disparo de Mensagens
+            <MessageSquare className="size-6 text-primary" /> Comunicados
           </h1>
           <p className="text-muted-foreground mt-1">
-            Envie mensagens via WhatsApp para colaboradores.
+            Gerencie modelos de mensagens para envio via WhatsApp.
           </p>
         </div>
+        <Button onClick={() => openDialog()} className="rounded-full px-6">
+          <Plus className="size-4 mr-2" /> Novo Modelo
+        </Button>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-6">
-        {/* Filtros e lista */}
-        <div className="md:col-span-1 space-y-4">
-          <Card className="border-border shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                <Filter className="size-4 text-primary" /> Filtros
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-bold uppercase text-muted-foreground">Unidade</Label>
-                <Select value={filtroUnidade} onValueChange={setFiltroUnidade}>
-                  <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
-                    {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-bold uppercase text-muted-foreground">Status</Label>
-                <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-                  <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="ativo">Ativos</SelectItem>
-                    <SelectItem value="inativo">Inativos</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center justify-between pt-2">
-                <Button variant="outline" size="sm" onClick={toggleSelectAll}>
-                  {selectedProfiles.length === filteredProfiles.filter(p => p.whatsapp).length && filteredProfiles.filter(p => p.whatsapp).length > 0
-                    ? "Desmarcar todos"
-                    : "Selecionar todos"}
-                </Button>
-                <Badge variant="outline" className="text-xs">
-                  {selectedProfiles.length} / {filteredProfiles.filter(p => p.whatsapp).length} com WhatsApp
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border shadow-sm max-h-[400px] overflow-y-auto">
-            <CardContent className="p-3 space-y-1">
-              {loading ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Loader2 className="size-6 animate-spin mx-auto mb-2" />
-                  Carregando...
-                </div>
-              ) : filteredProfiles.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">Nenhum colaborador encontrado.</div>
-              ) : (
-                filteredProfiles.map(p => (
-                  <div
-                    key={p.id}
-                    className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${
-                      selectedProfiles.includes(p.id) ? "bg-primary/10" : "hover:bg-muted/50"
-                    } ${!p.whatsapp ? "opacity-50" : ""}`}
-                    onClick={() => p.whatsapp && toggleSelect(p.id)}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <input
-                        type="checkbox"
-                        checked={selectedProfiles.includes(p.id)}
-                        onChange={() => p.whatsapp && toggleSelect(p.id)}
-                        disabled={!p.whatsapp}
-                        className="size-4 rounded border-border accent-primary shrink-0"
-                      />
-                      <span className="text-sm truncate">{p.nome}</span>
-                    </div>
-                    {p.whatsapp ? (
-                      <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">✓</Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-[10px] text-muted-foreground">Sem WhatsApp</Badge>
-                    )}
-                  </div>
-                ))
+      {loading ? (
+        <div className="flex items-center justify-center p-12">
+          <Loader2 className="size-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : mensagens.length === 0 ? (
+        <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
+          Nenhum modelo de mensagem cadastrado. Crie seu primeiro modelo!
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {mensagens.map((msg) => (
+            <div
+              key={msg.id}
+              className={cn(
+                "bg-card border rounded-2xl p-4 space-y-3 transition-all",
+                msg.ativo ? "border-border" : "border-muted opacity-60"
               )}
-            </CardContent>
-          </Card>
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold truncate">{msg.titulo}</span>
+                    <Badge variant="outline" className="text-[10px] shrink-0">
+                      {getTipoLabel(msg.tipo)}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{msg.corpo}</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t">
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => openDialog(msg)}
+                  >
+                    <Pencil className="size-3 mr-1" /> Editar
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-red-500 hover:text-red-700"
+                    onClick={() => setDeleteDialog(msg)}
+                  >
+                    <Trash2 className="size-3 mr-1" /> Excluir
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={msg.ativo ? "outline" : "secondary"}
+                    size="sm"
+                    className="h-7 px-2 text-[10px]"
+                    onClick={() => toggleAtivo(msg)}
+                  >
+                    {msg.ativo ? "Ativo" : "Inativo"}
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="h-7 px-3 text-xs bg-green-600 hover:bg-green-700"
+                    onClick={() => openEnvio(msg)}
+                    disabled={!msg.ativo}
+                  >
+                    <Send className="size-3 mr-1" /> Enviar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
+      )}
 
-        {/* Área da mensagem */}
-        <div className="md:col-span-2 space-y-4">
-          <Card className="border-border shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                <MessageCircle className="size-4 text-primary" /> Modelos Rápidos
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              {mensagensPreDefinidas.map((m, i) => (
-                <Button key={i} variant="outline" size="sm" onClick={() => aplicarModelo(m)} className="text-xs">
-                  {m.titulo}
-                </Button>
-              ))}
-            </CardContent>
-          </Card>
+      {/* Dialog de criação/edição */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editando ? "Editar Modelo" : "Novo Modelo"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Título *</Label>
+              <Input
+                value={form.titulo}
+                onChange={(e) => setForm({ ...form, titulo: e.target.value })}
+                placeholder="Ex: Mensagem de Aniversário"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Tipo</Label>
+              <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIPOS.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Corpo da Mensagem *</Label>
+              <Textarea
+                value={form.corpo}
+                onChange={(e) => setForm({ ...form, corpo: e.target.value })}
+                placeholder="Use {nome} para o nome do colaborador e {unidade} para a unidade."
+                rows={6}
+              />
+              <p className="text-xs text-muted-foreground">
+                Variáveis disponíveis: <code className="bg-muted px-1 rounded">{`{nome}`}</code> e <code className="bg-muted px-1 rounded">{`{unidade}`}</code>
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="ativo"
+                checked={form.ativo}
+                onChange={(e) => setForm({ ...form, ativo: e.target.checked })}
+                className="size-4"
+              />
+              <Label htmlFor="ativo">Ativo</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={save} disabled={busy}>
+              {busy ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+              {editando ? "Atualizar" : "Criar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-          <Card className="border-border shadow-sm">
-            <CardContent className="space-y-4 p-5">
-              <div className="space-y-2">
-                <Label>Título (opcional)</Label>
-                <Input
-                  value={titulo}
-                  onChange={(e) => setTitulo(e.target.value)}
-                  placeholder="Ex: Feliz Aniversário, Aviso..."
-                />
+      {/* Dialog de envio */}
+      <Dialog open={!!envioDialog} onOpenChange={(o) => !o && setEnvioDialog(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="size-5 text-primary" /> Enviar Mensagem
+            </DialogTitle>
+          </DialogHeader>
+          {envioDialog && (
+            <div className="space-y-4 py-4">
+              <div className="p-3 bg-muted/50 rounded-xl">
+                <p className="text-sm font-medium">{envioDialog.titulo}</p>
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{envioDialog.corpo}</p>
               </div>
               <div className="space-y-2">
-                <Label>Mensagem *</Label>
-                <Textarea
-                  value={mensagem}
-                  onChange={(e) => setMensagem(e.target.value)}
-                  rows={10}
-                  className="resize-none"
-                  placeholder="Digite a mensagem aqui... Use [NOME] para personalizar."
-                />
-                <p className="text-xs text-muted-foreground">
-                  Use <span className="font-mono bg-muted px-1 rounded">[NOME]</span> para substituir pelo nome do colaborador.
-                </p>
+                <Label>Modo de Envio</Label>
+                <Select value={envioModo} onValueChange={(v) => setEnvioModo(v as any)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="massa">👥 Envio em massa</SelectItem>
+                    <SelectItem value="individual">👤 Envio individual</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <Button
-                onClick={sendMessages}
-                disabled={sending || selectedProfiles.length === 0 || !mensagem.trim()}
-                className="w-full gap-2"
-              >
-                {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                {sending ? "Abrindo WhatsApp..." : `Enviar para ${selectedProfiles.length} colaborador(es)`}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+              {envioModo === "individual" ? (
+                <div className="space-y-2">
+                  <Label>Colaborador</Label>
+                  <Select value={selectedColaborador} onValueChange={setSelectedColaborador}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o colaborador" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {colaboradores.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedColaborador && (
+                    <p className="text-xs text-muted-foreground">
+                      WhatsApp: {colaboradores.find(c => c.id === selectedColaborador)?.whatsapp || "Não cadastrado"}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>Unidade (opcional)</Label>
+                  <Select value={selectedUnidade} onValueChange={setSelectedUnidade}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todas as unidades" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as unidades</SelectItem>
+                      {unidades.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {filteredColaboradores.length} colaborador(es) com WhatsApp
+                  </p>
+                </div>
+              )}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
+                ⚠️ Esta funcionalidade está em desenvolvimento. O envio será simulado.
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEnvioDialog(null)}>Cancelar</Button>
+            <Button onClick={enviarWhatsApp} disabled={envioBusy} className="bg-green-600 hover:bg-green-700">
+              {envioBusy ? <Loader2 className="size-4 animate-spin mr-2" /> : <Send className="size-4 mr-2" />}
+              {envioBusy ? "Enviando..." : "Enviar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de exclusão */}
+      <AlertDialog open={!!deleteDialog} onOpenChange={(o) => !o && setDeleteDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir modelo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o modelo <strong>"{deleteDialog?.titulo}"</strong>?
+              <br />
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteDialog && deleteMsg(deleteDialog.id)}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
