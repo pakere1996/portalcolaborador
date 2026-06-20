@@ -146,7 +146,6 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
           </Select>
         </div>
 
-        {/* 🔥 REGIME DE TRABALHO - já existe, vamos garantir que funcione */}
         <div className="space-y-2">
           <Label htmlFor="regime_trabalho">Regime de Trabalho</Label>
           <Select 
@@ -217,7 +216,7 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
             type="date"
             value={form.data_demissao || ""} 
             onChange={(e) => handleFormChange('data_demissao', e.target.value)} 
-            min={form.data_admissao || undefined} // não permite data anterior à admissão
+            min={form.data_admissao || undefined}
             disabled={busy}
           />
           <p className="text-xs text-muted-foreground">
