@@ -384,10 +384,12 @@ setPageResults(prev => prev.map(r =>
       if (substituidos > 0) msg += ` ${substituidos} substituído(s).`;
       toast.success(msg);
 
-      // Reseta a tela para o estado inicial
-      setPageResults([]);
-      setSelectedFile(null);
-      setCurrentPage(0);
+      // Reseta a tela após 2 segundos
+setTimeout(() => {
+  setPageResults([]);
+  setSelectedFile(null);
+  setCurrentPage(0);
+}, 2000);
     } catch (err) {
       toast.error("Erro ao salvar documentos", { description: (err as Error).message });
     } finally {
