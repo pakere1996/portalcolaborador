@@ -38,7 +38,8 @@ interface ColaboradorForm {
   regime_trabalho: string;
   ativo: boolean;
   senha: string;
-  data_demissao: string; // 🔥 NOVO
+  data_demissao: string;
+  tipo_vinculo: string; // 🔥 NOVO
 }
 
 interface ColaboradorFormDialogProps {
@@ -183,22 +184,6 @@ export function ColaboradorFormDialog({
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="space-y-2">
-  <Label>Tipo de Vínculo</Label>
-  <Select 
-    value={form.tipo_vinculo || "CLT"} 
-    onValueChange={(v) => setForm({ ...form, tipo_vinculo: v })}
-  >
-    <SelectTrigger>
-      <SelectValue placeholder="Selecione o tipo" />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="CLT">Colaborador CLT</SelectItem>
-      <SelectItem value="Socio">Sócio (Pró-labore)</SelectItem>
-    </SelectContent>
-  </Select>
-</div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -212,7 +197,6 @@ export function ColaboradorFormDialog({
             </div>
           </div>
 
-          {/* 🔥 NOVO CAMPO: Data de Demissão */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Data de Demissão</Label>
@@ -234,6 +218,18 @@ export function ColaboradorFormDialog({
             <div className="space-y-2">
               <Label>WhatsApp</Label>
               <Input value={form.whatsapp} onChange={set("whatsapp")} placeholder="(00) 00000-0000" />
+            </div>
+            <div className="space-y-2">
+              <Label>Tipo de Vínculo</Label>
+              <Select value={form.tipo_vinculo} onValueChange={(v) => setForm({ ...form, tipo_vinculo: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CLT">Colaborador CLT</SelectItem>
+                  <SelectItem value="Socio">Sócio (Pró-labore)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
