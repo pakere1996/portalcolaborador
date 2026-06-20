@@ -131,9 +131,8 @@ export default function AdminHomeAdminPage() {
 const loadData = async () => {
   setLoading(true);
   try {
-    // Usando SELECT * para evitar problemas de nomes de colunas
     const [pRes, uRes, cRes] = await Promise.all([
-      supabase.from("profiles").select("*").order("nome"),
+      supabase.from("profiles").select("*").order("nome"),  // <-- SELECT * para evitar erro de coluna
       supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
       supabase.from("cargos").select("*").eq("ativo", true).order("nome"),
     ]);
@@ -162,7 +161,7 @@ const loadData = async () => {
     setUnidades(uRes.data ?? []);
     setCargos(cRes.data ?? []);
   } catch (e) {
-    console.error("Erro detalhado ao carregar dados:", e);
+    console.error("Erro ao carregar dados:", e);
     toast.error("Erro ao carregar dados", { description: (e as Error).message });
   } finally {
     setLoading(false);
