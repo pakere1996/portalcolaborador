@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { extractTextFromPDF, renderPdfPageAsImage } from "@/lib/pdf-utils";
 import { adminApi } from "@/lib/admin-api";
-import { PDFDocument } from "pdf-lib";
 
 interface ProfileForMatching {
   id: string;
@@ -91,6 +90,7 @@ export function DocumentImportForm() {
 
   const documentType = window.location.pathname.includes("ponto") ? "ponto" : "contracheque";
 
+  // 🔥 useEffect para carregar perfis com filtro condicional
   useEffect(() => {
     if (!user) return;
     const fetchProfiles = async () => {
@@ -99,7 +99,7 @@ export function DocumentImportForm() {
         .select("id, nome, cpf, matricula, unidade_id, possui_folha_ponto")
         .eq("ativo", true);
       
-      // 🔥 Se for folha de ponto, filtra apenas quem tem permissão
+      // Se for folha de ponto, filtra apenas quem tem permissão
       if (documentType === "ponto") {
         query = query.eq("possui_folha_ponto", true);
       }
@@ -241,16 +241,6 @@ export function DocumentImportForm() {
     }
   };
 
-  const extractPageFromPdf = async (file: File, pageNumber: number): Promise<Blob> => {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdfDoc = await PDFDocument.load(arrayBuffer);
-    const newPdf = await PDFDocument.create();
-    const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageNumber - 1]);
-    newPdf.addPage(copiedPage);
-    const pdfBytes = await newPdf.save();
-    return new Blob([pdfBytes], { type: "application/pdf" });
-  };
-
   const avancarParaProximaPendente = () => {
     const proximoIndex = pageResults.findIndex((r, i) => i > currentPage && !r.resolvido && !r.ignorado);
     if (proximoIndex !== -1) {
@@ -303,7 +293,7 @@ export function DocumentImportForm() {
       const cleanCpf = novoColabForm.cpf.replace(/\D/g, "");
       const cargoSelecionado = listaCargos.find(c => c.id === novoColabForm.cargo);
       const authUser = await adminApi.createUser({
-        nome: novoColabForm.nome.trim().toUpperCase(),
+        nome: novoColabForm.nome.trim(),
         cpf: cleanCpf,
         email: `${cleanCpf}@pakere.com.br`,
         senha: novoColabForm.senha || cleanCpf.slice(-6),
@@ -318,15 +308,17 @@ export function DocumentImportForm() {
         unidade_id: novoColabForm.unidadeId,
         whatsapp: novoColabForm.whatsapp || null,
         matricula: novoColabForm.matricula || null,
+        possui_folha_ponto: documentType === "ponto" ? true : false, // Se criou na importação de ponto, ativa por padrão
       }).eq("id", authUser.userId);
       if (profErr) throw profErr;
 
       const newProfile: ProfileForMatching = { 
         id: authUser.userId, 
-        nome: novoColabForm.nome.trim().toUpperCase(), 
+        nome: novoColabForm.nome, 
         cpf: cleanCpf, 
         matricula: novoColabForm.matricula || null, 
-        unidade_id: novoColabForm.unidadeId 
+        unidade_id: novoColabForm.unidadeId,
+        possui_folha_ponto: documentType === "ponto",
       };
       setProfiles(prev => [...prev, newProfile]);
       setShowNovoColab(false);
@@ -387,10 +379,9 @@ export function DocumentImportForm() {
           continue;
         }
 
-        const pagePdfBlob = await extractPageFromPdf(selectedFile!, result.pageNumber);
         const storagePath = `documentos/${documentType}/${result.matchedProfile.id}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}_${Date.now()}.pdf`;
         const { error: uploadError } = await supabase.storage.from("documentos")
-          .upload(storagePath, pagePdfBlob, { contentType: "application/pdf", upsert: true });
+          .upload(storagePath, selectedFile!, { contentType: "application/pdf", upsert: true });
         if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
 
         const { error: insertError } = await supabase.from("documentos").insert({
@@ -434,6 +425,7 @@ export function DocumentImportForm() {
   const totalPages = pageResults.length;
   const resolvidos = pageResults.filter(r => r.resolvido).length;
   const ignorados = pageResults.filter(r => r.ignorado).length;
+  const todasResolvidas = totalPages > 0 && resolvidos === totalPages;
   const jaAprovado = pageResults.some(r => r.aprovado);
 
   const Navegacao = ({ posicao }: { posicao: "topo" | "baixo" }) => (
@@ -460,7 +452,7 @@ export function DocumentImportForm() {
     </div>
   );
 
-  // --- Renderização ---
+  // Renderização
   if (pageResults.length === 0) {
     return (
       <div className="space-y-4">
