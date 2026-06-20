@@ -87,7 +87,7 @@ export default function RegistrosDisciplinaresAdmin() {
           </div>
         );
       }}
-      // 🔥 editCamposExtras removido – a base já renderiza os campos de edição
+      // 🔥 editCamposExtras removido – base renderiza tipo e dias
       validarForm={(form) => {
         if (!form.tipo) return "Selecione o tipo de registro disciplinar";
         if (form.dias_afastamento && parseInt(form.dias_afastamento) < 0) {
