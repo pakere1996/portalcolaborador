@@ -7,7 +7,17 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, History, Download, Pencil, Loader2, Check, X } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface Documento {
@@ -50,12 +60,13 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
   const [editMes, setEditMes] = useState("");
   const [editAno, setEditAno] = useState("");
   const [busy, setBusy] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [documentoParaExcluir, setDocumentoParaExcluir] = useState<Documento | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  // 🔥 Função load com ordenação correta
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Busca documentos do tipo específico
       const { data: docs, error: docsError } = await supabase
         .from("documentos")
         .select("*")
@@ -63,7 +74,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
 
       if (docsError) throw docsError;
 
-      // Busca todos os perfis ativos
       const { data: profs, error: profsError } = await supabase
         .from("profiles")
         .select("id, nome")
@@ -72,19 +82,11 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
 
       if (profsError) throw profsError;
 
-      // Cria um mapa para acesso rápido ao nome do colaborador
       const profileMap = new Map(profs?.map(p => [p.id, p.nome]) ?? []);
 
-      // Ordena os documentos:
-      // 1. Ano decrescente (mais recente primeiro)
-      // 2. Mês decrescente (mais recente primeiro)
-      // 3. Nome do colaborador (ordem alfabética)
       const sortedDocs = (docs ?? []).sort((a, b) => {
-        // Primeiro por ano/mês (mais recente primeiro)
         if (a.ano !== b.ano) return b.ano - a.ano;
         if (a.mes !== b.mes) return b.mes - a.mes;
-
-        // Depois por nome do colaborador (alfabético)
         const nomeA = profileMap.get(a.colaborador_id) ?? "";
         const nomeB = profileMap.get(b.colaborador_id) ?? "";
         return nomeA.localeCompare(nomeB);
@@ -104,13 +106,11 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
     load();
   }, [load]);
 
-  // Anos disponíveis para filtro (já ordenados)
   const anos = useMemo(
     () => [...new Set(documentos.map((d) => d.ano))].sort((a, b) => b - a),
     [documentos]
   );
 
-  // Aplicação dos filtros (a lista já está ordenada)
   const filtrados = useMemo(() => {
     return documentos.filter((d) => {
       if (filtroColab !== "todos" && d.colaborador_id !== filtroColab) return false;
@@ -144,7 +144,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
       } else {
         toast.success("Competência atualizada!");
         setEditando(null);
-        load(); // recarrega para reordenar
+        load();
       }
       setBusy(false);
     },
@@ -160,6 +160,46 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
   const cancelEditing = useCallback(() => {
     setEditando(null);
   }, []);
+
+  // 🔥 Função de exclusão
+  const confirmDelete = useCallback((doc: Documento) => {
+    setDocumentoParaExcluir(doc);
+    setDeleteDialogOpen(true);
+  }, []);
+
+  const handleDelete = useCallback(async () => {
+    if (!documentoParaExcluir) return;
+    setDeleting(true);
+    try {
+      // 1. Remove o arquivo do storage
+      const { error: storageError } = await supabase.storage
+        .from("documentos")
+        .remove([documentoParaExcluir.storage_path]);
+
+      if (storageError) {
+        console.error("Erro ao remover arquivo:", storageError);
+        // Continua mesmo se falhar a remoção do storage (pode já ter sido removido)
+      }
+
+      // 2. Remove o registro do banco
+      const { error: dbError } = await supabase
+        .from("documentos")
+        .delete()
+        .eq("id", documentoParaExcluir.id);
+
+      if (dbError) throw dbError;
+
+      toast.success(`Documento de ${documentoParaExcluir.mes}/${documentoParaExcluir.ano} excluído com sucesso!`);
+      setDeleteDialogOpen(false);
+      setDocumentoParaExcluir(null);
+      load(); // recarrega a lista
+    } catch (error) {
+      console.error("Erro ao excluir documento:", error);
+      toast.error("Erro ao excluir documento", { description: (error as Error).message });
+    } finally {
+      setDeleting(false);
+    }
+  }, [documentoParaExcluir, load]);
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -208,7 +248,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
 
       {aba === "historico" && (
         <div className="space-y-4">
-          {/* Filtros */}
           <div className="bg-card border border-border rounded-2xl p-4 flex flex-wrap gap-3">
             <div className="space-y-1 flex-1 min-w-[180px]">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Colaborador</Label>
@@ -248,7 +287,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
             </div>
           </div>
 
-          {/* Tabela */}
           {loading ? (
             <div className="flex items-center justify-center p-12 text-muted-foreground">
               <Loader2 className="size-6 animate-spin mr-2" /> Carregando...
@@ -361,6 +399,15 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                             >
                               <Download className="size-4" />
                             </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              title="Excluir documento"
+                              onClick={() => confirmDelete(doc)}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -372,6 +419,47 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
           )}
         </div>
       )}
+
+      {/* 🔥 Dialog de confirmação de exclusão */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir documento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {documentoParaExcluir && (
+                <>
+                  <p className="mb-2">
+                    Você está prestes a excluir o documento de <strong>
+                      {profiles.find(p => p.id === documentoParaExcluir.colaborador_id)?.nome ?? "Colaborador"}
+                    </strong> referente à competência <strong>
+                      {String(documentoParaExcluir.mes).padStart(2, "0")}/{documentoParaExcluir.ano}
+                    </strong>.
+                  </p>
+                  <p className="text-destructive font-medium">
+                    Esta ação é irreversível. O arquivo será removido permanentemente do sistema.
+                  </p>
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="size-4 mr-2 animate-spin" /> Excluindo...
+                </>
+              ) : (
+                "Sim, excluir documento"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
