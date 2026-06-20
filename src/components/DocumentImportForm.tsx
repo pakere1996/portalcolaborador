@@ -74,6 +74,8 @@ export function DocumentImportForm() {
   const documentType = window.location.pathname.includes("ponto") ? "folha_ponto" : "contracheque";
 
   const loadData = useCallback(async () => {
+    console.log("=== LOAD DATA PROFILES ===");
+    
     // Query completa incluindo as colunas necessárias para o filtro e regime de trabalho
     const [pRes, uRes, cRes] = await Promise.all([
       supabase.from("profiles").select("id, nome, cpf, matricula, cargo, unidade_id, regime_trabalho, ativo").eq("ativo", true).order("nome"),
@@ -81,9 +83,24 @@ export function DocumentImportForm() {
       supabase.from("cargos").select("id, nome").order("nome")
     ]);
     
+    console.log("PROFILE ERROR:", pRes.error);
+    console.log("PROFILE DATA LENGTH:", pRes.data?.length ?? 0);
+    console.log("PROFILE DATA SAMPLE:", (pRes.data ?? []).slice(0, 3));
+
     if (pRes.error) {
       console.error("Erro ao carregar perfis:", pRes.error);
       toast.error("Erro ao carregar lista de colaboradores");
+      
+      // Fallback: tenta query mais simples
+      console.log("=== FALLBACK PROFILES ===");
+      const fallbackRes = await supabase.from("profiles").select("id, nome, cpf, cargo, unidade_id, ativo").eq("ativo", true).order("nome");
+      console.log("FALLBACK ERROR:", fallbackRes.error);
+      console.log("FALLBACK DATA LENGTH:", fallbackRes.data?.length ?? 0);
+      console.log("FALLBACK DATA SAMPLE:", (fallbackRes.data ?? []).slice(0, 3));
+      
+      if (!fallbackRes.error) {
+        setProfiles(fallbackRes.data ?? []);
+      }
     } else {
       setProfiles(pRes.data ?? []);
     }
@@ -166,6 +183,7 @@ export function DocumentImportForm() {
           const cleanPdfCnpj = cleanCNPJ(r.cnpj);
           const unit = unidades.find(u => u.cnpj && cleanCNPJ(u.cnpj) === cleanPdfCnpj);
           if (unit) unitId = unit.id;
+        unit.id;
         }
 
         let isNew = false;
@@ -258,6 +276,25 @@ export function DocumentImportForm() {
   const current = pageResults[currentPage];
   const unidadeId = current?.unidadeId;
   
+  // === DIAGNÓSTICO DO FILTRO ===
+  console.log("=== FILTRO DE COLABORADORES ===");
+  console.log("unidadeId detectado:", unidadeId);
+  console.log("profiles.length no estado:", profiles.length);
+  console.log("profiles sample:", profiles.slice(0, 5).map(p => ({
+    id: p.id,
+    nome: p.nome,
+    unidade_id: p.unidade_id,
+    matricula: p.matricula,
+    regime_trabalho: p.regime_trabalho
+  })));
+
+  const testeUnidade = profiles.filter(
+    p => String(p.unidade_id) === String(unidadeId)
+  );
+
+  console.log("TESTE FILTRO UNIDADE LENGTH:", testeUnidade.length);
+  console.log("TESTE FILTRO UNIDADE SAMPLE:", testeUnidade.slice(0, 5));
+
   const colaboradoresFiltrados = profiles.filter(p => {
     const term = searchTerm.toLowerCase();
     const matchesSearch = p.nome.toLowerCase().includes(term) || 
