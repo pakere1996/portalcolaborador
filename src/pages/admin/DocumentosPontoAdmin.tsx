@@ -159,6 +159,7 @@ export default function DocumentosPonto() {
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground">Competência</th>
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden md:table-cell">Arquivo</th>
                     <th className="text-center p-4 font-bold uppercase text-[10px] text-muted-foreground">Status</th>
+                    <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden md:table-cell">Aprovado em</th>
                     <th className="text-right p-4 font-bold uppercase text-[10px] text-muted-foreground">Ações</th>
                   </tr>
                 </thead>
