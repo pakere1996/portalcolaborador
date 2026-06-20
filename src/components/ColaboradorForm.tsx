@@ -29,6 +29,16 @@ const dayOfWeekMap: Record<number, string> = {
   6: "Sábado",
 };
 
+// 🔥 Lista fixa com "Sócio" + cargos do banco
+const getCargoOptions = (cargos: Cargo[]) => {
+  const cargoNomes = cargos.map(c => c.nome);
+  // Adiciona "Sócio" se não existir
+  if (!cargoNomes.includes("Sócio") && !cargoNomes.includes("SÓCIO")) {
+    return [...cargoNomes, "Sócio"];
+  }
+  return cargoNomes;
+};
+
 export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit = false }: ColaboradorFormProps) {
 
   const handleFormChange = (id: string, value: string | boolean) => {
@@ -46,6 +56,8 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
       return { ...prev, [id]: newValue };
     });
   };
+
+  const cargoOptions = getCargoOptions(cargos);
 
   return (
     <div className="space-y-4">
@@ -120,8 +132,8 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
               <SelectValue placeholder="Selecione o Cargo" />
             </SelectTrigger>
             <SelectContent>
-              {cargos.map(c => (
-                <SelectItem key={c.nome} value={c.nome}>{c.nome}</SelectItem>
+              {cargoOptions.map(cargoNome => (
+                <SelectItem key={cargoNome} value={cargoNome}>{cargoNome}</SelectItem>
               ))}
             </SelectContent>
           </Select>
