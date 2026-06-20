@@ -100,15 +100,14 @@ const adminModules = [
   },
 ];
 
-// 🔥 Adicionados campos regime_trabalho e data_demissao
 const blankEditForm = {
   nome: "", cpf: "", matricula: "", email: "", whatsapp: "",
   cargo: "", unidadeId: "", folgaFixa: "none",
   dataNascimento: "", dataAdmissao: "", perfil_acesso: "colaborador",
   ativo: true,
   senha: "",
-  regime_trabalho: "none",   // <-- NOVO
-  data_demissao: "",          // <-- NOVO
+  regime_trabalho: "none",
+  data_demissao: "",
 };
 
 export default function AdminHomeAdminPage() {
@@ -132,12 +131,14 @@ export default function AdminHomeAdminPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // 🔥 Adicionados regime_trabalho e data_demissao no SELECT
+      // 🔥 Busca todos os campos para evitar erros de coluna faltante
       const [pRes, uRes, cRes] = await Promise.all([
-        supabase.from("profiles").select("id, nome, cpf, cargo, matricula, unidade_id, folga_fixa_semana, regime_trabalho, perfil_acesso, data_admissao, data_nascimento, email_contato, whatsapp, ativo, data_demissao, created_at, updated_at").order("nome"),
+        supabase.from("profiles").select("*").order("nome"),
         supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
         supabase.from("cargos").select("*").eq("ativo", true).order("nome"),
       ]);
+
+      if (pRes.error) throw pRes.error;
 
       const profileIds = (pRes.data ?? []).map(p => p.id);
       let rolesMap = new Map<string, string[]>();
@@ -149,15 +150,23 @@ export default function AdminHomeAdminPage() {
         });
       }
 
+      // Mapeia os dados para garantir campos padronizados
       const profilesWithRoles = (pRes.data ?? []).map(p => ({
         ...p,
         role: rolesMap.get(p.id)?.[0] ?? null,
+        // Garante que campos como unidade_id estejam acessíveis
+        unidade_id: p.unidade_id ?? null,
+        regime_trabalho: p.regime_trabalho ?? null,
+        data_demissao: p.data_demissao ?? null,
+        // Para compatibilidade com o código que usa unidadeId (sem underscore)
+        unidadeId: p.unidade_id ?? null,
       }));
 
       setProfiles(profilesWithRoles);
       setUnidades(uRes.data ?? []);
       setCargos(cRes.data ?? []);
     } catch (e) {
+      console.error("Erro ao carregar dados:", e);
       toast.error("Erro ao carregar dados", { description: (e as Error).message });
     } finally {
       setLoading(false);
@@ -166,6 +175,7 @@ export default function AdminHomeAdminPage() {
 
   useEffect(() => { loadData(); }, []);
 
+  // 🔥 Ajusta o filtro para usar unidade_id (ou unidadeId, que foi mapeado)
   const filteredProfiles = profiles.filter(p => {
     const matchesSearch = p.nome.toLowerCase().includes(search.toLowerCase()) || p.cpf.includes(search.replace(/\D/g, ""));
     const matchesUnidade = filtroUnidade === "all" || p.unidade_id === filtroUnidade;
@@ -190,13 +200,12 @@ export default function AdminHomeAdminPage() {
         cargo: newForm.cargo,
         dataAdmissao: newForm.dataAdmissao,
         dataNascimento: newForm.dataNascimento,
-        folgaFixaSemana: newForm.folgaFixa === "" || newForm.folgaFixa === "none" ? null : Number(newForm.folgaFixa),
+        folgaFixaSemana: newForm.folgaFixa === "none" ? null : Number(newForm.folgaFixa),
         role: newForm.perfil_acesso,
       });
 
       if (authErr) throw authErr;
 
-      // 🔥 Incluindo regime_trabalho e data_demissao no update
       const { error: profErr } = await supabase.from("profiles").update({
         matricula: newForm.matricula.trim() || null,
         whatsapp: newForm.whatsapp.trim() || null,
@@ -228,15 +237,15 @@ export default function AdminHomeAdminPage() {
       email: p.email_contato ?? "",
       whatsapp: p.whatsapp ?? "",
       cargo: p.cargo,
-      unidadeId: p.unidade_id ?? "",
+      unidadeId: p.unidade_id ?? "", // usa unidade_id do banco
       folgaFixa: p.folga_fixa_semana?.toString() ?? "none",
       dataNascimento: p.data_nascimento ?? "",
       dataAdmissao: p.data_admissao ?? "",
       perfil_acesso: p.role ?? "colaborador",
       ativo: p.ativo,
       senha: "",
-      regime_trabalho: p.regime_trabalho ?? "none",   // <-- NOVO
-      data_demissao: p.data_demissao ?? "",            // <-- NOVO
+      regime_trabalho: p.regime_trabalho ?? "none",
+      data_demissao: p.data_demissao ?? "",
     });
   };
 
@@ -247,7 +256,6 @@ export default function AdminHomeAdminPage() {
       const cleanCpf = onlyDigits(editForm.cpf);
       if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
 
-      // 🔥 Incluindo regime_trabalho e data_demissao no update
       const { error: profErr } = await supabase.from("profiles").update({
         nome: editForm.nome.trim(),
         cpf: cleanCpf,
@@ -361,7 +369,6 @@ export default function AdminHomeAdminPage() {
         </div>
       ))}
 
-      {/* Dialog para criar colaborador */}
       <Dialog open={openNewDialog} onOpenChange={setOpenNewDialog}>
         <DialogTrigger asChild>
           <Button variant="outline" className="justify-start gap-2" onClick={() => { setNewForm(blankEditForm); setOpenNewDialog(true); }}>
@@ -382,7 +389,6 @@ export default function AdminHomeAdminPage() {
         />
       </Dialog>
 
-      {/* Dialog para editar colaborador */}
       <ColaboradorFormDialog
         open={!!editingProfile}
         onOpenChange={(open) => { if (!open) setEditingProfile(null); }}
