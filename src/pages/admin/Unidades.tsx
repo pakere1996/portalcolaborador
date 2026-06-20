@@ -22,11 +22,13 @@ interface Unidade {
   cidade: string | null;
   telefone: string | null;
   ativo: boolean;
+  possui_relogio_ponto: boolean; // 🔥 NOVO
   created_at: string;
 }
 
 const blank = {
   nome: "", cnpj: "", endereco: "", cidade: "", telefone: "",
+  possui_relogio_ponto: false, // 🔥 NOVO
 };
 
 export default function Unidades() {
@@ -60,6 +62,7 @@ export default function Unidades() {
         cidade: form.cidade.trim() || null,
         telefone: form.telefone.trim() || null,
         ativo: true,
+        possui_relogio_ponto: form.possui_relogio_ponto || false, // 🔥 NOVO
       });
       if (error) throw error;
       toast.success("Unidade cadastrada!");
@@ -81,22 +84,31 @@ export default function Unidades() {
       endereco: u.endereco ?? "",
       cidade: u.cidade ?? "",
       telefone: u.telefone ?? "",
+      possui_relogio_ponto: u.possui_relogio_ponto ?? false,
     });
   };
 
   const saveEdit = async () => {
     if (!editing) return;
-    const { error } = await supabase.from("unidades").update({
-      nome: editForm.nome.trim(),
-      cnpj: editForm.cnpj.trim() || null,
-      endereco: editForm.endereco.trim() || null,
-      cidade: editForm.cidade.trim() || null,
-      telefone: editForm.telefone.trim() || null,
-    }).eq("id", editing.id);
-    if (error) return toast.error(error.message);
-    toast.success("Unidade atualizada!");
-    setEditing(null);
-    load();
+    setBusy(true);
+    try {
+      const { error } = await supabase.from("unidades").update({
+        nome: editForm.nome.trim(),
+        cnpj: editForm.cnpj.trim() || null,
+        endereco: editForm.endereco.trim() || null,
+        cidade: editForm.cidade.trim() || null,
+        telefone: editForm.telefone.trim() || null,
+        possui_relogio_ponto: editForm.possui_relogio_ponto || false, // 🔥 NOVO
+      }).eq("id", editing.id);
+      if (error) throw error;
+      toast.success("Unidade atualizada!");
+      setEditing(null);
+      load();
+    } catch (e) {
+      toast.error("Erro ao atualizar", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const toggleAtivo = async (u: Unidade) => {
@@ -107,11 +119,18 @@ export default function Unidades() {
 
   const doDelete = async () => {
     if (!confirmDelete) return;
-    const { error } = await supabase.from("unidades").delete().eq("id", confirmDelete.id);
-    if (error) return toast.error(error.message);
-    toast.success("Unidade excluída!");
-    setConfirmDelete(null);
-    load();
+    setBusy(true);
+    try {
+      const { error } = await supabase.from("unidades").delete().eq("id", confirmDelete.id);
+      if (error) throw error;
+      toast.success("Unidade excluída!");
+      setConfirmDelete(null);
+      load();
+    } catch (e) {
+      toast.error("Erro ao excluir", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -150,6 +169,16 @@ export default function Unidades() {
                 <Label>Telefone</Label>
                 <Input value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} placeholder="Ex: (62) 99999-9999" />
               </div>
+
+              {/* 🔥 Switch para relógio de ponto */}
+              <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
+                <Switch
+                  id="possui_relogio_ponto"
+                  checked={form.possui_relogio_ponto || false}
+                  onCheckedChange={(checked) => setForm({ ...form, possui_relogio_ponto: checked })}
+                />
+                <Label htmlFor="possui_relogio_ponto">Possui relógio de ponto</Label>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
@@ -167,13 +196,14 @@ export default function Unidades() {
                 <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Unidade</th>
                 <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">CNPJ</th>
                 <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">Cidade</th>
+                <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Relógio</th>
                 <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
                 <th className="text-right p-4 font-bold uppercase tracking-wider text-[10px]">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {list.length === 0 && (
-                <tr><td colSpan={5} className="p-12 text-center text-muted-foreground">Nenhuma unidade cadastrada.</td></tr>
+                <tr><td colSpan={6} className="p-12 text-center text-muted-foreground">Nenhuma unidade cadastrada.</td></tr>
               )}
               {list.map((u) => (
                 <tr key={u.id} className="hover:bg-muted/20 transition-colors">
@@ -186,6 +216,13 @@ export default function Unidades() {
                   </td>
                   <td className="p-4 hidden lg:table-cell">
                     <span className="text-muted-foreground">{u.cidade || "—"}</span>
+                  </td>
+                  <td className="p-4 text-center">
+                    {u.possui_relogio_ponto ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Sim</span>
+                    ) : (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Não</span>
+                    )}
                   </td>
                   <td className="p-4 text-center">
                     <Switch checked={u.ativo} onCheckedChange={() => toggleAtivo(u)} />
@@ -216,10 +253,18 @@ export default function Unidades() {
             <div className="space-y-2"><Label>Endereço</Label><Input value={editForm.endereco} onChange={(e) => setEditForm({ ...editForm, endereco: e.target.value })} /></div>
             <div className="space-y-2"><Label>Cidade</Label><Input value={editForm.cidade} onChange={(e) => setEditForm({ ...editForm, cidade: e.target.value })} /></div>
             <div className="space-y-2"><Label>Telefone</Label><Input value={editForm.telefone} onChange={(e) => setEditForm({ ...editForm, telefone: e.target.value })} /></div>
+            <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
+              <Switch
+                id="edit_possui_relogio_ponto"
+                checked={editForm.possui_relogio_ponto || false}
+                onCheckedChange={(checked) => setEditForm({ ...editForm, possui_relogio_ponto: checked })}
+              />
+              <Label htmlFor="edit_possui_relogio_ponto">Possui relógio de ponto</Label>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setEditing(null)}>Cancelar</Button>
-            <Button onClick={saveEdit}>Salvar</Button>
+            <Button onClick={saveEdit} disabled={busy}>{busy ? "Salvando..." : "Salvar"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -234,8 +279,8 @@ export default function Unidades() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={doDelete} className="bg-red-600 text-white hover:bg-red-700">
-              Excluir
+            <AlertDialogAction onClick={doDelete} className="bg-red-600 text-white hover:bg-red-700" disabled={busy}>
+              {busy ? "Excluindo..." : "Excluir"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
