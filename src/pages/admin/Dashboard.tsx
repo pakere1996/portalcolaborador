@@ -1,12 +1,17 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Users, Calendar, CalendarCheck, ClipboardList, ArrowLeftRight, Ban, Sparkles, Cake, AlertTriangle, ChevronRight } from "lucide-react";
+import { Shield, Users, Calendar, CalendarCheck, ClipboardList, ArrowLeftRight, Ban, Sparkles, Cake, AlertTriangle, ChevronRight, Building2 } from "lucide-react";
 import { formatBR, parseYMD } from "@/lib/folga-rules";
 import { Button } from "@/components/ui/button";
 import { adminApi } from "@/lib/admin-api";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+interface Unidade {
+  id: string;
+  nome: string;
+}
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -18,7 +23,8 @@ export default function AdminDashboard() {
     ocupacaoHoje: "0/1",
   });
   const [proximasFolgas, setProximasFolgas] = useState<{ data: string; ocupacao: number; limite: number; temAniversario?: boolean; status: string; percentual: number }[]>([]);
-  const [aniversariantes, setAniversariantes] = useState<{ id: string; nome: string; data_nascimento: string; idade: number }[]>([]);
+  const [aniversariantes, setAniversariantes] = useState<{ id: string; nome: string; data_nascimento: string; idade: number; unidade: string }[]>([]);
+  const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [busySorteio, setBusySorteio] = useState(false);
   const [alertas, setAlertas] = useState<{ tipo: string; mensagem: string; data?: string }[]>([]);
 
@@ -38,9 +44,10 @@ export default function AdminDashboard() {
       configRes,
       priosRes,
       folgasDataRes,
-      profilesRes
+      profilesRes,
+      unidadesRes
     ] = await Promise.all([
-      supabase.from("profiles").select("id, nome, data_nascimento, folga_fixa_semana, ativo").eq("ativo", true),
+      supabase.from("profiles").select("id, nome, data_nascimento, folga_fixa_semana, ativo, unidade_id").eq("ativo", true),
       supabase.from("folgas").select("*", { count: "exact", head: true }).gte("data", start).lte("data", end),
       supabase.from("solicitacoes_especiais").select("*", { count: "exact", head: true }).eq("status", "pendente"),
       supabase.from("datas_bloqueadas").select("*", { count: "exact", head: true }).eq("liberada", false),
@@ -48,10 +55,17 @@ export default function AdminDashboard() {
       supabase.from("dia_config").select("data, limite_colaboradores").gte("data", start).lte("data", end),
       supabase.from("prioridade_aniversario").select("data").eq("status", "ativa").gte("data", start).lte("data", end),
       supabase.from("folgas").select("data").gte("data", start).lte("data", end),
-      supabase.from("profiles").select("id, nome, data_nascimento, folga_fixa_semana").eq("ativo", true),
+      supabase.from("profiles").select("id, nome, data_nascimento, folga_fixa_semana, unidade_id").eq("ativo", true),
+      supabase.from("unidades").select("id, nome").eq("ativo", true),
     ]);
 
     const profilesAtivos = profilesRes.data ?? [];
+    const unidadesList = unidadesRes.data ?? [];
+    setUnidades(unidadesList);
+
+    // 🔥 Mapa de unidade_id -> nome
+    const unidadeMap = new Map(unidadesList.map(u => [u.id, u.nome]));
+
     const todayLimit = (configRes.data ?? []).find((c) => c.data === todayIso)?.limite_colaboradores ?? 1;
     const todayMonthly = (folgasDataRes.data ?? []).filter((f) => f.data === todayIso).length;
     const todayFixed = profilesAtivos.filter((p) => p.folga_fixa_semana === now.getDay()).length;
@@ -65,22 +79,48 @@ export default function AdminDashboard() {
       ocupacaoHoje: `${todayMonthly + todayFixed}/${todayLimit}`,
     });
 
-    const currentMonth = now.getMonth() + 1;
-    const bdays = profilesAtivos
-      .filter((p) => p.data_nascimento && new Date(p.data_nascimento + "T00:00:00").getMonth() + 1 === currentMonth)
-      .map((p) => {
-        const bdate = new Date(p.data_nascimento + "T00:00:00");
+    // 🔥 Aniversariantes dos próximos 30 dias
+    const anoAtual = now.getFullYear();
+    const mesAtual = now.getMonth();
+    const diaAtual = now.getDate();
+    const hoje = new Date(anoAtual, mesAtual, diaAtual);
+    const limite = new Date(hoje);
+    limite.setDate(limite.getDate() + 30);
+
+    const aniversariantesList = profilesAtivos
+      .filter(p => p.data_nascimento)
+      .map(p => {
+        const nasc = new Date(p.data_nascimento + "T00:00:00");
+        // Calcula o próximo aniversário
+        let proximoAniversario = new Date(anoAtual, nasc.getMonth(), nasc.getDate());
+        if (proximoAniversario < hoje) {
+          proximoAniversario = new Date(anoAtual + 1, nasc.getMonth(), nasc.getDate());
+        }
+        const idade = proximoAniversario.getFullYear() - nasc.getFullYear();
+        const unidadeNome = p.unidade_id ? unidadeMap.get(p.unidade_id) || "—" : "—";
         return {
           id: p.id,
           nome: p.nome,
           data_nascimento: p.data_nascimento,
-          idade: now.getFullYear() - bdate.getFullYear()
+          dia: nasc.getDate(),
+          mes: nasc.getMonth() + 1,
+          proximoAniversario,
+          idade,
+          unidade: unidadeNome
         };
       })
-      .sort((a, b) => new Date(a.data_nascimento + "T00:00:00").getDate() - new Date(b.data_nascimento + "T00:00:00").getDate());
+      .filter(item => item.proximoAniversario >= hoje && item.proximoAniversario <= limite)
+      .sort((a, b) => a.proximoAniversario.getTime() - b.proximoAniversario.getTime());
 
-    setAniversariantes(bdays);
+    setAniversariantes(aniversariantesList.map(a => ({
+      id: a.id,
+      nome: a.nome,
+      data_nascimento: a.data_nascimento,
+      idade: a.idade,
+      unidade: a.unidade
+    })));
 
+    // 🔥 Próximos fins de semana
     const { data: folgasData } = folgasDataRes;
     const counts = new Map<string, number>();
     folgasData?.forEach((f) => counts.set(f.data, (counts.get(f.data) || 0) + 1));
@@ -92,7 +132,9 @@ export default function AdminDashboard() {
 
     const proximos: any[] = [];
     let d = new Date();
-    while (proximos.length < 5 && proximos.length < 30) {
+    let contador = 0;
+    while (proximos.length < 10 && contador < 30) {
+      contador++;
       const iso = d.toISOString().split("T")[0];
       const w = d.getDay();
       if (w === 0 || w === 6) {
@@ -104,35 +146,19 @@ export default function AdminDashboard() {
           limite,
           temAniversario: prioDates.has(iso),
           percentual: Math.round((ocupacao / limite) * 100),
-          status: ocupacao >= limite ? "lotado" : ocupacao >= limite * 0.7 ? "quase_lotado" : "disponivel"
+          status: ocupacao > limite ? "lotado" : ocupacao >= limite ? "cheio" : "disponivel"
         });
       }
       d.setDate(d.getDate() + 1);
     }
     setProximasFolgas(proximos);
 
+    // 🔥 Alertas de ocupação: só quando ocupacao > limite
     const novosAlertas: any[] = [];
-
-    proximos.filter((p) => p.status === "quase_lotado").forEach((p) => {
-      novosAlertas.push({
-        tipo: "quase_lotado",
-        mensagem: `${formatBR(parseYMD(p.data))} está com ${p.ocupacao}/${p.limite} vagas ocupadas (${p.percentual}%)`,
-        data: p.data
-      });
-    });
-
-    proximos.filter((p) => p.status === "lotado").forEach((p) => {
+    proximos.filter((p) => p.ocupacao > p.limite).forEach((p) => {
       novosAlertas.push({
         tipo: "lotado",
-        mensagem: `${formatBR(parseYMD(p.data))} atingiu o limite máximo (${p.ocupacao}/${p.limite})`,
-        data: p.data
-      });
-    });
-
-    proximos.filter((p) => p.temAniversario).forEach((p) => {
-      novosAlertas.push({
-        tipo: "aniversario",
-        mensagem: `${formatBR(parseYMD(p.data))} tem aniversariante com prioridade`,
+        mensagem: `${formatBR(parseYMD(p.data))} - ${p.ocupacao}/${p.limite} (${p.percentual}% acima)`,
         data: p.data
       });
     });
@@ -177,15 +203,15 @@ export default function AdminDashboard() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "lotado": return "bg-red-100 text-red-700 border-red-200";
-      case "quase_lotado": return "bg-yellow-100 text-yellow-700 border-yellow-200";
+      case "cheio": return "bg-orange-100 text-orange-700 border-orange-200";
       default: return "bg-green-100 text-green-700 border-green-200";
     }
   };
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case "lotado": return "Lotado";
-      case "quase_lotado": return "Quase lotado";
+      case "lotado": return "Acima do limite";
+      case "cheio": return "Lotado";
       default: return "Disponível";
     }
   };
@@ -219,24 +245,16 @@ export default function AdminDashboard() {
       </div>
 
       {alertas.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
           <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="size-5 text-amber-600" />
-            <h3 className="font-semibold text-amber-900">Alertas de Ocupação</h3>
+            <AlertTriangle className="size-5 text-red-600" />
+            <h3 className="font-semibold text-red-900">Alertas de Ocupação (acima do limite)</h3>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {alertas.map((alerta, idx) => (
-              <div key={idx} className={`
-                p-3 rounded-xl text-sm border-l-4 ${
-                  alerta.tipo === "lotado" ? "bg-red-50 border-red-400 text-red-800" :
-                  alerta.tipo === "quase_lotado" ? "bg-yellow-50 border-yellow-400 text-yellow-800" :
-                  "bg-blue-50 border-blue-400 text-blue-800"
-                }
-              `}>
+              <div key={idx} className="bg-red-100/50 p-3 rounded-xl text-sm border-l-4 border-red-400 text-red-800">
                 <div className="flex items-center gap-2">
-                  {alerta.tipo === "lotado" && <span className="text-red-500">●</span>}
-                  {alerta.tipo === "quase_lotado" && <span className="text-yellow-500">●</span>}
-                  {alerta.tipo === "aniversario" && <Cake className="size-3.5 text-amber-500" />}
+                  <span className="text-red-500">●</span>
                   <span className="font-medium">{alerta.mensagem}</span>
                 </div>
               </div>
@@ -272,7 +290,7 @@ export default function AdminDashboard() {
                       <div
                         className={`h-full transition-all ${
                           p.status === "lotado" ? "bg-red-500" :
-                          p.status === "quase_lotado" ? "bg-yellow-500" : "bg-emerald-500"
+                          p.status === "cheio" ? "bg-orange-500" : "bg-emerald-500"
                         }`}
                         style={{ width: `${Math.min(100, p.percentual)}%` }}
                       />
@@ -289,27 +307,33 @@ export default function AdminDashboard() {
         <Card className="shadow-sm border-border">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              <Cake className="size-4 text-primary" /> Aniversariantes de {new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date())}
+              <Cake className="size-4 text-primary" /> Aniversariantes dos Próximos 30 Dias
             </CardTitle>
             <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">{aniversariantes.length}</Badge>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               {aniversariantes.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">Nenhum aniversariante este mês.</div>
+                <div className="text-center py-8 text-muted-foreground text-sm">Nenhum aniversariante nos próximos 30 dias.</div>
               ) : (
                 aniversariantes.map((a) => (
                   <div key={a.id} className="flex items-center justify-between p-3 rounded-xl bg-amber-50/30 border border-amber-100/50">
-                    <div className="flex items-center gap-3">
-                      <div className="size-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 font-bold">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="size-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 font-bold shrink-0">
                         {new Date(a.data_nascimento + "T00:00:00").getDate()}
                       </div>
-                      <div>
-                        <div className="font-semibold text-slate-900">{a.nome}</div>
-                        <div className="text-xs text-muted-foreground">Completa {a.idade} anos</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-slate-900 truncate">{a.nome}</div>
+                        <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                          <span>Completa {a.idade} anos</span>
+                          <span className="flex items-center gap-0.5">
+                            <Building2 className="size-3" />
+                            {a.unidade}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="text-amber-600 hover:bg-amber-100" onClick={() => window.location.href = "/admin/calendario"}>
+                    <Button variant="ghost" size="icon" className="text-amber-600 hover:bg-amber-100 shrink-0" onClick={() => window.location.href = "/admin/calendario"}>
                       <ChevronRight className="size-4" />
                     </Button>
                   </div>
