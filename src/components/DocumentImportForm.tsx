@@ -263,13 +263,14 @@ export function DocumentImportForm() {
     setConfirmIgnorar(true);
   };
 
-  const confirmarIgnorar = () => {
+   const confirmarIgnorar = () => {
     setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, ignorado: true, resolvido: true } : r));
     setConfirmIgnorar(false);
     const next = pageResults.findIndex((r, i) => i > currentPage && !r.resolvido && !r.ignorado);
-if (next !== -1) {
-  setTimeout(() => setCurrentPage(next), 150);
-}
+    if (next !== -1) {
+      setTimeout(() => setCurrentPage(next), 150);
+    }
+  };
 
   const handleCriarColab = async () => {
     if (!novoColabForm.nome || !novoColabForm.cpf || !novoColabForm.cargo || !novoColabForm.unidadeId) {
