@@ -25,8 +25,8 @@ import Bloqueios from "./pages/admin/Bloqueios";
 import DocumentosHub from "./pages/admin/Documentos";
 import DocumentosContracheque from "./pages/admin/DocumentosContracheque";
 import DocumentosPontoAdmin from "./pages/admin/DocumentosPontoAdmin";
-import DocumentosAtestadosAdmin from "./pages/admin/DocumentosAtestadosAdmin";
-import DocumentosDisciplinar from "./pages/admin/DocumentosDisciplinar";
+import AtestadosAdmin from "./pages/admin/AtestadosAdmin";
+import RegistrosDisciplinaresAdmin from "./pages/admin/RegistrosDisciplinaresAdmin";
 import SetupAdmin from "./pages/SetupAdmin";
 
 function AuthenticatedRoutes() {
