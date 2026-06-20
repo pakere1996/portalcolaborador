@@ -29,9 +29,9 @@ import AtestadosAdmin from "./pages/admin/AtestadosAdmin";
 import RegistrosDisciplinaresAdmin from "./pages/admin/RegistrosDisciplinaresAdmin";
 import SetupAdmin from "./pages/SetupAdmin";
 
-// 🔥 Componente para proteger rotas admin
-function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { role, session, loading } = useAuth();
+// 🔥 Componente de redirecionamento da raiz que aguarda o role
+function RootRedirect() {
+  const { role, loading } = useAuth();
   
   if (loading) {
     return (
@@ -41,15 +41,8 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!session) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (role !== "admin") {
-    return <Navigate to="/home" replace />;
-  }
-
-  return <>{children}</>;
+  const isAdmin = role === "admin";
+  return <Navigate to={isAdmin ? "/admin/home" : "/home"} replace />;
 }
 
 function AuthenticatedRoutes() {
@@ -57,7 +50,6 @@ function AuthenticatedRoutes() {
   const isAuthenticated = !!session;
   const isAdmin = role === "admin";
 
-  // 🔥 Aguarda o carregamento do perfil antes de renderizar
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -83,11 +75,12 @@ function AuthenticatedRoutes() {
         <Route path="/documentos/atestados" element={<DocumentosAtestados />} />
         <Route path="/documentos/ponto" element={<Documentos />} />
 
-        {/* 🔥 Rotas de Home com redirecionamento correto */}
+        {/* Rotas de Home */}
         <Route path="/home" element={<Home />} />
-        <Route path="/" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
+        {/* 🔥 Usa RootRedirect para a raiz */}
+        <Route path="/" element={<RootRedirect />} />
 
-        {/* Admin Routes protegidas */}
+        {/* Admin Routes */}
         {isAdmin ? (
           <>
             <Route path="/admin" element={<Navigate to="/admin/home" replace />} />
@@ -119,7 +112,7 @@ function AuthenticatedRoutes() {
           <Route path="/admin/*" element={<Navigate to="/home" replace />} />
         )}
 
-        {/* Fallback para usuários autenticados */}
+        {/* Fallback */}
         <Route path="*" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
       </Routes>
     </AppShell>
