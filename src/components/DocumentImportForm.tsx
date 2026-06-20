@@ -148,8 +148,7 @@ export function DocumentImportForm() {
       const results: PageResult[] = pages.map((p) => {
         const text = p.text;
 
-        const nome = extractNomePDF(text);
-        const matchedProfile = findExactMatch(nome, profiles);
+          const { profile: matchedProfile, nomeEncontrado: nome } = findExactMatchInText(text, profiles);
 
         const cnpjMatch = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
         const cnpj = cnpjMatch ? cnpjMatch[0] : null;
