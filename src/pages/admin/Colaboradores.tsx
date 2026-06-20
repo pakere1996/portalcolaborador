@@ -23,15 +23,14 @@ type Profile = Tables<'profiles'> & { role?: string | null };
 type Unidade = Tables<'unidades'>;
 type Cargo = Tables<'cargos'>;
 
-// 🔥 Adicionados campos regime_trabalho e data_demissao
 const blankEditForm = {
   nome: "", cpf: "", matricula: "", email: "", whatsapp: "",
   cargo: "", unidadeId: "none", folgaFixa: "none",
   dataAdmissao: "", dataNascimento: "", perfil_acesso: "colaborador",
   ativo: true,
   senha: "",
-  regime_trabalho: "none",   // <-- NOVO
-  data_demissao: "",          // <-- NOVO
+  regime_trabalho: "none",
+  data_demissao: "",
 };
 
 export default function Colaboradores() {
@@ -55,12 +54,14 @@ export default function Colaboradores() {
   const loadData = async () => {
     setLoading(true);
     try {
+      // 🔥 USE SELECT * para evitar erro de coluna inexistente
       const [pRes, uRes, cRes] = await Promise.all([
-        // 🔥 Adicionados regime_trabalho e data_demissao no SELECT
         supabase.from("profiles").select("*").order("nome"),
         supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
         supabase.from("cargos").select("*").eq("ativo", true).order("nome"),
       ]);
+
+      if (pRes.error) throw pRes.error;
 
       const profileIds = (pRes.data ?? []).map(p => p.id);
       let rolesMap = new Map<string, string[]>();
@@ -119,7 +120,6 @@ export default function Colaboradores() {
 
       if (authErr) throw authErr;
 
-      // 🔥 Incluindo regime_trabalho e data_demissao no update
       const { error: profErr } = await supabase.from("profiles").update({
         matricula: newForm.matricula.trim() || null,
         whatsapp: newForm.whatsapp.trim() || null,
@@ -158,8 +158,8 @@ export default function Colaboradores() {
       perfil_acesso: p.role ?? "colaborador",
       ativo: p.ativo,
       senha: "",
-      regime_trabalho: p.regime_trabalho ?? "none",   // <-- NOVO
-      data_demissao: p.data_demissao ?? "",            // <-- NOVO
+      regime_trabalho: p.regime_trabalho ?? "none",
+      data_demissao: p.data_demissao ?? "",
     });
   };
 
@@ -170,7 +170,6 @@ export default function Colaboradores() {
       const cleanCpf = onlyDigits(editForm.cpf);
       if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
 
-      // 🔥 Incluindo regime_trabalho e data_demissao no update
       const { error: profErr } = await supabase.from("profiles").update({
         nome: editForm.nome.trim(),
         cpf: cleanCpf,
