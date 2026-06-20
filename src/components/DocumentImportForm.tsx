@@ -48,6 +48,7 @@ const normalizeNome = (str: string): string => {
     .toUpperCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\n\r\t]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 };
