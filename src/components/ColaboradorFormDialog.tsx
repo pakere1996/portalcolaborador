@@ -36,6 +36,7 @@ interface ColaboradorForm {
   dataNascimento: string;
   perfil_acesso: string;
   regime_trabalho: string;
+  data_demissao: string; // 🔥 NOVO CAMPO
   ativo: boolean;
   senha: string;
 }
@@ -189,7 +190,7 @@ export function ColaboradorFormDialog({
           </div>
 
           {/* Datas */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Data de Admissão</Label>
               <Input type="date" value={form.dataAdmissao} onChange={set("dataAdmissao")} />
@@ -197,6 +198,19 @@ export function ColaboradorFormDialog({
             <div className="space-y-2">
               <Label>Data de Nascimento</Label>
               <Input type="date" value={form.dataNascimento} onChange={set("dataNascimento")} />
+            </div>
+            {/* 🔥 NOVO CAMPO: Data de Demissão */}
+            <div className="space-y-2">
+              <Label>Data de Demissão</Label>
+              <Input 
+                type="date" 
+                value={form.data_demissao || ""} 
+                onChange={set("data_demissao")} 
+                min={form.dataAdmissao || undefined}
+              />
+              <p className="text-xs text-muted-foreground">
+                Preencha apenas se desligado.
+              </p>
             </div>
           </div>
 
