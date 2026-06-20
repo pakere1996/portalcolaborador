@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -29,6 +29,10 @@ export default function BloqueiosPage() {
   const [busy, setBusy] = useState(false);
   const [anoFiltro, setAnoFiltro] = useState(new Date().getFullYear());
   const [mesFiltro, setMesFiltro] = useState<string>("all");
+
+  // Controle de diálogos
+  const [isRegraDialogOpen, setIsRegraDialogOpen] = useState(false);
+  const [isDataDialogOpen, setIsDataDialogOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -56,35 +60,41 @@ export default function BloqueiosPage() {
   });
 
   // --- Regras de Bloqueio ---
-  const [regraDialog, setRegraDialog] = useState<BloqueioRegra | null>(null);
   const [regraForm, setRegraForm] = useState<Partial<BloqueioRegra>>({
     descricao: "", tipo: "fixa_anual", mes: null, dia: null, ordinal: null, dia_semana: null, ativo: true,
   });
+  const [editRegraId, setEditRegraId] = useState<string | null>(null);
 
   const openRegraDialog = (r?: BloqueioRegra) => {
     if (r) {
-      setRegraDialog(r);
-      setRegraForm(r);
+      setEditRegraId(r.id);
+      setRegraForm({ ...r });
     } else {
-      setRegraDialog(null);
+      setEditRegraId(null);
       setRegraForm({ descricao: "", tipo: "fixa_anual", mes: null, dia: null, ordinal: null, dia_semana: null, ativo: true });
     }
+    setIsRegraDialogOpen(true);
+  };
+
+  const closeRegraDialog = () => {
+    setIsRegraDialogOpen(false);
+    setEditRegraId(null);
   };
 
   const saveRegra = async () => {
     if (!regraForm.descricao?.trim()) return toast.error("Descrição é obrigatória");
     setBusy(true);
     try {
-      if (regraDialog) {
-        const { error } = await supabase.from("bloqueio_regras").update(regraForm).eq("id", regraDialog.id);
+      if (editRegraId) {
+        const { error } = await supabase.from("bloqueio_regras").update(regraForm).eq("id", editRegraId);
         if (error) throw error;
-        toast.success("Regra updated");
+        toast.success("Regra atualizada");
       } else {
         const { error } = await supabase.from("bloqueio_regras").insert(regraForm);
         if (error) throw error;
         toast.success("Regra criada");
       }
-      setRegraDialog(null);
+      closeRegraDialog();
       load();
     } catch (e) {
       toast.error("Erro ao salvar", { description: (e as Error).message });
@@ -115,38 +125,52 @@ export default function BloqueiosPage() {
   };
 
   // --- Datas Bloqueadas Manuais ---
-  const [dataDialog, setDataDialog] = useState<{ iso: string } | null>(null);
   const [manualData, setManualData] = useState("");
   const [manualMotivo, setManualMotivo] = useState("");
+  const [editDataId, setEditDataId] = useState<string | null>(null);
 
-  const openDataDialog = (iso?: string) => {
-    if (iso) {
-      setDataDialog({ iso });
-      setManualData(iso);
-      setManualMotivo("");
+  const openDataDialog = (data?: DataBloqueada) => {
+    if (data) {
+      setEditDataId(data.id);
+      setManualData(data.data);
+      setManualMotivo(data.motivo || "");
     } else {
-      setDataDialog(null);
+      setEditDataId(null);
       setManualData("");
       setManualMotivo("");
     }
+    setIsDataDialogOpen(true);
+  };
+
+  const closeDataDialog = () => {
+    setIsDataDialogOpen(false);
+    setEditDataId(null);
   };
 
   const saveManualBlock = async () => {
     if (!manualData || !manualMotivo.trim()) return toast.error("Preencha data e motivo");
     setBusy(true);
     try {
-      const { error } = await supabase.from("datas_bloqueadas").upsert({
-        data: manualData,
-        motivo: manualMotivo.trim(),
-        auto: false,
-        liberada: false,
-      }, { onConflict: "data" });
-      if (error) throw error;
-      toast.success("Data bloqueada");
-      openDataDialog();
+      if (editDataId) {
+        const { error } = await supabase.from("datas_bloqueadas").update({
+          motivo: manualMotivo.trim(),
+        }).eq("id", editDataId);
+        if (error) throw error;
+        toast.success("Bloqueio atualizado");
+      } else {
+        const { error } = await supabase.from("datas_bloqueadas").upsert({
+          data: manualData,
+          motivo: manualMotivo.trim(),
+          auto: false,
+          liberada: false,
+        }, { onConflict: "data" });
+        if (error) throw error;
+        toast.success("Data bloqueada");
+      }
+      closeDataDialog();
       load();
     } catch (e) {
-      toast.error("Erro ao bloquear", { description: (e as Error).message });
+      toast.error("Erro ao salvar", { description: (e as Error).message });
     } finally {
       setBusy(false);
     }
@@ -160,9 +184,8 @@ export default function BloqueiosPage() {
   };
 
   const deleteManualBlock = async (id: string) => {
-    const { error } = await supabase.from("datas_runs").delete().eq("id", id);
-    const { error: err } = await supabase.from("datas_bloqueadas").delete().eq("id", id);
-    if (err) return toast.error(err.message);
+    const { error } = await supabase.from("datas_bloqueadas").delete().eq("id", id);
+    if (error) return toast.error(error.message);
     toast.success("Bloqueio removido");
     load();
   };
@@ -215,52 +238,9 @@ export default function BloqueiosPage() {
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Calendar className="size-5 text-primary" /> Regras de Bloqueio Automático
           </h2>
-          <Dialog open={!!regraDialog} onOpenChange={(o) => !o && openRegraDialog()}>
-            <DialogTrigger asChild>
-              <Button className="rounded-full px-6"><Plus className="size-4 mr-2" /> Nova Regra</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader><DialogTitle>{regraDialog ? "Editar Regra" : "Nova Regra"}</DialogTitle></DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>Descrição *</Label>
-                  <Input value={regraForm.descricao ?? ""} onChange={(e) => setRegraForm({ ...regraForm, descricao: e.target.value })} placeholder="Ex: Natal, Black Friday..." />
-                </div>
-                <div className="space-y-2">
-                  <Label>Tipo *</Label>
-                  <select value={regraForm.tipo ?? "fixa_anual"} onChange={(e) => setRegraForm({ ...regraForm, tipo: e.target.value })} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    <option value="fixa_anual">Fixa Anual (dia/mês fixo)</option>
-                    <option value="dinamica">Dinâmica (ex: 2º sábado do mês)</option>
-                    <option value="pos_pagamento">Pós-Pagamento (1º sáb após dia 5)</option>
-                  </select>
-                </div>
-                {regraForm.tipo === "fixa_anual" && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2"><Label>Mês (1-12) *</Label><Input type="number" min={1} max={12} value={regraForm.mes ?? ""} onChange={(e) => setRegraForm({ ...regraForm, mes: Number(e.target.value) })} /></div>
-                    <div className="space-y-2"><Label>Dia (1-31) *</Label><Input type="number" min={1} max={31} value={regraForm.dia ?? ""} onChange={(e) => setRegraForm({ ...regraForm, dia: Number(e.target.value) })} /></div>
-                  </div>
-                )}
-                {regraForm.tipo === "dinamica" && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2"><Label>Mês (1-12) *</Label><Input type="number" min={1} max={12} value={regraForm.mes ?? ""} onChange={(e) => setRegraForm({ ...regraForm, mes: Number(e.target.value) })} /></div>
-                    <div className="space-y-2"><Label>Dia da Semana (0=Dom...6=Sáb) *</Label><Input type="number" min={0} max={6} value={regraForm.dia_semana ?? ""} onChange={(e) => setRegraForm({ ...regraForm, dia_semana: Number(e.target.value) })} /></div>
-                    <div className="space-y-2"><Label>Ordinal (1=primeiro, 2=segundo...) *</Label><Input type="number" min={1} max={5} value={regraForm.ordinal ?? ""} onChange={(e) => setRegraForm({ ...regraForm, ordinal: Number(e.target.value) })} /></div>
-                  </div>
-                )}
-                {regraForm.tipo === "pos_pagamento" && (
-                  <div className="space-y-2"><Label>Mês (1-12) *</Label><Input type="number" min={1} max={12} value={regraForm.mes ?? ""} onChange={(e) => setRegraForm({ ...regraForm, mes: Number(e.target.value) })} /></div>
-                )}
-                <div className="flex items-center gap-2">
-                  <input type="checkbox" id="ativo" checked={regraForm.ativo ?? true} onChange={(e) => setRegraForm({ ...regraForm, ativo: e.target.checked })} className="size-4" />
-                  <Label htmlFor="ativo">Ativa</Label>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="ghost" onClick={() => openRegraDialog()}>Cancelar</Button>
-                <Button onClick={saveRegra} disabled={busy}>{busy ? "Salvando..." : "Salvar"}</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button className="rounded-full px-6" onClick={() => openRegraDialog()}>
+            <Plus className="size-4 mr-2" /> Nova Regra
+          </Button>
         </div>
 
         <div className="bg-card border border-border rounded-2xl overflow-hidden">
@@ -276,7 +256,7 @@ export default function BloqueiosPage() {
                     </div>
                     <div>
                       <div className="font-semibold">{r.descricao ?? ""}</div>
-                      <div className="text-sm text-muted-foreground flex items-center gap-4">
+                      <div className="text-sm text-muted-foreground flex items-center gap-4 flex-wrap">
                         <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">{getTipoLabel(r.tipo ?? "")}</span>
                         {r.tipo === "fixa_anual" && <span>Dia {r.dia}/{String(r.mes).padStart(2, '0')}</span>}
                         {r.tipo === "dinamica" && <span>{r.ordinal}º dia {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"][r.dia_semana ?? 0]} do mês {r.mes}</span>}
@@ -286,7 +266,9 @@ export default function BloqueiosPage() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="ghost" size="icon" className="size-8" onClick={() => openRegraDialog(r)}><Filter className="size-4" /></Button>
+                    <Button variant="ghost" size="icon" className="size-8" onClick={() => openRegraDialog(r)}>
+                      <Filter className="size-4" />
+                    </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="ghost" size="icon" className="size-8 text-destructive hover:bg-destructive/10">
@@ -316,28 +298,15 @@ export default function BloqueiosPage() {
         </div>
       </section>
 
-      {/* Bloqueios Manuais */}
+      {/* Bloqueios Manuais / Liberações */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <CalendarX className="size-5 text-rose-500" /> Bloqueios Manuais / Liberações
           </h2>
-          <Dialog open={!!dataDialog} onOpenChange={(o) => !o && openDataDialog()}>
-            <DialogTrigger asChild>
-              <Button className="rounded-full px-6"><Plus className="size-4 mr-2" /> Bloquear Data</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader><DialogTitle>Bloquear Data Manualmente</DialogTitle></DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2"><Label>Data *</Label><Input type="date" value={manualData} onChange={(e) => setManualData(e.target.value)} /></div>
-                <div className="space-y-2"><Label>Motivo *</Label><Input value={manualMotivo} onChange={(e) => setManualMotivo(e.target.value)} placeholder="Ex: Evento da empresa, manutenção..." /></div>
-              </div>
-              <DialogFooter>
-                <Button variant="ghost" onClick={() => openDataDialog()}>Cancelar</Button>
-                <Button onClick={saveManualBlock} disabled={busy}>{busy ? "Salvando..." : "Bloquear"}</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button className="rounded-full px-6" onClick={() => openDataDialog()}>
+            <Plus className="size-4 mr-2" /> Bloquear Data
+          </Button>
         </div>
 
         <div className="bg-card border border-border rounded-2xl overflow-hidden">
@@ -353,7 +322,7 @@ export default function BloqueiosPage() {
                     </div>
                     <div>
                       <div className="font-semibold">{formatBR(parseYMD(d.data))}</div>
-                      <div className="text-sm text-muted-foreground flex items-center gap-4">
+                      <div className="text-sm text-muted-foreground flex items-center gap-4 flex-wrap">
                         <span>{d.motivo ?? ""}</span>
                         <Badge variant="outline" className={d.auto ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-rose-50 text-rose-700 border-rose-200"}>
                           {d.auto ? "Automático" : "Manual"}
@@ -365,8 +334,13 @@ export default function BloqueiosPage() {
                     </div>
                   </div>
                   <div className="flex gap-2">
+                    {!d.auto && (
+                      <Button variant="ghost" size="icon" className="size-8" onClick={() => openDataDialog(d)}>
+                        <Filter className="size-4" />
+                      </Button>
+                    )}
                     {!d.liberada && !d.auto && (
-                      <Button variant="ghost" size="icon" className="size-8 text-destructive hover:bg-destructive/10" onClick={() => { if(confirm("Excluir este bloqueio manual?")) deleteManualBlock(d.id); }}>
+                      <Button variant="ghost" size="icon" className="size-8 text-destructive hover:bg-destructive/10" onClick={() => deleteManualBlock(d.id)}>
                         <Trash2 className="size-4" />
                       </Button>
                     )}
@@ -385,6 +359,70 @@ export default function BloqueiosPage() {
           )}
         </div>
       </section>
+
+      {/* Dialog de Regras */}
+      <Dialog open={isRegraDialogOpen} onOpenChange={(o) => !o && closeRegraDialog()}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editRegraId ? "Editar Regra" : "Nova Regra"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Descrição *</Label>
+              <Input value={regraForm.descricao ?? ""} onChange={(e) => setRegraForm({ ...regraForm, descricao: e.target.value })} placeholder="Ex: Natal, Black Friday..." />
+            </div>
+            <div className="space-y-2">
+              <Label>Tipo *</Label>
+              <select value={regraForm.tipo ?? "fixa_anual"} onChange={(e) => setRegraForm({ ...regraForm, tipo: e.target.value })} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <option value="fixa_anual">Fixa Anual (dia/mês fixo)</option>
+                <option value="dinamica">Dinâmica (ex: 2º sábado do mês)</option>
+                <option value="pos_pagamento">Pós-Pagamento (1º sáb após dia 5)</option>
+              </select>
+            </div>
+            {regraForm.tipo === "fixa_anual" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2"><Label>Mês (1-12) *</Label><Input type="number" min={1} max={12} value={regraForm.mes ?? ""} onChange={(e) => setRegraForm({ ...regraForm, mes: Number(e.target.value) })} /></div>
+                <div className="space-y-2"><Label>Dia (1-31) *</Label><Input type="number" min={1} max={31} value={regraForm.dia ?? ""} onChange={(e) => setRegraForm({ ...regraForm, dia: Number(e.target.value) })} /></div>
+              </div>
+            )}
+            {regraForm.tipo === "dinamica" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2"><Label>Mês (1-12) *</Label><Input type="number" min={1} max={12} value={regraForm.mes ?? ""} onChange={(e) => setRegraForm({ ...regraForm, mes: Number(e.target.value) })} /></div>
+                <div className="space-y-2"><Label>Dia da Semana (0=Dom...6=Sáb) *</Label><Input type="number" min={0} max={6} value={regraForm.dia_semana ?? ""} onChange={(e) => setRegraForm({ ...regraForm, dia_semana: Number(e.target.value) })} /></div>
+                <div className="space-y-2"><Label>Ordinal (1=primeiro, 2=segundo...) *</Label><Input type="number" min={1} max={5} value={regraForm.ordinal ?? ""} onChange={(e) => setRegraForm({ ...regraForm, ordinal: Number(e.target.value) })} /></div>
+              </div>
+            )}
+            {regraForm.tipo === "pos_pagamento" && (
+              <div className="space-y-2"><Label>Mês (1-12) *</Label><Input type="number" min={1} max={12} value={regraForm.mes ?? ""} onChange={(e) => setRegraForm({ ...regraForm, mes: Number(e.target.value) })} /></div>
+            )}
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="ativo" checked={regraForm.ativo ?? true} onChange={(e) => setRegraForm({ ...regraForm, ativo: e.target.checked })} className="size-4" />
+              <Label htmlFor="ativo">Ativa</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={closeRegraDialog}>Cancelar</Button>
+            <Button onClick={saveRegra} disabled={busy}>{busy ? "Salvando..." : "Salvar"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Datas Manuais */}
+      <Dialog open={isDataDialogOpen} onOpenChange={(o) => !o && closeDataDialog()}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editDataId ? "Editar Bloqueio" : "Bloquear Data Manualmente"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2"><Label>Data *</Label><Input type="date" value={manualData} onChange={(e) => setManualData(e.target.value)} /></div>
+            <div className="space-y-2"><Label>Motivo *</Label><Input value={manualMotivo} onChange={(e) => setManualMotivo(e.target.value)} placeholder="Ex: Evento da empresa, manutenção..." /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={closeDataDialog}>Cancelar</Button>
+            <Button onClick={saveManualBlock} disabled={busy}>{busy ? "Salvando..." : editDataId ? "Atualizar" : "Bloquear"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
