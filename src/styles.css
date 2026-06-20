@@ -1,4 +1,22 @@
-/* Hide Lovable badge */
-.lovable-badge, .lovable-badge-frame, #lovable-badge, [data-lovable-badge] {
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom CSS variables for Pakerê brand colors */
+:root {
+  --primary: #e30f27;
+  --primary-foreground: #ffffff;
+  --secondary: #fede59;
+  --secondary-foreground: #000000;
+  --available: #10b981;
+  --unavailable: #ef4444;
+  --pending: #8b5cf6;
+}
+
+/* Hide Lovable badge - isolated rule at the end to avoid conflicts */
+.lovable-badge,
+.lovable-badge-frame,
+#lovable-badge,
+[data-lovable-badge] {
   display: none !important;
 }
