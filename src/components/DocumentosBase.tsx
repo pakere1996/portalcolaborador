@@ -17,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2, Search } from "lucide-react";
+import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface Documento {
@@ -36,6 +36,13 @@ interface Documento {
 interface Profile {
   id: string;
   nome: string;
+  ativo: boolean;
+  unidade_id: string | null;
+}
+
+interface Unidade {
+  id: string;
+  nome: string;
 }
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -52,16 +59,24 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
   const [aba, setAba] = useState<"importar" | "historico">("importar");
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Filtros existentes
   const [filtroColab, setFiltroColab] = useState("todos");
   const [filtroMes, setFiltroMes] = useState("todos");
   const [filtroAno, setFiltroAno] = useState("todos");
-  const [buscaNome, setBuscaNome] = useState(""); // 🔥 NOVO: busca textual
+  
+  // 🔥 NOVOS FILTROS
+  const [filtroStatus, setFiltroStatus] = useState("todos"); // "todos", "ativo", "inativo"
+  const [filtroUnidade, setFiltroUnidade] = useState("todos");
+
   const [editando, setEditando] = useState<string | null>(null);
   const [editMes, setEditMes] = useState("");
   const [editAno, setEditAno] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Estados para exclusão
   const [excluirDialogOpen, setExcluirDialogOpen] = useState(false);
   const [documentoParaExcluir, setDocumentoParaExcluir] = useState<Documento | null>(null);
   const [excluindo, setExcluindo] = useState(false);
@@ -69,6 +84,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      // Busca documentos do tipo específico
       const { data: docs, error: docsError } = await supabase
         .from("documentos")
         .select("*")
@@ -76,26 +92,39 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
 
       if (docsError) throw docsError;
 
+      // Busca todos os perfis (incluindo ativo e unidade_id)
       const { data: profs, error: profsError } = await supabase
         .from("profiles")
-        .select("id, nome")
-        .eq("ativo", true)
+        .select("id, nome, ativo, unidade_id")
         .order("nome");
 
       if (profsError) throw profsError;
 
-      const profileMap = new Map(profs?.map(p => [p.id, p.nome]) ?? []);
+      // Busca todas as unidades ativas
+      const { data: units, error: unitsError } = await supabase
+        .from("unidades")
+        .select("id, nome")
+        .eq("ativo", true)
+        .order("nome");
 
+      if (unitsError) throw unitsError;
+
+      // Cria mapas para acesso rápido
+      const profileMap = new Map(profs?.map(p => [p.id, p]) ?? []);
+      const unitMap = new Map(units?.map(u => [u.id, u.nome]) ?? []);
+
+      // Ordena documentos: ano/mês decrescente, depois nome do colaborador
       const sortedDocs = (docs ?? []).sort((a, b) => {
         if (a.ano !== b.ano) return b.ano - a.ano;
         if (a.mes !== b.mes) return b.mes - a.mes;
-        const nomeA = profileMap.get(a.colaborador_id) ?? "";
-        const nomeB = profileMap.get(b.colaborador_id) ?? "";
+        const nomeA = profileMap.get(a.colaborador_id)?.nome ?? "";
+        const nomeB = profileMap.get(b.colaborador_id)?.nome ?? "";
         return nomeA.localeCompare(nomeB);
       });
 
       setDocumentos(sortedDocs);
       setProfiles(profs ?? []);
+      setUnidades(units ?? []);
     } catch (error) {
       console.error("Erro ao carregar documentos:", error);
       toast.error("Erro ao carregar histórico");
@@ -108,31 +137,38 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
     load();
   }, [load]);
 
+  // Anos disponíveis para filtro
   const anos = useMemo(
     () => [...new Set(documentos.map((d) => d.ano))].sort((a, b) => b - a),
     [documentos]
   );
 
-  // 🔥 Filtro combinado: select + busca textual
+  // 🔥 Aplicação dos filtros (incluindo status e unidade)
   const filtrados = useMemo(() => {
-    const buscaLower = buscaNome.toLowerCase().trim();
-    
     return documentos.filter((d) => {
-      // Filtros por select
+      // Filtro por colaborador
       if (filtroColab !== "todos" && d.colaborador_id !== filtroColab) return false;
+      
+      // Filtro por mês
       if (filtroMes !== "todos" && d.mes !== parseInt(filtroMes)) return false;
+      
+      // Filtro por ano
       if (filtroAno !== "todos" && d.ano !== parseInt(filtroAno)) return false;
 
-      // 🔥 Busca textual por nome do colaborador
-      if (buscaLower) {
-        const profile = profiles.find(p => p.id === d.colaborador_id);
-        const nomeColaborador = profile?.nome?.toLowerCase() ?? "";
-        if (!nomeColaborador.includes(buscaLower)) return false;
-      }
+      // Busca o perfil do colaborador
+      const profile = profiles.find(p => p.id === d.colaborador_id);
+      if (!profile) return false;
+
+      // 🔥 Filtro por status do colaborador
+      if (filtroStatus === "ativo" && !profile.ativo) return false;
+      if (filtroStatus === "inativo" && profile.ativo) return false;
+
+      // 🔥 Filtro por unidade
+      if (filtroUnidade !== "todos" && profile.unidade_id !== filtroUnidade) return false;
 
       return true;
     });
-  }, [documentos, filtroColab, filtroMes, filtroAno, buscaNome, profiles]);
+  }, [documentos, profiles, filtroColab, filtroMes, filtroAno, filtroStatus, filtroUnidade]);
 
   const handleDownload = useCallback(async (doc: Documento) => {
     const { data } = await supabase.storage
@@ -175,6 +211,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
     setEditando(null);
   }, []);
 
+  // Exclusão
   const handleExcluir = useCallback((doc: Documento) => {
     setDocumentoParaExcluir(doc);
     setExcluirDialogOpen(true);
@@ -259,24 +296,9 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
 
       {aba === "historico" && (
         <div className="space-y-4">
-          {/* 🔥 Filtros melhorados com busca textual */}
-          <div className="bg-card border border-border rounded-2xl p-4 flex flex-wrap gap-3 items-end">
-            {/* Busca por nome */}
-            <div className="space-y-1 flex-1 min-w-[200px]">
-              <Label className="text-xs uppercase text-muted-foreground font-bold">Buscar por nome</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <Input
-                  placeholder="Digite o nome do colaborador..."
-                  value={buscaNome}
-                  onChange={(e) => setBuscaNome(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-
-            {/* Filtro por colaborador (select) */}
-            <div className="space-y-1 flex-1 min-w-[180px]">
+          {/* 🔥 Filtros (agora com Status e Unidade) */}
+          <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="space-y-1">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Colaborador</Label>
               <Select value={filtroColab} onValueChange={setFiltroColab}>
                 <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
@@ -289,8 +311,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
               </Select>
             </div>
 
-            {/* Filtro por mês */}
-            <div className="space-y-1 w-[140px]">
+            <div className="space-y-1">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Mês</Label>
               <Select value={filtroMes} onValueChange={setFiltroMes}>
                 <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
@@ -303,8 +324,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
               </Select>
             </div>
 
-            {/* Filtro por ano */}
-            <div className="space-y-1 w-[120px]">
+            <div className="space-y-1">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Ano</Label>
               <Select value={filtroAno} onValueChange={setFiltroAno}>
                 <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
@@ -317,31 +337,42 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
               </Select>
             </div>
 
-            {/* Botão para limpar filtros */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setBuscaNome("");
-                setFiltroColab("todos");
-                setFiltroMes("todos");
-                setFiltroAno("todos");
-              }}
-              className="h-10"
-            >
-              Limpar filtros
-            </Button>
+            {/* 🔥 NOVO FILTRO: Status do colaborador */}
+            <div className="space-y-1">
+              <Label className="text-xs uppercase text-muted-foreground font-bold">Status</Label>
+              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="ativo">Ativo</SelectItem>
+                  <SelectItem value="inativo">Inativo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* 🔥 NOVO FILTRO: Unidade */}
+            <div className="space-y-1">
+              <Label className="text-xs uppercase text-muted-foreground font-bold">Unidade</Label>
+              <Select value={filtroUnidade} onValueChange={setFiltroUnidade}>
+                <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas</SelectItem>
+                  {unidades.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          {/* Tabela de resultados */}
+          {/* Tabela */}
           {loading ? (
             <div className="flex items-center justify-center p-12 text-muted-foreground">
               <Loader2 className="size-6 animate-spin mr-2" /> Carregando...
             </div>
           ) : filtrados.length === 0 ? (
             <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
-              Nenhum documento encontrado.
-              {buscaNome && ` (busca por "${buscaNome}")`}
+              Nenhum documento encontrado com os filtros selecionados.
             </div>
           ) : (
             <div className="bg-card border border-border rounded-2xl overflow-hidden">
@@ -361,7 +392,14 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                     const profile = profiles.find((p) => p.id === doc.colaborador_id);
                     return (
                       <tr key={doc.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="p-4 font-medium">{profile?.nome ?? "—"}</td>
+                        <td className="p-4 font-medium">
+                          {profile?.nome ?? "—"}
+                          {!profile?.ativo && (
+                            <Badge variant="outline" className="ml-2 text-xs bg-red-50 text-red-600 border-red-200">
+                              Inativo
+                            </Badge>
+                          )}
+                        </td>
                         <td className="p-4">
                           {editando === doc.id ? (
                             <div className="flex items-center gap-2">
