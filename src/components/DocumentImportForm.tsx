@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -76,9 +78,12 @@ export function DocumentImportForm() {
   const loadData = useCallback(async () => {
     console.log("=== LOAD DATA PROFILES ===");
     
-    // Query completa incluindo as colunas necessárias para o filtro e regime de trabalho
+    // Query principal: sempre buscar todos os campos necessários
     const [pRes, uRes, cRes] = await Promise.all([
-      supabase.from("profiles").select("id, nome, cpf, matricula, cargo, unidade_id, regime_trabalho, ativo").eq("ativo", true).order("nome"),
+      supabase.from("profiles")
+        .select("id, nome, cpf, matricula, cargo, unidade_id, regime_trabalho, ativo")
+        .eq("ativo", true)
+        .order("nome"),
       supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome"),
       supabase.from("cargos").select("id, nome").order("nome")
     ]);
@@ -91,9 +96,12 @@ export function DocumentImportForm() {
       console.error("Erro ao carregar perfis:", pRes.error);
       toast.error("Erro ao carregar lista de colaboradores");
       
-      // Fallback: tenta query mais simples
-      console.log("=== FALLBACK PROFILES ===");
-      const fallbackRes = await supabase.from("profiles").select("id, nome, cpf, cargo, unidade_id, ativo").eq("ativo", true).order("nome");
+      // Fallback: mesma query completa, sem remover campos
+      console.log("=== FALLBACK PROFILES (mesma query completa) ===");
+      const fallbackRes = await supabase.from("profiles")
+        .select("id, nome, cpf, matricula, cargo, unidade_id, regime_trabalho, ativo")
+        .eq("ativo", true)
+        .order("nome");
       console.log("FALLBACK ERROR:", fallbackRes.error);
       console.log("FALLBACK DATA LENGTH:", fallbackRes.data?.length ?? 0);
       console.log("FALLBACK DATA SAMPLE:", (fallbackRes.data ?? []).slice(0, 3));
@@ -183,7 +191,6 @@ export function DocumentImportForm() {
           const cleanPdfCnpj = cleanCNPJ(r.cnpj);
           const unit = unidades.find(u => u.cnpj && cleanCNPJ(u.cnpj) === cleanPdfCnpj);
           if (unit) unitId = unit.id;
-        unit.id;
         }
 
         let isNew = false;
@@ -278,37 +285,31 @@ export function DocumentImportForm() {
   
   // === DIAGNÓSTICO DO FILTRO ===
   console.log("=== FILTRO DE COLABORADORES ===");
-  console.log("unidadeId detectado:", unidadeId);
-  console.log("profiles.length no estado:", profiles.length);
-  console.log("profiles sample:", profiles.slice(0, 5).map(p => ({
-    id: p.id,
-    nome: p.nome,
-    unidade_id: p.unidade_id,
-    matricula: p.matricula,
-    regime_trabalho: p.regime_trabalho
-  })));
+  console.log("UNIDADE DETECTADA:", unidadeId);
+  console.log("TOTAL PROFILES:", profiles.length);
 
-  const testeUnidade = profiles.filter(
-    p => String(p.unidade_id) === String(unidadeId)
-  );
+  // Etapa A — filtro por unidade (defensivo)
+  const profilesDaUnidade = !unidadeId
+    ? profiles
+    : profiles.filter(p => String(p.unidade_id ?? "") === String(unidadeId ?? ""));
 
-  console.log("TESTE FILTRO UNIDADE LENGTH:", testeUnidade.length);
-  console.log("TESTE FILTRO UNIDADE SAMPLE:", testeUnidade.slice(0, 5));
+  console.log("TOTAL PROFILES DA UNIDADE:", profilesDaUnidade.length);
+  console.log("SAMPLE PROFILES DA UNIDADE:", profilesDaUnidade.slice(0, 5));
 
-  const colaboradoresFiltrados = profiles.filter(p => {
+  // Etapa B — filtro por busca textual
+  const colaboradoresFiltrados = profilesDaUnidade.filter(p => {
     const term = searchTerm.toLowerCase();
-    const matchesSearch = p.nome.toLowerCase().includes(term) || 
-                         (p.cpf && p.cpf.includes(searchTerm.replace(/\D/g, ""))) ||
-                         (p.matricula && p.matricula.includes(term));
+    if (!term) return true;
     
-    // Se a unidade foi detectada no PDF, filtra apenas colaboradores daquela unidade
-    if (unidadeId && p.unidade_id !== unidadeId) {
-      return false;
-    }
+    const nome = (p.nome || "").toLowerCase();
+    const cpf = (p.cpf || "").toLowerCase();
+    const matricula = (p.matricula || "").toLowerCase();
     
-    return matchesSearch;
+    return nome.includes(term) || cpf.includes(term) || matricula.includes(term);
   });
 
+  console.log("COLABORADORES FILTRADOS:", colaboradoresFiltrados.length);
+  
   if (pageResults.length === 0) {
     return (
       <div className="space-y-4">
