@@ -15,7 +15,7 @@ export default function LoginPage() {
   const [senha, setSenha] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Função para buscar role e redirecionar com replace forçado
+  // 🔥 Função para buscar role e redirecionar com replace forçado
   const redirectUser = async (userId: string) => {
     try {
       const { data: rolesData, error: rolesError } = await supabase
