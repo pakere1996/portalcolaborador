@@ -372,6 +372,12 @@ if (next !== -1) {
         if (insertError) throw insertError;
 
         salvos++;
+        // Marca a página como aprovada
+setPageResults(prev => prev.map(r => 
+  r.pageNumber === result.pageNumber 
+    ? { ...r, aprovado: true, aprovadoEm } 
+    : r
+));
       }
 
       let msg = `${salvos} documento(s) salvo(s) com sucesso!`;
