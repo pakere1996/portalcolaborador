@@ -45,6 +45,7 @@ interface PageResult {
   resolvido: boolean; // true quando vinculado (pendente de aprovação final) ou ignorado
   ignorado: boolean;
   aprovado: boolean; // true só depois do "Aprovar e Salvar"
+  aprovadoEm?: string; // data/hora da aprovação
   duplicadoId: string | null; // id do documento existente, se já houver essa competência para o colaborador
   acaoSeDuplicado: "substituir" | "manter_antigo" | null;
 }
