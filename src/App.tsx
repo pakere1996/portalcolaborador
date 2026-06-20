@@ -29,26 +29,21 @@ import AtestadosAdmin from "./pages/admin/AtestadosAdmin";
 import RegistrosDisciplinaresAdmin from "./pages/admin/RegistrosDisciplinaresAdmin";
 import SetupAdmin from "./pages/SetupAdmin";
 
-// 🔥 Componente de redirecionamento da raiz que aguarda o role
-function RootRedirect() {
-  const { role, loading } = useAuth();
-  
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-red-600"></div>
-      </div>
-    );
-  }
-
-  const isAdmin = role === "admin";
-  return <Navigate to={isAdmin ? "/admin/home" : "/home"} replace />;
-}
+// 🔥 Função para verificar se o usuário é admin (usando localStorage como fallback)
+const isUserAdmin = (role?: string | null): boolean => {
+  if (role === "admin") return true;
+  const storedRole = localStorage.getItem('user_role');
+  return storedRole === "admin";
+};
 
 function AuthenticatedRoutes() {
   const { session, role, loading } = useAuth();
   const isAuthenticated = !!session;
-  const isAdmin = role === "admin";
+
+  // 🔥 Determina se é admin (prioriza role do contexto, fallback para localStorage)
+  const isAdmin = isUserAdmin(role);
+
+  console.log('🔍 AuthenticatedRoutes - role:', role, 'isAdmin:', isAdmin, 'loading:', loading);
 
   if (loading) {
     return (
@@ -75,10 +70,9 @@ function AuthenticatedRoutes() {
         <Route path="/documentos/atestados" element={<DocumentosAtestados />} />
         <Route path="/documentos/ponto" element={<Documentos />} />
 
-        {/* Rotas de Home */}
-        <Route path="/home" element={<Home />} />
-        {/* 🔥 Usa RootRedirect para a raiz */}
-        <Route path="/" element={<RootRedirect />} />
+        {/* 🔥 Rotas de Home com redirecionamento baseado em isAdmin */}
+        <Route path="/home" element={isAdmin ? <Navigate to="/admin/home" replace /> : <Home />} />
+        <Route path="/" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
 
         {/* Admin Routes */}
         {isAdmin ? (
@@ -109,10 +103,14 @@ function AuthenticatedRoutes() {
             <Route path="/admin/setup" element={<SetupAdmin />} />
           </>
         ) : (
-          <Route path="/admin/*" element={<Navigate to="/home" replace />} />
+          <>
+            {/* Se não for admin, redireciona qualquer rota admin para home */}
+            <Route path="/admin/*" element={<Navigate to="/home" replace />} />
+            <Route path="/admin" element={<Navigate to="/home" replace />} />
+          </>
         )}
 
-        {/* Fallback */}
+        {/* Fallback para usuários autenticados */}
         <Route path="*" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
       </Routes>
     </AppShell>
