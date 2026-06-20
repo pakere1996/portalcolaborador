@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -57,32 +57,50 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
 
   const cargoOptions = getCargoOptions(cargos);
 
-  // 🔥 Lógica para controlar o switch baseado na unidade selecionada
+  // Referência para guardar o ID da unidade anterior, para detectar mudanças
+  const prevUnidadeIdRef = useRef<string | null>(null);
+
+  // 🔥 Efeito para controlar o switch baseado na unidade selecionada
   useEffect(() => {
-    const unidadeId = form.unidade_id;
-    if (!unidadeId || unidadeId === 'null' || unidadeId === '') return;
+    const unidadeId = form.unidadeId; // ← agora usa unidadeId (camelCase)
+    // Se não houver unidade selecionada ou for "none" ou vazio, desabilita e desmarca
+    if (!unidadeId || unidadeId === 'none' || unidadeId === '') {
+      setForm((prev: any) => ({ ...prev, possui_folha_ponto: false }));
+      prevUnidadeIdRef.current = unidadeId;
+      return;
+    }
 
     const unidadeSelecionada = unidades.find(u => u.id === unidadeId);
-    if (!unidadeSelecionada) return;
+    if (!unidadeSelecionada) {
+      setForm((prev: any) => ({ ...prev, possui_folha_ponto: false }));
+      prevUnidadeIdRef.current = unidadeId;
+      return;
+    }
 
     const temRelogio = unidadeSelecionada.possui_relogio_ponto || false;
 
-    // Se a unidade NÃO tem relógio, força o switch para false e desabilita
+    // Se a unidade NÃO tem relógio, força false e desabilita
     if (!temRelogio) {
       setForm((prev: any) => ({ ...prev, possui_folha_ponto: false }));
     } else {
-      // Se a unidade tem relógio e é um novo cadastro (não edição), ativa por padrão
-      if (!isEdit) {
+      // Unidade tem relógio
+      // Se for criação (isEdit = false), ativa automaticamente
+      // Se for edição, só ativa se a unidade mudou e era diferente
+      const unidadeMudou = prevUnidadeIdRef.current !== unidadeId;
+      if (!isEdit || unidadeMudou) {
         setForm((prev: any) => ({ ...prev, possui_folha_ponto: true }));
       }
-      // Em edição, mantém o valor salvo (não sobrescreve)
+      // Se for edição e a unidade não mudou, mantém o valor atual (não sobrescreve)
     }
-  }, [form.unidade_id, unidades, isEdit, setForm]);
+
+    // Atualiza a referência da unidade anterior
+    prevUnidadeIdRef.current = unidadeId;
+  }, [form.unidadeId, unidades, isEdit, setForm]);
 
   // 🔥 Determina se a unidade tem relógio para habilitar/desabilitar o switch
-  const unidadeSelecionada = unidades.find(u => u.id === form.unidade_id);
+  const unidadeSelecionada = unidades.find(u => u.id === form.unidadeId);
   const unidadeTemRelogio = unidadeSelecionada?.possui_relogio_ponto || false;
-  const isSwitchDisabled = busy || !unidadeTemRelogio || !form.unidade_id || form.unidade_id === 'null' || form.unidade_id === '';
+  const isSwitchDisabled = busy || !unidadeTemRelogio || !form.unidadeId || form.unidadeId === 'none' || form.unidadeId === '';
 
   return (
     <div className="space-y-4">
@@ -165,17 +183,17 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="unidade_id">Unidade *</Label>
+          <Label htmlFor="unidadeId">Unidade *</Label>
           <Select 
-            value={form.unidade_id || "null"} 
-            onValueChange={(value) => handleFormChange('unidade_id', value)}
+            value={form.unidadeId || "none"} 
+            onValueChange={(value) => handleFormChange('unidadeId', value)}
             disabled={busy}
           >
-            <SelectTrigger id="unidade_id">
+            <SelectTrigger id="unidadeId">
               <SelectValue placeholder="Selecione a Unidade" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="null">Sem Unidade</SelectItem>
+              <SelectItem value="none">Sem Unidade</SelectItem>
               {unidades.map(u => (
                 <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
               ))}
@@ -205,7 +223,7 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
         <div className="space-y-2">
           <Label htmlFor="regime_trabalho">Regime de Trabalho</Label>
           <Select 
-            value={form.regime_trabalho || "null"} 
+            value={form.regime_trabalho || "none"} 
             onValueChange={(value) => handleFormChange('regime_trabalho', value)}
             disabled={busy}
           >
@@ -213,7 +231,7 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
               <SelectValue placeholder="Selecione o Regime" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="null">Não informado</SelectItem>
+              <SelectItem value="none">Não informado</SelectItem>
               <SelectItem value="Horista">Horista</SelectItem>
               <SelectItem value="Mensalista">Mensalista</SelectItem>
             </SelectContent>
@@ -244,17 +262,17 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="folga_fixa_semana">Folga Fixa Semanal *</Label>
+          <Label htmlFor="folgaFixa">Folga Fixa Semanal *</Label>
           <Select 
-            value={form.folga_fixa_semana || "null"} 
-            onValueChange={(value) => handleFormChange('folga_fixa_semana', value)}
+            value={form.folgaFixa || "none"} 
+            onValueChange={(value) => handleFormChange('folgaFixa', value)}
             disabled={busy}
           >
-            <SelectTrigger id="folga_fixa_semana">
+            <SelectTrigger id="folgaFixa">
               <SelectValue placeholder="Nenhuma Folga Fixa" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="null">Nenhuma Folga Fixa</SelectItem>
+              <SelectItem value="none">Nenhuma Folga Fixa</SelectItem>
               {Object.entries(dayOfWeekMap).map(([key, value]) => (
                 <SelectItem key={key} value={key}>{value}</SelectItem>
               ))}
@@ -306,7 +324,7 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
             Possui acesso a Folha de Ponto
             {isSwitchDisabled && !busy && (
               <span className="ml-1 text-xs text-muted-foreground">
-                {!form.unidade_id || form.unidade_id === 'null' || form.unidade_id === '' 
+                {!form.unidadeId || form.unidadeId === 'none' 
                   ? "(selecione uma unidade)" 
                   : "(unidade sem relógio)"}
               </span>
