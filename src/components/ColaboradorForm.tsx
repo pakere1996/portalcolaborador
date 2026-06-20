@@ -29,7 +29,6 @@ const dayOfWeekMap: Record<number, string> = {
   6: "Sábado",
 };
 
-// 🔥 Retorna lista de cargos em MAIÚSCULAS + garante "SÓCIO"
 const getCargoOptions = (cargos: Cargo[]): string[] => {
   const nomes = cargos.map(c => c.nome.trim().toUpperCase());
   if (!nomes.includes("SÓCIO")) {
@@ -264,6 +263,19 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
               <SelectItem value="admin">Administrador</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+      </div>
+
+      {/* 🔥 Switch para Folha de Ponto */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
+          <Switch 
+            id="possui_folha_ponto" 
+            checked={form.possui_folha_ponto || false} 
+            onCheckedChange={(checked) => handleFormChange('possui_folha_ponto', checked)} 
+            disabled={busy}
+          />
+          <Label htmlFor="possui_folha_ponto">Possui acesso a Folha de Ponto</Label>
         </div>
       </div>
 
