@@ -62,7 +62,6 @@ interface DocumentosBaseProps {
   importTitle: string;
 }
 
-// Hook para detectar mobile
 const useMediaQuery = (query: string) => {
   const [matches, setMatches] = useState(false);
   useEffect(() => {
@@ -377,62 +376,49 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
               Nenhum documento encontrado com os filtros selecionados.
             </div>
           ) : isMobile ? (
-            // 🔥 VERSÃO MOBILE – COM BOTÃO DOWNLOAD NO CARD
+            // 🔥 VERSÃO MOBILE – CARD COM BOTÃO DOWNLOAD E POPOUT NO CLIQUE
             <div className="grid gap-3">
               {filtrados.map((doc) => {
                 const profile = profiles.find((p) => p.id === doc.colaborador_id);
                 const unidade = profile?.unidade_id ? unidades.find(u => u.id === profile.unidade_id) : null;
                 const isEditing = editando === doc.id;
+                const isDisponivel = doc.status === "disponivel" || doc.status === "vinculado";
+
                 return (
                   <div
                     key={doc.id}
                     className="bg-card border border-border rounded-2xl p-4 space-y-2 shadow-sm hover:shadow-md transition-shadow"
                   >
-                    <div className="flex items-start justify-between gap-2">
+                    {/* 🔥 Card clicável para abrir popout */}
+                    <div 
+                      className="flex items-start justify-between gap-2 cursor-pointer"
+                      onClick={() => openDetail(doc)}
+                    >
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-sm truncate">{profile?.nome ?? "—"}</div>
                         <div className="text-xs text-muted-foreground">
                           {unidade?.nome && <span>{unidade.nome} • </span>}
                           {String(doc.mes).padStart(2, "0")}/{doc.ano}
                         </div>
-                        <div className="flex flex-wrap items-center gap-1 mt-1">
-                          <Badge
-                            className={
-                              doc.status === "disponivel" || doc.status === "vinculado"
-                                ? "bg-green-100 text-green-700 border-green-200"
-                                : "bg-muted text-muted-foreground"
-                            }
-                          >
-                            {doc.status}
+                        {!profile?.ativo && (
+                          <Badge variant="outline" className="mt-1 text-[10px] bg-red-50 text-red-600 border-red-200">
+                            Inativo
                           </Badge>
-                          {!profile?.ativo && (
-                            <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200">
-                              Inativo
-                            </Badge>
-                          )}
-                        </div>
+                        )}
                       </div>
-                      <div className="flex gap-1 shrink-0">
-                        {/* 🔥 Botão Download no card */}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8"
-                          title="Baixar"
-                          onClick={() => handleDownload(doc)}
-                        >
-                          <Download className="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8"
-                          title="Detalhes"
-                          onClick={() => openDetail(doc)}
-                        >
-                          <ChevronRight className="size-4" />
-                        </Button>
-                      </div>
+                      {/* 🔥 Botão Download no card (não abre popout) */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 shrink-0"
+                        title="Baixar"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownload(doc);
+                        }}
+                      >
+                        <Download className="size-4" />
+                      </Button>
                     </div>
                     {isEditing ? (
                       <div className="flex items-center gap-2 mt-2">
@@ -561,7 +547,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
         </div>
       )}
 
-      {/* Dialog de detalhes (mobile) */}
+      {/* 🔥 POPOUT DE DETALHES (mobile) */}
       <Dialog open={isDetailOpen} onOpenChange={(o) => !o && setIsDetailOpen(false)}>
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
