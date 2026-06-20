@@ -31,7 +31,7 @@ const blankEditForm = {
   senha: "",
   regime_trabalho: "none",
   data_demissao: "",
-  tipo_vinculo: "CLT", // 🔥 NOVO
+  tipo_vinculo: "CLT",
 };
 
 export default function Colaboradores() {
@@ -100,6 +100,9 @@ export default function Colaboradores() {
 
   const uniqueCargos = [...new Set(profiles.map(p => p.cargo).filter(Boolean))];
 
+  // 🔥 Função auxiliar para converter para maiúsculas
+  const toUpperCaseTrim = (str: string) => str.trim().toUpperCase();
+
   const handleCreate = async () => {
     setBusy(true);
     try {
@@ -107,11 +110,11 @@ export default function Colaboradores() {
       if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
 
       const { data: authUser, error: authErr } = await adminApi.createUser({
-        nome: newForm.nome.trim(),
+        nome: toUpperCaseTrim(newForm.nome),
         cpf: cleanCpf,
-        email: `${cleanCpf}@pakere.com.br`,
+        email: newForm.email.trim().toLowerCase() || `${cleanCpf}@pakere.com.br`,
         senha: newForm.senha || cleanCpf.slice(-6),
-        cargo: newForm.cargo,
+        cargo: toUpperCaseTrim(newForm.cargo),
         dataAdmissao: newForm.dataAdmissao,
         dataNascimento: newForm.dataNascimento,
         folgaFixaSemana: newForm.folgaFixa === "none" ? null : Number(newForm.folgaFixa),
@@ -121,13 +124,13 @@ export default function Colaboradores() {
       if (authErr) throw authErr;
 
       const { error: profErr } = await supabase.from("profiles").update({
-        matricula: newForm.matricula.trim() || null,
+        matricula: toUpperCaseTrim(newForm.matricula) || null,
         whatsapp: newForm.whatsapp.trim() || null,
         unidade_id: newForm.unidadeId === "none" ? null : newForm.unidadeId,
         ativo: true,
         regime_trabalho: newForm.regime_trabalho === "none" ? null : newForm.regime_trabalho,
         data_demissao: newForm.data_demissao || null,
-        tipo_vinculo: newForm.tipo_vinculo || "CLT", // 🔥 NOVO
+        tipo_vinculo: newForm.tipo_vinculo || "CLT",
       }).eq("id", authUser.userId);
 
       if (profErr) throw profErr;
@@ -161,7 +164,7 @@ export default function Colaboradores() {
       senha: "",
       regime_trabalho: p.regime_trabalho ?? "none",
       data_demissao: p.data_demissao ?? "",
-      tipo_vinculo: p.tipo_vinculo ?? "CLT", // 🔥 NOVO
+      tipo_vinculo: p.tipo_vinculo ?? "CLT",
     });
   };
 
@@ -173,12 +176,12 @@ export default function Colaboradores() {
       if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
 
       const { error: profErr } = await supabase.from("profiles").update({
-        nome: editForm.nome.trim(),
+        nome: toUpperCaseTrim(editForm.nome),
         cpf: cleanCpf,
-        matricula: editForm.matricula.trim() || null,
-        email_contato: editForm.email.trim() || null,
+        matricula: toUpperCaseTrim(editForm.matricula) || null,
+        email_contato: editForm.email.trim().toLowerCase() || null,
         whatsapp: editForm.whatsapp.trim() || null,
-        cargo: editForm.cargo,
+        cargo: toUpperCaseTrim(editForm.cargo),
         unidade_id: editForm.unidadeId === "none" ? null : editForm.unidadeId,
         folga_fixa_semana: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa),
         data_nascimento: editForm.dataNascimento || null,
@@ -187,7 +190,7 @@ export default function Colaboradores() {
         updated_at: new Date().toISOString(),
         regime_trabalho: editForm.regime_trabalho === "none" ? null : editForm.regime_trabalho,
         data_demissao: editForm.data_demissao || null,
-        tipo_vinculo: editForm.tipo_vinculo || "CLT", // 🔥 NOVO
+        tipo_vinculo: editForm.tipo_vinculo || "CLT",
       }).eq("id", editingProfile.id);
 
       if (profErr) throw profErr;
