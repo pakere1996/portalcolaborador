@@ -355,7 +355,7 @@ if (next !== -1) {
 
         const storagePath = `documentos/${documentType}/${result.matchedProfile.id}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}_${Date.now()}.pdf`;
         const { error: uploadError } = await supabase.storage.from("documentos")
-          .upload(storagePath, selectedFile!, { contentType: "application/pdf", upsert: false });
+          .upload(storagePath, selectedFile!, { contentType: "application/pdf", upsert: true });
         if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
 
         const { error: insertError } = await supabase.from("documentos").insert({
