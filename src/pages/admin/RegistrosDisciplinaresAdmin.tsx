@@ -87,36 +87,7 @@ export default function RegistrosDisciplinaresAdmin() {
           </div>
         );
       }}
-      editCamposExtras={(editForm, setEditForm) => (
-        <>
-          <div className="space-y-1 mt-2">
-            <Label className="text-xs">Tipo</Label>
-            <Select
-              value={editForm.tipo || "outro"}
-              onValueChange={(v) => setEditForm({ ...editForm, tipo: v })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="advertencia">Advertência</SelectItem>
-                <SelectItem value="suspensao">Suspensão</SelectItem>
-                <SelectItem value="justa_causa">Justa Causa</SelectItem>
-                <SelectItem value="outro">Outro</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1 mt-2">
-            <Label className="text-xs">Dias de Afastamento</Label>
-            <Input
-              type="number"
-              min="0"
-              value={editForm.dias_afastamento || 0}
-              onChange={(e) => setEditForm({ ...editForm, dias_afastamento: e.target.value })}
-            />
-          </div>
-        </>
-      )}
+      // 🔥 editCamposExtras removido – a base já renderiza os campos de edição
       validarForm={(form) => {
         if (!form.tipo) return "Selecione o tipo de registro disciplinar";
         if (form.dias_afastamento && parseInt(form.dias_afastamento) < 0) {
