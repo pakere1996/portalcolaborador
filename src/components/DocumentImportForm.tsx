@@ -1,1 +1,393 @@
-{"code": "use client";\n\nimport { useEffect, useState, useCallback } from \"react\";\nimport { supabase } from \"@/integrations/supabase/client\";\nimport { useAuth } from \"@/lib/auth-context\";\nimport { toast } from \"sonner\";\nimport { Button } from \"@/components/ui/button\";\nimport { Input } from \"@/components/ui/input\";\nimport { Label } from \"@/components/ui/label\";\nimport { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from \"@/components/ui/select\";\nimport { Upload, FileText, X, Loader2, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight, UserPlus, Search, Check, Building, Briefcase, Clock } from \"lucide-react\";\nimport { extractTextFromPDF } from \"@/lib/pdf-utils\";\nimport { FolhaPontoParser, ContrachequeParser, PageResult } from \"@/lib/parsers\";\nimport { cn, cleanCNPJ } from \"@/lib/utils\";\nimport { PDFDocument } from \"pdf-lib\";\nimport { adminApi } from \"@/lib/admin-api\";\nimport { ColaboradorFormDialog } from \"./ColaboradorFormDialog\";\n\ninterface Unidade { id: string; nome: string; cnpj: string | null; }\ninterface Cargo { id: string; nome: string; }\n\nconst blankColabForm = { nome: \"\", cpf: \"\", matricula: \"\", email: \"\", whatsapp: \"\", cargo: \"\", unidadeId: \"none\", folgaFixa: \"none\", dataAdmissao: \"\", dataNascimento: \"\", perfil_acesso: \"colaborador\", regime_trabalho: \"none\", ativo: true, senha: \"\" };\n\nexport function DocumentImportForm() {\n  const [selectedFile, setSelectedFile] = useState<File | null>(null);\n  const [isDragging, setIsDragging] = useState(false);\n  const [isProcessing, setIsProcessing] = useState(false);\n  const [pageResults, setPageResults] = useState<PageResult[]>([]);\n  const [currentPage, setCurrentPage] = useState(0);\n  const [profiles, setProfiles] = useState<any[]>([]);\n  const [unidades, setUnidades] = useState<Unidade[]>([]);\n  const [listaCargos, setListaCargos] = useState<Cargo[]>([]);\n  const [isUploading, setIsUploading] = useState(false);\n  const [searchTerm, setSearchTerm] = useState(\"\");\n  const [showNewColab, setShowNewColab] = useState(false);\n  const [newColabForm, setNewColabForm] = useState(blankColabForm);\n  const [busyNewColab, setBusyNewColab] = useState(false);\n  const { user } = useAuth();\n\n  const documentType = window.location.pathname.includes(\"ponto\") ? \"folha_ponto\" : \"contracheque\";\n\n  const loadData = useCallback(async () => {\n    console.log(\"=== LOAD DATA PROFILES ===\");\n    \n    // Query principal: sempre buscar todos os campos necessários\n    const [pRes, uRes, cRes] = await Promise.all([\n      supabase.from(\"profiles\")\n        .select(\"id, nome, cpf, matricula, cargo, unidade_id, regime_trabalho, ativo\")\n        .eq(\"ativo\", true)\n        .order(\"nome\"),\n      supabase.from(\"unidades\").select(\"id, nome, cnpj\").eq(\"ativo\", true).order(\"nome\"),\n      supabase.from(\"cargos\").select(\"id, nome\").order(\"nome\")\n    ]);\n    \n    console.log(\"PROFILE ERROR:\", pRes.error);\n    console.log(\"PROFILE DATA LENGTH:\", pRes.data?.length ?? 0);\n    console.log(\"PROFILE DATA SAMPLE:\", (pRes.data ?? []).slice(0, 3));\n\n    if (pRes.error) {\n      console.error(\"Erro ao carregar perfis:\", pRes.error);\n      toast.error(\"Erro ao carregar lista de colaboradores\");\n      \n      // Fallback: mesma query completa, sem remover campos\n      console.log(\"=== FALLBACK PROFILES (mesma query completa) ===\");\n      const fallbackRes = await supabase.from(\"profiles\")\n        .select(\"id, nome, cpf, matricula, cargo, unidade_id, regime_trabalho, ativo\")\n        .eq(\"ativo\", true)\n        .order(\"nome\");\n      console.log(\"FALLBACK ERROR:\", fallbackRes.error);\n      console.log(\"FALLBACK DATA LENGTH:\", fallbackRes.data?.length ?? 0);\n      console.log(\"FALLBACK DATA SAMPLE:\", (fallbackRes.data ?? []).slice(0, 3));\n      \n      if (!fallbackRes.error) {\n        setProfiles(fallbackRes.data ?? []);\n      }\n    } else {\n      setProfiles(pRes.data ?? []);\n    }\n\n    setUnidades(uRes.data ?? []);\n    setListaCargos(cRes.data ?? []);\n  }, []);\n\n  useEffect(() => {\n    if (user) loadData();\n  }, [user?.id, loadData]);\n\n  const extractPageAsBlob = async (file: File, pageIndex: number): Promise<Blob> => {\n    const arrayBuffer = await file.arrayBuffer();\n    const pdfDoc = await PDFDocument.load(arrayBuffer);\n    const newPdf = await PDFDocument.create();\n    const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageIndex]);\n    newPdf.addPage(copiedPage);\n    const pdfBytes = await newPdf.save();\n    return new Blob([pdfBytes], { type: \"application/pdf\" });\n  };\n\n  const handleVinculo = async (profileId: string, result: PageResult, silent = false) => {\n    if (!selectedFile || isUploading) return;\n    if (!silent) setIsUploading(true);\n\n    try {\n      const pageBlob = await extractPageAsBlob(selectedFile, result.pageNumber - 1);\n      const fileName = `${result.ano}-${String(result.mes).padStart(2, '0')}_${profileId}_${documentType}.pdf`;\n      const storagePath = `documentos/${documentType}/${profileId}/${fileName}`;\n\n      const { error: uploadError } = await supabase.storage.from(\"documentos\").upload(storagePath, pageBlob, { contentType: \"application/pdf\", upsert: true });\n      if (uploadError) throw uploadError;\n\n      const { error: dbError } = await supabase.from(\"documentos\").insert({ colaborador_id: profileId, tipo: documentType, mes: result.mes!, ano: result.ano!, storage_path: storagePath, status: \"vinculado\", nome_pdf: fileName });\n      if (dbError) throw dbError;\n\n      setPageResults(prev => prev.map((r) => r.pageNumber === result.pageNumber ? { ...r, vinculado: true, matchedProfile: profiles.find(p => p.id === profileId) || r.matchedProfile } : r));\n      if (!silent) { toast.success(\"Documento vinculado com sucesso!\"); if (currentPage < pageResults.length - 1) setCurrentPage(prev => prev + 1); }\n    } catch (err) {\n      if (!silent) toast.error(\"Erro ao vincular documento\", { description: (err as Error).message });\n      console.error(\"Erro no vínculo:\", err);\n    } finally {\n      if (!silent) setIsUploading(false);\n    }\n  };\n\n  const handleProcessar = async () => {\n    if (!selectedFile) return;\n    setIsProcessing(true);\n    try {\n      const pages = await extractTextFromPDF(selectedFile);\n      const parser = documentType === \"folha_ponto\" ? new FolhaPontoParser() : new ContrachequeParser();\n      const results = parser.parse(pages, profiles);\n\n      const processedResults = results.map(r => {\n        let unitId = null;\n        if (r.cnpj) {\n          const cleanPdfCnpj = cleanCNPJ(r.cnpj);\n          const unit = unidades.find(u => u.cnpj && cleanCNPJ(u.cnpj) === cleanPdfCnpj);\n          if (unit) unitId = unit.id;\n        }\n        let isNew = false;\n        if (r.suggestedCargoName) {\n          const normalizedSuggested = r.suggestedCargoName.toLowerCase().normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\").trim();\n          const cargoExists = listaCargos.some(c => c.nome.toLowerCase().normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\").trim() === normalizedSuggested);\n          isNew = !cargoExists;\n        }\n        return { ...r, unidadeId: unitId, isNewCargo: isNew };\n      });\n\n      setPageResults(processedResults);\n      toast.success(`${pages.length} páginas processadas.`);\n      let autoCount = 0;\n      for (const r of processedResults) {\n        if (r.matchStatus === \"automatico\" && r.matchedProfile && r.mes && r.ano) {\n          await handleVinculo(r.matchedProfile.id, r, true);\n          autoCount++;\n        }\n      }\n      if (autoCount > 0) { toast.success(`${autoCount} documentos vinculados automaticamente.`); }\n    } catch (err) {\n      toast.error(\"Erro ao processar PDF\", { description: (err as Error).message });\n    } finally {\n      setIsProcessing(false);\n    }\n  };\n\n  const handleCreateColab = async () => {\n    setBusyNewColab(true);\n    try {\n      const { data: authUser, error: authErr } = await adminApi.createUser({ nome: newColabForm.nome.trim(), cpf: newColabForm.cpf.replace(/\\D/g, \"\"), email: newColabForm.email.trim().toLowerCase() || `${newColabForm.cpf.replace(/\\D/g, \"\")}@pakere.com.br`, senha: newColabForm.senha || newColabForm.cpf.replace(/\\D/g, \"\").slice(-6), cargo: newColabForm.cargo, dataAdmissao: newColabForm.dataAdmissao, dataNascimento: newColabForm.dataNascimento, folgaFixaSemana: newColabForm.folgaFixa === \"none\" ? null : Number(newColabForm.folgaFixa), role: newColabForm.perfil_acesso });\n      if (authErr) throw authErr;\n      await supabase.from(\"profiles\").update({ matricula: newColabForm.matricula.trim() || null, whatsapp: newColabForm.whatsapp.trim() || null, unidade_id: newColabForm.unidadeId === \"none\" ? null : newColabForm.unidadeId, regime_trabalho: newColabForm.regime_trabalho === \"none\" ? null : newColabForm.regime_trabalho, ativo: true }).eq(\"id\", authUser.userId);\n      toast.success(\"Colaborador criado!\");\n      setShowNewColab(false);\n      await loadData();\n      const current = pageResults[currentPage];\n      handleVinculo(authUser.userId, current);\n    } catch (e) {\n      toast.error(\"Erro ao criar colaborador\", { description: (e as Error).message });\n    } finally {\n      setBusyNewColab(false);\n    }\n  };\n\n  const openNewColab = () => {\n    const current = pageResults[currentPage];\n    setNewColabForm({ ...blankColabForm, nome: current.nome || \"\", cpf: current.cpf || \"\", cargo: current.suggestedCargoName || \"\", dataAdmissao: current.dataAdmissao || \"\", unidadeId: current.unidadeId || \"none\", regime_trabalho: current.regimeTrabalho || \"none\" });\n    setShowNewColab(true);\n  };\n\n  const current = pageResults[currentPage];\n  const unidadeId = current?.unidadeId;\n  \n  // === DIAGNÓSTICO DO FILTRO ===\n  console.log(\"=== FILTRO DE COLABORADORES ===\");\n  console.log(\"UNIDADE DETECTADA:\", unidadeId);\n  console.log(\"TOTAL PROFILES:\", profiles.length);\n\n  // Etapa A — filtro por unidade (defensivo)\n  const profilesDaUnidade = !unidadeId\n    ? profiles\n    : profiles.filter(p => String(p.unidade_id ?? \"\") === String(unidadeId ?? \"\"));\n\n  console.log(\"TOTAL PROFILES DA UNIDADE:\", profilesDaUnidade.length);\n  console.log(\"SAMPLE PROFILES DA UNIDADE:\", profilesDaUnidade.slice(0, 5));\n\n  // Etapa B — filtro por busca textual\n  const colaboradoresFiltrados = profilesDaUnidade.filter(p => {\n    const term = searchTerm.toLowerCase();\n    if (!term) return true;\n    const nome = (p.nome || \"\").toLowerCase();\n    const cpf = (p.cpf || \"\").toLowerCase();\n    const matricula = (p.matricula || \"\").toLowerCase();\n    return nome.includes(term) || cpf.includes(term) || matricula.includes(term);\n  });\n\n  console.log(\"COLABORADORES FILTRADOS:\", colaboradoresFiltrados.length);\n  \n  if (pageResults.length === 0) {\n    return (\n      <div className=\"space-y-4\">\n        <div className={cn(\"border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors\", isDragging ? \"border-primary bg-primary/5\" : \"border-border hover:bg-muted/30\")} onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) setSelectedFile(f); }} onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onClick={() => document.getElementById(\"file-import-input\")?.click()}>\n          <Input id=\"file-import-input\" type=\"file\" accept=\".pdf\" onChange={(e) => { const f = e.target.files?.[0]; if (f) setSelectedFile(f); }} className=\"hidden\" />\n          <Upload className=\"size-10 text-muted-foreground mx-auto mb-3\" />\n          <p className=\"text-sm text-muted-foreground font-medium\">Arraste um PDF ou clique para selecionar</p>\n          <p className=\"text-xs text-muted-foreground mt-1\">O arquivo será dividido por páginas para cada colaborador</p>\n        </div>\n        {selectedFile && (\n          <div className=\"flex items-center justify-between p-3 bg-muted/50 rounded-xl border border-border\">\n            <div className=\"flex items-center gap-2\">\n              <FileText className=\"size-4 text-primary\" />\n              <div>\n                <div className=\"text-sm font-medium\">{selectedFile.name}</div>\n                <div className=\"text-xs text-muted-foreground\">{(selectedFile.size / 1024).toFixed(1)} KB</div>\n              </div>\n            </div>\n            <Button variant=\"ghost\" size=\"icon\" onClick={() => setSelectedFile(null)} disabled={isProcessing}>\n              <X className=\"size-4\" />\n            </Button>\n          </div>\n        )}\n        <Button onClick={handleProcessar} disabled={!selectedFile || isProcessing} className=\"w-full h-12 font-bold\">\n          {isProcessing ? <><Loader2 className=\"size-4 mr-2 animate-spin\" /> Processando...</> : <><Upload className=\"size-4 mr-2\" /> Iniciar Processamento</>}\n        </Button>\n      </div>\n    );\n  }\n\n  const totalPages = pageResults.length;\n  const vinculados = pageResults.filter(r => r.vinculado).length;\n\n  return (\n    <div className=\"space-y-6\">\n      <div className=\"flex items-center justify-between bg-muted/30 p-4 rounded-2xl border border-border\">\n        <div className=\"flex items-center justify-between bg-muted/30 p-4 rounded-2xl border border-border\">\n          <div className=\"flex items-center gap-4\">\n            <Button variant=\"outline\" size=\"icon\" onClick={() => setCurrentPage(p => Math.max(0, p - 1))} disabled={currentPage === 0}>\n              <ChevronLeft className=\"size-4\" />\n            </Button>\n            <div className=\"text-center\">\n              <div className=\"text-xs font-bold uppercase text-muted-foreground\">Página</div>\n              <div className=\"text-lg font-black\">{currentPage + 1} / {totalPages}</div>\n            </div>\n            <Button variant=\"outline\" size=\"icon\" onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))} disabled={currentPage === totalPages - 1}>\n              <ChevronRight className=\"size-4\" />\n            </Button>\n          </div>\n          <div className=\"text-right\">\n            <div className=\"text-xs font-bold uppercase text-muted-foreground\">Progresso</div>\n            <div className=\"text-sm font-bold text-primary\">{vinculados} de {totalPages} vinculados</div>\n          </div>\n        </div>\n      </div>\n\n      <div className=\"grid gap-6 md:grid-cols-2\">\n        <div className=\"space-y-4\">\n          <div className=\"bg-card border border-border rounded-2xl p-5 space-y-4\">\n            <h3 className=\"font-bold flex items-center gap-2 text-primary\">\n              <Search className=\"size-4\" /> Dados Extraídos\n            </h3>\n            <div className=\"grid grid-cols-2 gap-4 text-sm\">\n              <div className=\"col-span-2\">\n                <Label className=\"text-[10px] uppercase text-muted-foreground\">Nome no PDF</Label>\n                <div className=\"font-bold text-base truncate\">{current.nome || \"Não identificado\"}</div>\n              </div>\n              <div>\n                <Label className=\"text-[10px] uppercase text-muted-foreground\">CPF no PDF</Label>\n                <div className=\"font-mono\">{current.cpf || \"Não identificado\"}</div>\n              </div>\n              <div>\n                <Label className=\"text-[10px] uppercase text-muted-foreground\">Matrícula no PDF</Label>\n                <div className=\"font-mono\">{current.matricula || \"Não identificada\"}</div>\n              </div>\n              <div>\n                <Label className=\"text-[10px] uppercase text-muted-foreground\">Competência</Label>\n                <div className=\"font-medium\">{current.mes && current.ano ? `${String(current.mes).padStart(2, '0')}/${current.ano}` : \"Não identificada\"}</div>\n              </div>\n              <div>\n                <Label className=\"text-[10px] uppercase text-muted-foreground flex items-center gap-1\">\n                  <Briefcase className=\"size-3\" /> Cargo\n                </Label>\n                <div className=\"font-medium truncate\">{current.suggestedCargoName || \"—\"} {current.isNewCargo && <span className=\"ml-2 text-[8px] h-4 px-1 bg-amber-50 text-amber-600 border border-amber-200 rounded-full\">Novo</span>}</div>\n              </div>\n              <div>\n                <Label className=\"text-[10px] uppercase text-muted-foreground flex items-center gap-1\">\n                  <Clock className=\"size-3\" /> Regime\n                </Label>\n                <div className=\"font-medium\">{current.regimeTrabalho || \"—\"}</div>\n              </div>\n              <div className=\"col-span-2\">\n                <Label className=\"text-[10px] uppercase text-muted-foreground flex items-center gap-1\">\n                  <Building className=\"size-3\" /> Unidade (via CNPJ)\n                </Label>\n                <div className=\"font-medium\">{current.unidadeId ? unidades.find(u => u.id === current.unidadeId)?.nome : (current.cnpj || \"CNPJ não identificado\")}</div>\n              </div>\n            </div>\n          </div>\n\n          {current.vinculado ? (\n            <div className=\"bg-emerald-50 border border-emerald-200 rounded-2xl p-8 text-center space-y-3\">\n              <CheckCircle2 className=\"size-12 text-emerald-500 mx-auto\" />\n              <div className=\"font-bold text-emerald-900\">Documento Vinculado</div>\n              <p className=\"text-sm text-emerald-700\">Esta página já foi salva para {current.matchedProfile?.nome}.</p>\n              <Button variant=\"outline\" className=\"w-full border-emerald-200 text-emerald-700\" onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}>\n                Próxima Página\n              </Button>\n            </div>\n          ) : (\n            <div className=\"bg-card border border-border rounded-2xl p-5 space-y-4\">\n              <h3 className=\"font-bold flex items-center gap-2\">\n                <Check className=\"size-4 text-primary\" /> Confirmar Colaborador\n              </h3>\n              {current.matchedProfile ? (\n                <div className=\"p-4 bg-primary/5 border border-primary/20 rounded-xl space-y-3\">\n                  <div className=\"flex items-center justify-between\">\n                    <span className={cn(\"text-xs font-bold text-white px-2 py-1 rounded-full\", current.matchStatus === \"automatico\" ? \"bg-emerald-500\" : \"bg-amber-500\")}>\n                      {current.matchStatus === \"automatico\" ? \"Match Exato\" : \"Sugestão\"}\n                    </span>\n                    <span className=\"text-[10px] font-bold text-muted-foreground uppercase\">Confiança: {Math.round(current.confidence * 100)}%</span>\n                  </div>\n                  <div className=\"font-bold text-lg\">{current.matchedProfile.nome}</div>\n                  <div className=\"text-xs text-muted-foreground\">\n                    Matrícula: {current.matchedProfile.matricula || \"—\"} • {current.matchedProfile.cargo || \"Sem cargo\"} • {current.matchedProfile.cpf}\n                  </div>\n                  <Button className=\"w-full\" onClick={() => handleVinculo(current.matchedProfile!.id, current)} disabled={isUploading}>\n                    {isUploading ? <Loader2 className=\"size-4 animate-spin mr-2\" /> : <Check className=\"size-4 mr-2\" />}\n                    Confirmar e Vincular\n                  </Button>\n                </div>\n              ) : (\n                <div className=\"p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-4\">\n                  <div className=\"flex items-start gap-3\">\n                    <AlertTriangle className=\"size-5 text-rose-500 shrink-0 mt-0.5\" />\n                    <p className=\"text-sm text-rose-800 font-medium\">Nenhum colaborador correspondente encontrado automaticamente.</p>\n                  </div>\n                  <Button variant=\"outline\" className=\"w-full border-rose-200 text-rose-700 hover:bg-rose-100\" onClick={openNewColab}>\n                    <UserPlus className=\"size-4 mr-2\" /> Cadastrar Novo Colaborador\n                  </Button>\n                </div>\n              )}\n            </div>\n          )}\n        </div>\n\n        <div className=\"bg-card border border-border rounded-2xl p-5 space-y-4\">\n          <h3 className=\"font-bold flex items-center gap-2\">\n            <UserPlus className=\"size-4 text-primary\" /> Busca Manual\n          </h3>\n          <div className=\"relative\">\n            <Search className=\"absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground\" />\n            <Input placeholder=\"Buscar por nome, CPF ou matrícula...\" className=\"pl-10\" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />\n          </div>\n          <div className=\"max-h-[300px] overflow-y-auto border rounded-xl divide-y divide-border\">\n            {colaboradoresFiltrados.length === 0 ? (\n              <div className=\"p-8 text-center text-sm text-muted-foreground\">Nenhum colaborador encontrado.</div>\n            ) : (\n              colaboradoresFiltrados.map(p => (\n                <button key={p.id} className=\"w-full text-left p-3 hover:bg-muted transition-colors flex items-center justify-between group\" onClick={() => handleVinculo(p.id, current)} disabled={isUploading || current.vinculado}>\n                  <div>\n                    <div className=\"font-bold text-sm group-hover:text-primary transition-colors\">{p.nome}</div>\n                    <div className=\"text-[10px] text-muted-foreground uppercase\">\n                      Matrícula: {p.matricula || \"—\"} • {p.cargo || \"Sem cargo\"} • {p.cpf}\n                    </div>\n                  </div>\n                  <ChevronRight className=\"size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all\" />\n                </button>\n              ))\n            )}\n          </div>\n        </div>\n      </div>\n\n      <ColaboradorFormDialog open={showNewColab} onOpenChange={setShowNewColab} form={newColabForm as any} setForm={setNewColabForm as any} unidades={unidades} cargos={listaCargos} busy={busyNewColab} isEdit={false} onSave={handleCreateColab} />\n    </div>\n  );\n}"}
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth-context";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Upload, FileText, X, Loader2, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight, UserPlus, Search, Check, Building, Briefcase, Clock } from "lucide-react";
+import { extractTextFromPDF } from "@/lib/pdf-utils";
+import { FolhaPontoParser, ContrachequeParser, PageResult } from "@/lib/parsers";
+import { cn, cleanCNPJ } from "@/lib/utils";
+import { PDFDocument } from "pdf-lib";
+import { adminApi } from "@/lib/admin-api";
+import { ColaboradorFormDialog } from "./ColaboradorFormDialog";
+
+interface Unidade { id: string; nome: string; cnpj: string | null; }
+interface Cargo { id: string; nome: string; }
+
+const blankColabForm = { nome: "", cpf: "", matricula: "", email: "", whatsapp: "", cargo: "", unidadeId: "none", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", perfil_acesso: "colaborador", regime_trabalho: "none", ativo: true, senha: "" };
+
+export function DocumentImportForm() {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [pageResults, setPageResults] = useState<PageResult[]>([]);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [unidades, setUnidades] = useState<Unidade[]>([]);
+  const [listaCargos, setListaCargos] = useState<Cargo[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showNewColab, setShowNewColab] = useState(false);
+  const [newColabForm, setNewColabForm] = useState(blankColabForm);
+  const [busyNewColab, setBusyNewColab] = useState(false);
+  const { user } = useAuth();
+
+  const documentType = window.location.pathname.includes("ponto") ? "folha_ponto" : "contracheque";
+
+  const loadData = useCallback(async () => {
+    console.log("=== LOAD DATA PROFILES ===");
+    
+    // Query principal: sempre buscar todos os campos necessários
+    const [pRes, uRes, cRes] = await Promise.all([
+      supabase.from("profiles")
+        .select("id, nome, cpf, matricula, cargo, unidade_id, regime_trabalho, ativo")
+        .eq("ativo", true)
+        .order("nome"),
+      supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome"),
+      supabase.from("cargos").select("id, nome").order("nome")
+    ]);
+    
+    console.log("PROFILE ERROR:", pRes.error);
+    console.log("PROFILE DATA LENGTH:", pRes.data?.length ?? 0);
+    console.log("PROFILE DATA SAMPLE:", (pRes.data ?? []).slice(0, 3));
+
+    if (pRes.error) {
+      console.error("Erro ao carregar perfis:", pRes.error);
+      toast.error("Erro ao carregar lista de colaboradores");
+      
+      // Fallback: mesma query completa, sem remover campos
+      console.log("=== FALLBACK PROFILES (mesma query completa) ===");
+      const fallbackRes = await supabase.from("profiles")
+        .select("id, nome, cpf, matricula, cargo, unidade_id, regime_trabalho, ativo")
+        .eq("ativo", true)
+        .order("nome");
+      console.log("FALLBACK ERROR:", fallbackRes.error);
+      console.log("FALLBACK DATA LENGTH:", fallbackRes.data?.length ?? 0);
+      console.log("FALLBACK DATA SAMPLE:", (fallbackRes.data ?? []).slice(0, 3));
+      
+      if (!fallbackRes.error) {
+        setProfiles(fallbackRes.data ?? []);
+      }
+    } else {
+      setProfiles(pRes.data ?? []);
+    }
+
+    setUnidades(uRes.data ?? []);
+    setListaCargos(cRes.data ?? []);
+  }, []);
+
+  useEffect(() => {
+    if (user) loadData();
+  }, [user?.id, loadData]);
+
+  const extractPageAsBlob = async (file: File, pageIndex: number): Promise<Blob> => {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdfDoc = await PDFDocument.load(arrayBuffer);
+    const newPdf = await PDFDocument.create();
+    const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageIndex]);
+    newPdf.addPage(copiedPage);
+    const pdfBytes = await newPdf.save();
+    return new Blob([pdfBytes], { type: "application/pdf" });
+  };
+
+  const handleVinculo = async (profileId: string, result: PageResult, silent = false) => {
+    if (!selectedFile || isUploading) return;
+    if (!silent) setIsUploading(true);
+
+    try {
+      const pageBlob = await extractPageAsBlob(selectedFile, result.pageNumber - 1);
+      const fileName = `${result.ano}-${String(result.mes).padStart(2, '0')}_${profileId}_${documentType}.pdf`;
+      const storagePath = `documentos/${documentType}/${profileId}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage.from("documentos").upload(storagePath, pageBlob, { contentType: "application/pdf", upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { error: dbError } = await supabase.from("documentos").insert({ colaborador_id: profileId, tipo: documentType, mes: result.mes!, ano: result.ano!, storage_path: storagePath, status: "vinculado", nome_pdf: fileName });
+      if (dbError) throw dbError;
+
+      setPageResults(prev => prev.map((r) => r.pageNumber === result.pageNumber ? { ...r, vinculado: true, matchedProfile: profiles.find(p => p.id === profileId) || r.matchedProfile } : r));
+      if (!silent) { toast.success("Documento vinculado com sucesso!"); if (currentPage < pageResults.length - 1) setCurrentPage(prev => prev + 1); }
+    } catch (err) {
+      if (!silent) toast.error("Erro ao vincular documento", { description: (err as Error).message });
+      console.error("Erro no vínculo:", err);
+    } finally {
+      if (!silent) setIsUploading(false);
+    }
+  };
+
+  const handleProcessar = async () => {
+    if (!selectedFile) return;
+    setIsProcessing(true);
+    try {
+      const pages = await extractTextFromPDF(selectedFile);
+      const parser = documentType === "folha_ponto" ? new FolhaPontoParser() : new ContrachequeParser();
+      const results = parser.parse(pages, profiles);
+
+      const processedResults = results.map(r => {
+        let unitId = null;
+        if (r.cnpj) {
+          const cleanPdfCnpj = cleanCNPJ(r.cnpj);
+          const unit = unidades.find(u => u.cnpj && cleanCNPJ(u.cnpj) === cleanPdfCnpj);
+          if (unit) unitId = unit.id;
+        }
+        let isNew = false;
+        if (r.suggestedCargoName) {
+          const normalizedSuggested = r.suggestedCargoName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+          const cargoExists = listaCargos.some(c => c.nome.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim() === normalizedSuggested);
+          isNew = !cargoExists;
+        }
+        return { ...r, unidadeId: unitId, isNewCargo: isNew };
+      });
+
+      setPageResults(processedResults);
+      toast.success(`${pages.length} páginas processadas.`);
+      let autoCount = 0;
+      for (const r of processedResults) {
+        if (r.matchStatus === "automatico" && r.matchedProfile && r.mes && r.ano) {
+          await handleVinculo(r.matchedProfile.id, r, true);
+          autoCount++;
+        }
+      }
+      if (autoCount > 0) { toast.success(`${autoCount} documentos vinculados automaticamente.`); }
+    } catch (err) {
+      toast.error("Erro ao processar PDF", { description: (err as Error).message });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleCreateColab = async () => {
+    setBusyNewColab(true);
+    try {
+      const { data: authUser, error: authErr } = await adminApi.createUser({ nome: newColabForm.nome.trim(), cpf: newColabForm.cpf.replace(/\D/g, ""), email: newColabForm.email.trim().toLowerCase() || `${newColabForm.cpf.replace(/\D/g, "")}@pakere.com.br`, senha: newColabForm.senha || newColabForm.cpf.replace(/\D/g, "").slice(-6), cargo: newColabForm.cargo, dataAdmissao: newColabForm.dataAdmissao, dataNascimento: newColabForm.dataNascimento, folgaFixaSemana: newColabForm.folgaFixa === "none" ? null : Number(newColabForm.folgaFixa), role: newColabForm.perfil_acesso });
+      if (authErr) throw authErr;
+      await supabase.from("profiles").update({ matricula: newColabForm.matricula.trim() || null, whatsapp: newColabForm.whatsapp.trim() || null, unidade_id: newColabForm.unidadeId === "none" ? null : newColabForm.unidadeId, regime_trabalho: newColabForm.regime_trabalho === "none" ? null : newColabForm.regime_trabalho, ativo: true }).eq("id", authUser.userId);
+      toast.success("Colaborador criado!");
+      setShowNewColab(false);
+      await loadData();
+      const current = pageResults[currentPage];
+      handleVinculo(authUser.userId, current);
+    } catch (e) {
+      toast.error("Erro ao criar colaborador", { description: (e as Error).message });
+    } finally {
+      setBusyNewColab(false);
+    }
+  };
+
+  const openNewColab = () => {
+    const current = pageResults[currentPage];
+    setNewColabForm({ ...blankColabForm, nome: current.nome || "", cpf: current.cpf || "", cargo: current.suggestedCargoName || "", dataAdmissao: current.dataAdmissao || "", unidadeId: current.unidadeId || "none", regime_trabalho: current.regimeTrabalho || "none" });
+    setShowNewColab(true);
+  };
+
+  const current = pageResults[currentPage];
+  const unidadeId = current?.unidadeId;
+  
+  // === DIAGNÓSTICO DO FILTRO ===
+  console.log("=== FILTRO DE COLABORADORES ===");
+  console.log("UNIDADE DETECTADA:", unidadeId);
+  console.log("TOTAL PROFILES:", profiles.length);
+
+  // Etapa A — filtro por unidade (defensivo)
+  const profilesDaUnidade = !unidadeId
+    ? profiles
+    : profiles.filter(p => String(p.unidade_id ?? "") === String(unidadeId ?? ""));
+
+  console.log("TOTAL PROFILES DA UNIDADE:", profilesDaUnidade.length);
+  console.log("SAMPLE PROFILES DA UNIDADE:", profilesDaUnidade.slice(0, 5));
+
+  // Etapa B — filtro por busca textual
+  const colaboradoresFiltrados = profilesDaUnidade.filter(p => {
+    const term = searchTerm.toLowerCase();
+    if (!term) return true;
+    const nome = (p.nome || "").toLowerCase();
+    const cpf = (p.cpf || "").toLowerCase();
+    const matricula = (p.matricula || "").toLowerCase();
+    return nome.includes(term) || cpf.includes(term) || matricula.includes(term);
+  });
+
+  console.log("COLABORADORES FILTRADOS:", colaboradoresFiltrados.length);
+  
+  if (pageResults.length === 0) {
+    return (
+      <div className="space-y-4">
+        <div className={cn("border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors", isDragging ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30")} onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) setSelectedFile(f); }} onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onClick={() => document.getElementById("file-import-input")?.click()} >
+          <Input id="file-import-input" type="file" accept=".pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) setSelectedFile(f); }} className="hidden" />
+          <Upload className="size-10 text-muted-foreground mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground font-medium">Arraste um PDF ou clique para selecionar</p>
+          <p className="text-xs text-muted-foreground mt-1">O arquivo será dividido por páginas para cada colaborador</p>
+        </div>
+        {selectedFile && (
+          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-xl border border-border">
+            <div className="flex items-center gap-2">
+              <FileText className="size-4 text-primary" />
+              <div>
+                <div className="text-sm font-medium">{selectedFile.name}</div>
+                <div className="text-xs text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB</div>
+              </div>
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => setSelectedFile(null)} disabled={isProcessing}>
+              <X className="size-4" />
+            </Button>
+          </div>
+        )}
+        <Button onClick={handleProcessar} disabled={!selectedFile || isProcessing} className="w-full h-12 font-bold">
+          {isProcessing ? <><Loader2 className="size-4 mr-2 animate-spin" /> Processando...</> : <><Upload className="size-4 mr-2" /> Iniciar Processamento</>}
+        </Button>
+      </div>
+    );
+  }
+
+  const totalPages = pageResults.length;
+  const vinculados = pageResults.filter(r => r.vinculado).length;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between bg-muted/30 p-4 rounded-2xl border border-border">
+        <div className="flex items-center justify-between bg-muted/30 p-4 rounded-2xl border border-border">
+          <div className="flex items-center gap-4">
+            <Button variant="outline" size="icon" onClick={() => setCurrentPage(p => Math.max(0, p - 1))} disabled={currentPage === 0}>
+              <ChevronLeft className="size-4" />
+            </Button>
+            <div className="text-center">
+              <div className="text-xs font-bold uppercase text-muted-foreground">Página</div>
+              <div className="text-lg font-black">{currentPage + 1} / {totalPages}</div>
+            </div>
+            <Button variant="outline" size="icon" onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))} disabled={currentPage === totalPages - 1}>
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+          <div className="text-right">
+            <div className="text-xs font-bold uppercase text-muted-foreground">Progresso</div>
+            <div className="text-sm font-bold text-primary">{vinculados} de {totalPages} vinculados</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <div className="space-y-4">
+          <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
+            <h3 className="font-bold flex items-center gap-2 text-primary">
+              <Search className="size-4" /> Dados Extraídos
+            </h3>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="col-span-2">
+                <Label className="text-[10px] uppercase text-muted-foreground">Nome no PDF</Label>
+                <div className="font-bold text-base truncate">{current.nome || "Não identificado"}</div>
+              </div>
+              <div>
+                <Label className="text-[10px] uppercase text-muted-foreground">CPF no PDF</Label>
+                <div className="font-mono">{current.cpf || "Não identificado"}</div>
+              </div>
+              <div>
+                <Label className="text-[10px] uppercase text-muted-foreground">Matrícula no PDF</Label>
+                <div className="font-mono">{current.matricula || "Não identificada"}</div>
+              </div>
+              <div>
+                <Label className="text-[10px] uppercase text-muted-foreground">Competência</Label>
+                <div className="font-medium">{current.mes && current.ano ? `${String(current.mes).padStart(2, '0')}/${current.ano}` : "Não identificada"}</div>
+              </div>
+              <div>
+                <Label className="text-[10px] uppercase text-muted-foreground flex items-center gap-1">
+                  <Briefcase className="size-3" /> Cargo
+                </Label>
+                <div className="font-medium truncate">{current.suggestedCargoName || "—"} {current.isNewCargo && <span className="ml-2 text-[8px] h-4 px-1 bg-amber-50 text-amber-600 border border-amber-200 rounded-full">Novo</span>}</div>
+              </div>
+              <div>
+                <Label className="text-[10px] uppercase text-muted-foreground flex items-center gap-1">
+                  <Clock className="size-3" /> Regime
+                </Label>
+                <div className="font-medium">{current.regimeTrabalho || "—"}</div>
+              </div>
+              <div className="col-span-2">
+                <Label className="text-[10px] uppercase text-muted-foreground flex items-center gap-1">
+                  <Building className="size-3" /> Unidade (via CNPJ)
+                </Label>
+                <div className="font-medium">{current.unidadeId ? unidades.find(u => u.id === current.unidadeId)?.nome : (current.cnpj || "CNPJ não identificado")}</div>
+              </div>
+            </div>
+          </div>
+
+          {current.vinculado ? (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-8 text-center space-y-3">
+              <CheckCircle2 className="size-12 text-emerald-500 mx-auto" />
+              <div className="font-bold text-emerald-900">Documento Vinculado</div>
+              <p className="text-sm text-emerald-700">Esta página já foi salva para {current.matchedProfile?.nome}.</p>
+              <Button variant="outline" className="w-full border-emerald-200 text-emerald-700" onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}>
+                Próxima Página
+              </Button>
+            </div>
+          ) : (
+            <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
+              <h3 className="font-bold flex items-center gap-2">
+                <Check className="size-4 text-primary" /> Confirmar Colaborador
+              </h3>
+              {current.matchedProfile ? (
+                <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className={cn("text-xs font-bold text-white px-2 py-1 rounded-full", current.matchStatus === "automatico" ? "bg-emerald-500" : "bg-amber-500")}>
+                      {current.matchStatus === "automatico" ? "Match Exato" : "Sugestão"}
+                    </span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase">Confiança: {Math.round(current.confidence * 100)}%</span>
+                  </div>
+                  <div className="font-bold text-lg">{current.matchedProfile.nome}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Matrícula: {current.matchedProfile.matricula || "—"} • {current.matchedProfile.cargo || "Sem cargo"} • {current.matchedProfile.cpf}
+                  </div>
+                  <Button className="w-full" onClick={() => handleVinculo(current.matchedProfile!.id, current)} disabled={isUploading}>
+                    {isUploading ? <Loader2 className="size-4 animate-spin mr-2" /> : <Check className="size-4 mr-2" />}
+                    Confirmar e Vincular
+                  </Button>
+                </div>
+              ) : (
+                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="size-5 text-rose-500 shrink-0 mt-0.5" />
+                    <p className="text-sm text-rose-800 font-medium">Nenhum colaborador correspondente encontrado automaticamente.</p>
+                  </div>
+                  <Button variant="outline" className="w-full border-rose-200 text-rose-700 hover:bg-rose-100" onClick={openNewColab}>
+                    <UserPlus className="size-4 mr-2" /> Cadastrar Novo Colaborador
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
+          <h3 className="font-bold flex items-center gap-2">
+            <UserPlus className="size-4 text-primary" /> Busca Manual
+          </h3>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input placeholder="Buscar por nome, CPF ou matrícula..." className="pl-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          </div>
+          <div className="max-h-[300px] overflow-y-auto border rounded-xl divide-y divide-border">
+            {colaboradoresFiltrados.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">Nenhum colaborador encontrado.</div>
+            ) : (
+              colaboradoresFiltrados.map(p => (
+                <button key={p.id} className="w-full text-left p-3 hover:bg-muted transition-colors flex items-center justify-between group" onClick={() => handleVinculo(p.id, current)} disabled={isUploading || current.vinculado}>
+                  <div>
+                    <div className="font-bold text-sm group-hover:text-primary transition-colors">{p.nome}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase">
+                      Matrícula: {p.matricula || "—"} • {p.cargo || "Sem cargo"} • {p.cpf}
+                    </div>
+                  </div>
+                  <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all" />
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      <ColaboradorFormDialog open={showNewColab} onOpenChange={setShowNewColab} form={newColabForm as any} setForm={setNewColabForm as any} unidades={unidades} cargos={listaCargos} busy={busyNewColab} isEdit={false} onSave={handleCreateColab} />
+    </div>
+  );
+}
