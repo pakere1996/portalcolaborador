@@ -11,7 +11,7 @@ type Unidade = Tables<'unidades'>;
 type Cargo = Tables<'cargos'>;
 
 interface ColaboradorFormProps {
-  form: any; // Usaremos 'any' temporariamente para flexibilidade
+  form: any;
   setForm: React.Dispatch<React.SetStateAction<any>>;
   unidades: Unidade[];
   cargos: Cargo[];
@@ -68,7 +68,7 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
             onChange={(e) => handleFormChange('cpf', e.target.value)} 
             placeholder="000.000.000-00"
             maxLength={14}
-            disabled={busy || isEdit} // CPF não deve ser editável após o cadastro
+            disabled={busy || isEdit}
           />
         </div>
         <div className="space-y-2">
@@ -109,7 +109,6 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Cargo */}
         <div className="space-y-2">
           <Label htmlFor="cargo">Cargo *</Label>
           <Select 
@@ -128,7 +127,6 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
           </Select>
         </div>
 
-        {/* Unidade */}
         <div className="space-y-2">
           <Label htmlFor="unidade_id">Unidade *</Label>
           <Select 
@@ -148,7 +146,7 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
           </Select>
         </div>
 
-        {/* Regime de Trabalho */}
+        {/* 🔥 REGIME DE TRABALHO - já existe, vamos garantir que funcione */}
         <div className="space-y-2">
           <Label htmlFor="regime_trabalho">Regime de Trabalho</Label>
           <Select 
@@ -190,7 +188,6 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
           />
         </div>
         
-        {/* Folga Fixa */}
         <div className="space-y-2">
           <Label htmlFor="folga_fixa_semana">Folga Fixa Semanal *</Label>
           <Select 
@@ -211,8 +208,23 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
         </div>
       </div>
 
+      {/* 🔥 NOVO CAMPO: Data de Demissão */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Perfil de Acesso */}
+        <div className="space-y-2">
+          <Label htmlFor="data_demissao">Data de Demissão</Label>
+          <Input 
+            id="data_demissao" 
+            type="date"
+            value={form.data_demissao || ""} 
+            onChange={(e) => handleFormChange('data_demissao', e.target.value)} 
+            min={form.data_admissao || undefined} // não permite data anterior à admissão
+            disabled={busy}
+          />
+          <p className="text-xs text-muted-foreground">
+            Preencha apenas se o colaborador já foi desligado.
+          </p>
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="perfil_acesso">Perfil de Acesso *</Label>
           <Select 
