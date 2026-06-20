@@ -128,50 +128,47 @@ export default function AdminHomeAdminPage() {
   const [confirmDelete, setConfirmDelete] = useState<any | null>(null);
   const [resetPasswordDialog, setResetPasswordDialog] = useState<{ profile: any; senha: string; confirmar: string } | null>(null);
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      // 🔥 Busca todos os campos para evitar erros de coluna faltante
-      const [pRes, uRes, cRes] = await Promise.all([
-        supabase.from("profiles").select("*").order("nome"),
-        supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
-        supabase.from("cargos").select("*").eq("ativo", true).order("nome"),
-      ]);
+const loadData = async () => {
+  setLoading(true);
+  try {
+    // Use SELECT * para garantir que todos os campos existentes sejam trazidos
+    const [pRes, uRes, cRes] = await Promise.all([
+      supabase.from("profiles").select("*").order("nome"),
+      supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
+      supabase.from("cargos").select("*").eq("ativo", true).order("nome"),
+    ]);
 
-      if (pRes.error) throw pRes.error;
-
-      const profileIds = (pRes.data ?? []).map(p => p.id);
-      let rolesMap = new Map<string, string[]>();
-      if (profileIds.length > 0) {
-        const { data: rolesData } = await supabase.from("user_roles").select("user_id, role").in("user_id", profileIds);
-        rolesData?.forEach(r => {
-          if (!rolesMap.has(r.user_id)) rolesMap.set(r.user_id, []);
-          rolesMap.get(r.user_id)!.push(r.role);
-        });
-      }
-
-      // Mapeia os dados para garantir campos padronizados
-      const profilesWithRoles = (pRes.data ?? []).map(p => ({
-        ...p,
-        role: rolesMap.get(p.id)?.[0] ?? null,
-        // Garante que campos como unidade_id estejam acessíveis
-        unidade_id: p.unidade_id ?? null,
-        regime_trabalho: p.regime_trabalho ?? null,
-        data_demissao: p.data_demissao ?? null,
-        // Para compatibilidade com o código que usa unidadeId (sem underscore)
-        unidadeId: p.unidade_id ?? null,
-      }));
-
-      setProfiles(profilesWithRoles);
-      setUnidades(uRes.data ?? []);
-      setCargos(cRes.data ?? []);
-    } catch (e) {
-      console.error("Erro ao carregar dados:", e);
-      toast.error("Erro ao carregar dados", { description: (e as Error).message });
-    } finally {
-      setLoading(false);
+    // Verifique se houve erro na consulta
+    if (pRes.error) {
+      console.error("Erro ao buscar profiles:", pRes.error);
+      throw pRes.error;
     }
-  };
+
+    const profileIds = (pRes.data ?? []).map(p => p.id);
+    let rolesMap = new Map<string, string[]>();
+    if (profileIds.length > 0) {
+      const { data: rolesData } = await supabase.from("user_roles").select("user_id, role").in("user_id", profileIds);
+      rolesData?.forEach(r => {
+        if (!rolesMap.has(r.user_id)) rolesMap.set(r.user_id, []);
+        rolesMap.get(r.user_id)!.push(r.role);
+      });
+    }
+
+    const profilesWithRoles = (pRes.data ?? []).map(p => ({
+      ...p,
+      role: rolesMap.get(p.id)?.[0] ?? null,
+    }));
+
+    setProfiles(profilesWithRoles);
+    setUnidades(uRes.data ?? []);
+    setCargos(cRes.data ?? []);
+  } catch (e) {
+    console.error("Erro detalhado ao carregar dados:", e);
+    toast.error("Erro ao carregar dados", { description: (e as Error).message });
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => { loadData(); }, []);
 
