@@ -275,12 +275,13 @@ export function DocumentImportForm() {
     setIsUploading(true);
     try {
       const cleanCpf = novoColabForm.cpf.replace(/\D/g, "");
+      const cargoSelecionado = listaCargos.find(c => c.id === novoColabForm.cargo);
       const authUser = await adminApi.createUser({
         nome: novoColabForm.nome.trim(),
         cpf: cleanCpf,
         email: `${cleanCpf}@pakere.com.br`,
         senha: novoColabForm.senha || cleanCpf.slice(-6),
-        cargo: novoColabForm.cargo,
+        cargo: cargoSelecionado?.nome ?? novoColabForm.cargo,
         dataAdmissao: novoColabForm.dataAdmissao || null,
         dataNascimento: novoColabForm.dataNascimento || null,
         folgaFixaSemana: novoColabForm.folgaFixa === "none" ? null : Number(novoColabForm.folgaFixa),
