@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { extractTextFromPDF, renderPdfPageAsImage } from "@/lib/pdf-utils";
 import { adminApi } from "@/lib/admin-api";
+import { PDFDocument } from "pdf-lib";
 
 interface ProfileForMatching {
   id: string;
@@ -20,7 +21,7 @@ interface ProfileForMatching {
   cpf: string;
   matricula: string | null;
   unidade_id: string | null;
-  possui_folha_ponto?: boolean; // 🔥 NOVO (opcional, para evitar erro)
+  possui_folha_ponto?: boolean;
 }
 
 interface Cargo {
@@ -107,7 +108,7 @@ export function DocumentImportForm() {
       setProfiles((data ?? []) as ProfileForMatching[]);
     };
     fetchProfiles();
-    
+
     supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome")
       .then(({ data }) => setUnidades(data ?? []));
     supabase.from("cargos").select("id, nome").order("nome")
@@ -238,6 +239,16 @@ export function DocumentImportForm() {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const extractPageFromPdf = async (file: File, pageNumber: number): Promise<Blob> => {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdfDoc = await PDFDocument.load(arrayBuffer);
+    const newPdf = await PDFDocument.create();
+    const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageNumber - 1]);
+    newPdf.addPage(copiedPage);
+    const pdfBytes = await newPdf.save();
+    return new Blob([pdfBytes], { type: "application/pdf" });
   };
 
   const avancarParaProximaPendente = () => {
@@ -376,9 +387,10 @@ export function DocumentImportForm() {
           continue;
         }
 
+        const pagePdfBlob = await extractPageFromPdf(selectedFile!, result.pageNumber);
         const storagePath = `documentos/${documentType}/${result.matchedProfile.id}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}_${Date.now()}.pdf`;
         const { error: uploadError } = await supabase.storage.from("documentos")
-          .upload(storagePath, selectedFile!, { contentType: "application/pdf", upsert: true });
+          .upload(storagePath, pagePdfBlob, { contentType: "application/pdf", upsert: true });
         if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
 
         const { error: insertError } = await supabase.from("documentos").insert({
@@ -422,7 +434,6 @@ export function DocumentImportForm() {
   const totalPages = pageResults.length;
   const resolvidos = pageResults.filter(r => r.resolvido).length;
   const ignorados = pageResults.filter(r => r.ignorado).length;
-  const todasResolvidas = totalPages > 0 && resolvidos === totalPages;
   const jaAprovado = pageResults.some(r => r.aprovado);
 
   const Navegacao = ({ posicao }: { posicao: "topo" | "baixo" }) => (
@@ -449,6 +460,7 @@ export function DocumentImportForm() {
     </div>
   );
 
+  // --- Renderização ---
   if (pageResults.length === 0) {
     return (
       <div className="space-y-4">
