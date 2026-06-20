@@ -327,72 +327,74 @@ export default function AdminCalendar() {
 
   // 🔥 Função para renderizar o calendário em lista (mobile)
   const renderMobileCalendar = () => {
-    const days = getMonthDays(year, month0);
-    const monthName = new Date(year, month0).toLocaleString('pt-BR', { month: 'long' });
-    const yearStr = year;
+  const days = getMonthDays(year, month0);
+  const monthName = new Date(year, month0).toLocaleString('pt-BR', { month: 'long' });
+  const yearStr = year;
 
-    return (
-      <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
-        {/* Cabeçalho do mês */}
-        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="size-8 rounded-full" onClick={goPrev}>
-              <ChevronLeft className="size-4" />
-            </Button>
-            <span className="font-bold text-sm capitalize">
-              {monthName} {yearStr}
-            </span>
-            <Button variant="ghost" size="icon" className="size-8 rounded-full" onClick={goNext}>
-              <ChevronRight className="size-4" />
-            </Button>
-          </div>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            {days.filter(d => dayType(d)).length} dias úteis
+  return (
+    <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+      {/* Cabeçalho do mês */}
+      <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="size-8 rounded-full" onClick={goPrev}>
+            <ChevronLeft className="size-4" />
+          </Button>
+          <span className="font-bold text-sm capitalize">
+            {monthName} {yearStr}
           </span>
+          <Button variant="ghost" size="icon" className="size-8 rounded-full" onClick={goNext}>
+            <ChevronRight className="size-4" />
+          </Button>
         </div>
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+          {days.filter(d => dayType(d)).length} dias úteis
+        </span>
+      </div>
 
-        {/* Lista de dias */}
-        <div className="divide-y divide-slate-100 max-h-[70vh] overflow-y-auto">
-          {days.map((d) => {
-            const iso = ymd(d);
-            const occupants = occupantsByDate.get(iso) || [];
-            const isWeekendDay = !!dayType(d);
-            const limit = dayLimits.get(iso) || 1;
-            const isBlocked = manualMap.get(iso)?.liberada === false || autoBlockedDatesForMonth(year, month0).some(b => b.date === iso);
+      {/* Lista de dias */}
+      <div className="divide-y divide-slate-100 max-h-[70vh] overflow-y-auto">
+        {days.map((d) => {
+          const iso = ymd(d);
+          const occupants = occupantsByDate.get(iso) || [];
+          const isWeekendDay = !!dayType(d);
+          const limit = dayLimits.get(iso) || 1;
+          const isBlocked = manualMap.get(iso)?.liberada === false || autoBlockedDatesForMonth(year, month0).some(b => b.date === iso);
 
-            return (
-              <div
-                key={iso}
-                className="px-4 py-3 hover:bg-slate-50/50 transition-colors cursor-pointer"
-                onClick={() => onSelect(iso)}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className={cn(
-                        "text-sm font-bold",
-                        isWeekendDay ? "text-slate-900" : "text-slate-400"
-                      )}>
-                        {d.getDate()}
-                      </span>
-                      {isBlocked && (
-                        <Badge variant="outline" className="text-[9px] bg-rose-50 text-rose-600 border-rose-200 px-1.5 py-0 h-5">
-                          Bloqueado
-                        </Badge>
-                      )}
-                      {occupants.length > 0 && (
-                        <Badge className="text-[9px] bg-primary/10 text-primary border-primary/20 px-1.5 py-0 h-5">
-                          {occupants.length}/{limit}
-                        </Badge>
-                      )}
-                      {isWeekendDay && !isBlocked && occupants.length === 0 && (
-                        <span className="text-[9px] text-slate-400">Vago</span>
-                      )}
-                    </div>
-                    {/* Exibe nomes dos colaboradores */}
-                    {occupants.length > 0 ? (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {occupants.map((occ, idx) => (
+          return (
+            <div
+              key={iso}
+              className="px-4 py-3 hover:bg-slate-50/50 transition-colors cursor-pointer"
+              onClick={() => onSelect(iso)}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      "text-sm font-bold",
+                      isWeekendDay ? "text-slate-900" : "text-slate-400"
+                    )}>
+                      {d.getDate()}
+                    </span>
+                    {isBlocked && (
+                      <Badge variant="outline" className="text-[9px] bg-rose-50 text-rose-600 border-rose-200 px-1.5 py-0 h-5">
+                        Bloqueado
+                      </Badge>
+                    )}
+                    {occupants.length > 0 && (
+                      <Badge className="text-[9px] bg-primary/10 text-primary border-primary/20 px-1.5 py-0 h-5">
+                        {occupants.length}/{limit}
+                      </Badge>
+                    )}
+                    {isWeekendDay && !isBlocked && occupants.length === 0 && (
+                      <span className="text-[9px] text-slate-400">Vago</span>
+                    )}
+                  </div>
+                  {/* 🔥 Exibe apenas o primeiro nome */}
+                  {occupants.length > 0 ? (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {occupants.map((occ, idx) => {
+                        const primeiroNome = occ.userName.split(' ')[0];
+                        return (
                           <span
                             key={idx}
                             className={cn(
@@ -403,23 +405,24 @@ export default function AdminCalendar() {
                             )}
                             title={occ.userName}
                           >
-                            {occ.userName}
+                            {primeiroNome}
                           </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-[10px] text-slate-400">Nenhum colaborador</span>
-                    )}
-                  </div>
-                  <ChevronRight className="size-4 text-slate-300 shrink-0 mt-0.5" />
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-slate-400">Nenhum colaborador</span>
+                  )}
                 </div>
+                <ChevronRight className="size-4 text-slate-300 shrink-0 mt-0.5" />
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
