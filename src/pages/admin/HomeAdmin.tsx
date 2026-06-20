@@ -131,14 +131,13 @@ export default function AdminHomeAdminPage() {
 const loadData = async () => {
   setLoading(true);
   try {
-    // Use SELECT * para garantir que todos os campos existentes sejam trazidos
+    // Usando SELECT * para evitar problemas de nomes de colunas
     const [pRes, uRes, cRes] = await Promise.all([
       supabase.from("profiles").select("*").order("nome"),
       supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
       supabase.from("cargos").select("*").eq("ativo", true).order("nome"),
     ]);
 
-    // Verifique se houve erro na consulta
     if (pRes.error) {
       console.error("Erro ao buscar profiles:", pRes.error);
       throw pRes.error;
