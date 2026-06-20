@@ -447,7 +447,7 @@ export function DocumentosAdminBase({
               </div>
 
               <div className="space-y-2">
-                <Label>Observações</Label>
+                <Label>Observações do Colaborador</Label>
                 <Textarea
                   rows={3}
                   value={form.observacao}
@@ -535,7 +535,6 @@ export function DocumentosAdminBase({
                     <th className="text-center p-4 font-bold uppercase text-[10px] text-muted-foreground">
                       {tipo === "atestados" ? "Status" : "Tipo"}
                     </th>
-                    {colunasExtras && <th className="text-center p-4 font-bold uppercase text-[10px] text-muted-foreground">Detalhes</th>}
                     <th className="text-center p-4 font-bold uppercase text-[10px] text-muted-foreground">Arquivo</th>
                     <th className="text-right p-4 font-bold uppercase text-[10px] text-muted-foreground">Ações</th>
                   </tr>
@@ -574,7 +573,7 @@ export function DocumentosAdminBase({
                               value={editForm.observacao}
                               onChange={(e) => setEditForm({ ...editForm, observacao: e.target.value })}
                               className="w-auto"
-                              placeholder="Observações"
+                              placeholder="Observações do Colaborador"
                             />
                           ) : (
                             <span className="text-xs truncate max-w-[150px] block">
@@ -587,6 +586,7 @@ export function DocumentosAdminBase({
                             <div className="space-y-2 min-w-[200px]">
                               {tipo === "atestados" ? (
                                 <>
+                                  <Label className="text-xs font-medium text-muted-foreground">Status</Label>
                                   <select
                                     className="w-full rounded-md border border-border bg-background px-3 py-1 text-sm"
                                     value={editForm.status || "pendente"}
@@ -596,24 +596,27 @@ export function DocumentosAdminBase({
                                     <option value="aprovado">Aprovado</option>
                                     <option value="rejeitado">Rejeitado</option>
                                   </select>
+                                  <Label className="text-xs font-medium text-muted-foreground">Dias de Afastamento</Label>
                                   <Input
                                     type="number"
                                     min="0"
                                     value={editForm.dias_afastamento || ""}
                                     onChange={(e) => setEditForm({ ...editForm, dias_afastamento: e.target.value })}
-                                    placeholder="Dias"
+                                    placeholder="0"
                                     className="w-full"
                                   />
+                                  <Label className="text-xs font-medium text-muted-foreground">Observação do Admin</Label>
                                   <Textarea
                                     rows={2}
                                     value={editForm.observacao_admin || ""}
                                     onChange={(e) => setEditForm({ ...editForm, observacao_admin: e.target.value })}
-                                    placeholder="Observação do Admin"
+                                    placeholder="Observação para o colaborador"
                                     className="w-full"
                                   />
                                 </>
                               ) : (
                                 <>
+                                  <Label className="text-xs font-medium text-muted-foreground">Tipo</Label>
                                   <select
                                     className="w-full rounded-md border border-border bg-background px-3 py-1 text-sm"
                                     value={editForm.tipo || "outro"}
@@ -624,12 +627,13 @@ export function DocumentosAdminBase({
                                     <option value="justa_causa">Justa Causa</option>
                                     <option value="outro">Outro</option>
                                   </select>
+                                  <Label className="text-xs font-medium text-muted-foreground">Dias de Afastamento</Label>
                                   <Input
                                     type="number"
                                     min="0"
                                     value={editForm.dias_afastamento || ""}
                                     onChange={(e) => setEditForm({ ...editForm, dias_afastamento: e.target.value })}
-                                    placeholder="Dias"
+                                    placeholder="0"
                                     className="w-full"
                                   />
                                 </>
@@ -654,15 +658,6 @@ export function DocumentosAdminBase({
                             </>
                           )}
                         </td>
-                        {colunasExtras && (
-                          <td className="p-4 text-center">
-                            {isEditing ? (
-                              editCamposExtras ? editCamposExtras(editForm, setEditForm) : null
-                            ) : (
-                              colunasExtras(doc)
-                            )}
-                          </td>
-                        )}
                         <td className="p-4 text-center">
                           <Button
                             variant="ghost"
