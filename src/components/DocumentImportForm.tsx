@@ -335,16 +335,19 @@ export function DocumentImportForm() {
 
         // Se for substituição de duplicata, remove o documento antigo primeiro
         if (result.duplicadoId && result.acaoSeDuplicado === "substituir") {
-          const { data: docAntigo } = await supabase
-            .from("documentos")
-            .select("tipo")
-            .eq("id", result.duplicadoId)
-            .single();
-          
-          if (docAntigo?.tipo !== documentType) {
-            toast.error(`Erro: Conflito - documento existente é do tipo ${docAntigo?.tipo}, não ${documentType}`);
-            continue;
-          }
+  const { data: docAntigo } = await supabase
+    .from("documentos")
+    .select("id, tipo")
+    .eq("id", result.duplicadoId)
+    .single();
+  
+  // Se o documento antigo não tem tipo definido ou é diferente, apenas substitui
+  if (docAntigo) {
+    console.log("Substituindo documento:", docAntigo.id, "tipo:", docAntigo.tipo);
+  }
+  
+  await supabase.from("documentos").delete().eq("id", result.duplicadoId);
+  substituidos++;
           
           await supabase.from("documentos").delete().eq("id", result.duplicadoId);
           substituidos++;
