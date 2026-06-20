@@ -28,6 +28,8 @@ import DocumentosPontoAdmin from "./pages/admin/DocumentosPontoAdmin";
 import AtestadosAdmin from "./pages/admin/AtestadosAdmin";
 import RegistrosDisciplinaresAdmin from "./pages/admin/RegistrosDisciplinaresAdmin";
 import SetupAdmin from "./pages/SetupAdmin";
+// 🔥 NOVA IMPORTAÇÃO PARA MENSAGENS
+import MensagensAdmin from "./pages/admin/Mensagens";
 
 // 🔥 Função para verificar se o usuário é admin (usando localStorage como fallback)
 const isUserAdmin = (role?: string | null): boolean => {
@@ -98,6 +100,9 @@ function AuthenticatedRoutes() {
             <Route path="/admin/documentos/ponto" element={<DocumentosPontoAdmin />} />
             <Route path="/admin/documentos/atestados" element={<AtestadosAdmin />} />
             <Route path="/admin/documentos/disciplinar" element={<RegistrosDisciplinaresAdmin />} />
+            
+            {/* 🔥 NOVA ROTA PARA MENSAGENS/COMUNICADOS */}
+            <Route path="/admin/mensagens" element={<MensagensAdmin />} />
             
             {/* Setup */}
             <Route path="/admin/setup" element={<SetupAdmin />} />
