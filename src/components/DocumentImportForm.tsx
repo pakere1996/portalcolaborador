@@ -45,6 +45,8 @@ interface PageResult {
   resolvido: boolean; // true quando vinculado (pendente de aprovação final) ou ignorado
   ignorado: boolean;
   aprovado: boolean; // true só depois do "Aprovar e Salvar"
+  duplicadoId: string | null; // id do documento existente, se já houver essa competência para o colaborador
+  acaoSeDuplicado: "substituir" | "manter_antigo" | null;
 }
 
 // Remove acentos e normaliza para comparação exata de nomes
@@ -168,7 +170,7 @@ export function DocumentImportForm() {
     setIsProcessing(true);
     try {
       const pages = await extractTextFromPDF(selectedFile);
-      const results: PageResult[] = pages.map((p) => {
+      const resultsComMatch = pages.map((p) => {
         const text = p.text;
 
         const { profile: matchedProfile, nomeEncontrado: nome } = findExactMatchInText(text, profiles);
@@ -191,14 +193,41 @@ export function DocumentImportForm() {
           resolvido: !!matchedProfile,
           ignorado: false,
           aprovado: false,
+          duplicadoId: null,
+          acaoSeDuplicado: null,
         } as PageResult;
       });
+
+      // Verifica duplicatas: para cada página com colaborador + mês/ano identificados,
+      // checa se já existe um documento dessa competência para esse colaborador.
+      const results: PageResult[] = await Promise.all(
+        resultsComMatch.map(async (r) => {
+          if (!r.matchedProfile || !r.mes || !r.ano) return r;
+
+          const { data: existente } = await supabase
+            .from("documentos")
+            .select("id")
+            .eq("colaborador_id", r.matchedProfile.id)
+            .eq("tipo", documentType)
+            .eq("mes", r.mes)
+            .eq("ano", r.ano)
+            .maybeSingle();
+
+          if (existente) {
+            return { ...r, duplicadoId: existente.id, resolvido: false };
+          }
+          return r;
+        })
+      );
 
       setPageResults(results);
       setCurrentPage(0);
 
-      const qtdAuto = results.filter(r => r.matchedProfile).length;
-      toast.success(`${pages.length} páginas processadas (${qtdAuto} com colaborador identificado). Confira cada página antes de aprovar.`);
+      const qtdAuto = results.filter(r => r.matchedProfile && !r.duplicadoId).length;
+      const qtdDuplicados = results.filter(r => r.duplicadoId).length;
+      let msg = `${pages.length} páginas processadas (${qtdAuto} com colaborador identificado)`;
+      if (qtdDuplicados > 0) msg += `. ${qtdDuplicados} já existem no histórico — revise antes de aprovar.`;
+      toast.success(msg);
     } catch (err) {
       toast.error("Erro ao processar PDF", { description: (err as Error).message });
     } finally {
@@ -292,24 +321,21 @@ export function DocumentImportForm() {
     setIsApproving(true);
     try {
       let salvos = 0;
-      let duplicados = 0;
+      let substituidos = 0;
 
       for (const result of pageResults) {
         if (result.ignorado || !result.matchedProfile || !result.mes || !result.ano) continue;
 
-        const { count } = await supabase.from("documentos")
-          .select("id", { count: "exact", head: true })
-          .eq("colaborador_id", result.matchedProfile.id)
-          .eq("tipo", documentType)
-          .eq("mes", result.mes)
-          .eq("ano", result.ano);
-
-        if (count && count > 0) {
-          duplicados++;
+        // Se for substituição de duplicata, remove o documento antigo primeiro
+        if (result.duplicadoId && result.acaoSeDuplicado === "substituir") {
+          await supabase.from("documentos").delete().eq("id", result.duplicadoId);
+          substituidos++;
+        } else if (result.duplicadoId) {
+          // Duplicata sem decisão de substituir (não deveria chegar aqui, mas por segurança pula)
           continue;
         }
 
-        const storagePath = `documentos/${documentType}/${result.matchedProfile.id}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}.pdf`;
+        const storagePath = `documentos/${documentType}/${result.matchedProfile.id}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}_${Date.now()}.pdf`;
         const { error: uploadError } = await supabase.storage.from("documentos")
           .upload(storagePath, selectedFile!, { contentType: "application/pdf", upsert: false });
         if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
@@ -328,11 +354,14 @@ export function DocumentImportForm() {
         salvos++;
       }
 
-      setPageResults(prev => prev.map(r => ({ ...r, aprovado: true })));
-
       let msg = `${salvos} documento(s) salvo(s) com sucesso!`;
-      if (duplicados > 0) msg += ` ${duplicados} ignorado(s) por já existirem.`;
+      if (substituidos > 0) msg += ` ${substituidos} substituído(s).`;
       toast.success(msg);
+
+      // Reseta a tela para o estado inicial
+      setPageResults([]);
+      setSelectedFile(null);
+      setCurrentPage(0);
     } catch (err) {
       toast.error("Erro ao salvar documentos", { description: (err as Error).message });
     } finally {
@@ -395,12 +424,6 @@ export function DocumentImportForm() {
         <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${(resolvidos / totalPages) * 100}%` }} />
       </div>
 
-      {jaAprovado && (
-        <div className="rounded-xl border border-green-300 bg-green-50 p-3 text-sm text-green-800 flex items-center gap-2">
-          <CheckCircle2 className="size-4" /> Documentos já aprovados e salvos no histórico.
-        </div>
-      )}
-
       <div className="flex items-center justify-between">
         <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(0, p - 1))} disabled={currentPage === 0}>
           <ChevronLeft className="size-4" />
@@ -412,12 +435,12 @@ export function DocumentImportForm() {
       </div>
 
       {result && (
-        <div className={`rounded-2xl border-2 p-5 space-y-4 ${result.ignorado ? "border-gray-200 bg-gray-50 opacity-60" : result.resolvido ? "border-green-300 bg-green-50" : result.matchStatus === "automatico" ? "border-green-200 bg-green-50/50" : "border-red-200 bg-red-50/50"}`}>
+        <div className={`rounded-2xl border-2 p-5 space-y-4 ${result.ignorado ? "border-gray-200 bg-gray-50 opacity-60" : result.duplicadoId && !result.acaoSeDuplicado ? "border-amber-300 bg-amber-50/50" : result.resolvido ? "border-green-300 bg-green-50" : "border-red-200 bg-red-50/50"}`}>
 
           <div className="flex items-center gap-2">
-            {result.ignorado ? <XCircle className="size-5 text-gray-400" /> : result.resolvido ? <CheckCircle2 className="size-5 text-green-600" /> : result.matchStatus === "automatico" ? <CheckCircle2 className="size-5 text-green-600" /> : <XCircle className="size-5 text-red-500" />}
+            {result.ignorado ? <XCircle className="size-5 text-gray-400" /> : result.duplicadoId && !result.acaoSeDuplicado ? <AlertTriangle className="size-5 text-amber-500" /> : result.resolvido ? <CheckCircle2 className="size-5 text-green-600" /> : <XCircle className="size-5 text-red-500" />}
             <span className="font-semibold text-sm">
-              {result.ignorado ? "⛔ Ignorado" : result.resolvido && result.matchStatus === "automatico" ? "✅ Vinculado automaticamente (nome exato)" : result.resolvido ? "✅ Vinculado (pendente de aprovação final)" : "❌ Revisão manual necessária"}
+              {result.ignorado ? "⛔ Ignorado" : result.duplicadoId && !result.acaoSeDuplicado ? "⚠️ Competência duplicada — decida abaixo" : result.resolvido && result.matchStatus === "automatico" ? "✅ Vinculado automaticamente (nome exato)" : result.resolvido ? "✅ Vinculado (pendente de aprovação final)" : "❌ Revisão manual necessária"}
             </span>
           </div>
 
@@ -463,7 +486,40 @@ export function DocumentImportForm() {
             </div>
           )}
 
-          {!result.resolvido && !result.ignorado && (
+          {result.duplicadoId && !result.ignorado && (
+            <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-3">
+              <div className="flex items-center gap-2 text-amber-800">
+                <AlertTriangle className="size-5" />
+                <span className="font-semibold text-sm">
+                  Já existe um documento de {String(result.mes).padStart(2, "0")}/{result.ano} para {result.matchedProfile?.nome} no histórico.
+                </span>
+              </div>
+              <p className="text-xs text-amber-700">Escolha o que fazer com esta página:</p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+                  onClick={() => setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, acaoSeDuplicado: "substituir", resolvido: true } : r))}
+                  variant={result.acaoSeDuplicado === "substituir" ? "default" : "outline"}
+                >
+                  Substituir documento existente
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, acaoSeDuplicado: "manter_antigo", resolvido: true, ignorado: true } : r))}
+                >
+                  Manter o antigo (ignorar esta página)
+                </Button>
+              </div>
+              {result.acaoSeDuplicado === "substituir" && (
+                <p className="text-xs text-amber-700 font-medium">✓ Esta página vai substituir o documento existente ao aprovar.</p>
+              )}
+            </div>
+          )}
+
+          {!result.resolvido && !result.ignorado && !result.duplicadoId && (
             <div className="space-y-3">
               <div className="space-y-2">
                 <Label className="text-xs">Vincular manualmente a outro colaborador:</Label>
@@ -622,13 +678,23 @@ export function DocumentImportForm() {
             </div>
           )}
 
-          {result.resolvido && !result.ignorado && !jaAprovado && (
+          {result.resolvido && !result.ignorado && !result.duplicadoId && (
             <Button
               variant="outline"
               className="w-full text-muted-foreground"
               onClick={() => setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, resolvido: false } : r))}
             >
               Desfazer vínculo (revisar novamente)
+            </Button>
+          )}
+
+          {result.duplicadoId && result.acaoSeDuplicado && (
+            <Button
+              variant="outline"
+              className="w-full text-muted-foreground"
+              onClick={() => setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, acaoSeDuplicado: null, resolvido: false, ignorado: false } : r))}
+            >
+              Desfazer decisão sobre duplicata
             </Button>
           )}
         </div>
@@ -639,7 +705,7 @@ export function DocumentImportForm() {
         {pageResults.map((r, i) => (
           <button key={i} onClick={() => setCurrentPage(i)} className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors ${i === currentPage ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"}`}>
             <span>Pág. {r.pageNumber} — {r.matchedProfile?.nome ?? r.nome ?? "Nome não identificado"}</span>
-            <span>{r.ignorado ? "⛔" : r.resolvido ? "✅" : r.matchStatus === "automatico" ? "🟢" : "🔴"}</span>
+            <span>{r.ignorado ? "⛔" : r.duplicadoId && !r.acaoSeDuplicado ? "⚠️" : r.resolvido ? "✅" : "🔴"}</span>
           </button>
         ))}
       </div>
@@ -647,12 +713,6 @@ export function DocumentImportForm() {
       {!jaAprovado && (
         <Button className="w-full bg-green-600 hover:bg-green-700 text-white" onClick={handleAprovarTudo} disabled={isApproving}>
           {isApproving ? <><Loader2 className="size-4 mr-2 animate-spin" /> Salvando documentos...</> : <><CheckCircle2 className="size-4 mr-2" /> Aprovar e Salvar Documentos</>}
-        </Button>
-      )}
-
-      {jaAprovado && (
-        <Button className="w-full" onClick={() => { setPageResults([]); setSelectedFile(null); setCurrentPage(0); }}>
-          Processar Novo Documento
         </Button>
       )}
 
