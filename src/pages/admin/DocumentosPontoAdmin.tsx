@@ -42,7 +42,7 @@ export default function DocumentosPonto() {
   const load = async () => {
     setLoading(true);
     const [{ data: docs }, { data: profs }] = await Promise.all([
-      supabase.from("documentos").select("*").eq("tipo", "folha_ponto").order("ano", { ascending: false }).order("mes", { ascending: false }),
+      supabase.from("documentos").select("*").eq("tipo", "fponto").order("ano", { ascending: false }).order("mes", { ascending: false }),
       supabase.from("profiles").select("id, nome").eq("ativo", true).order("nome"),
     ]);
     setDocumentos(docs ?? []);
