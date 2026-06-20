@@ -19,6 +19,7 @@ export default function RegistrosDisciplinaresAdmin() {
       icone={<ShieldAlert className="size-6 text-primary" />}
       descricao="Gerencie advertências, suspensões e outros registros disciplinares."
       importTitle="Importar Registro Disciplinar"
+      // 🔥 Corrigido: usa a coluna correta do banco (data_ocorrencia)
       campoData="data_ocorrencia"
       gerarStoragePath={async (colaboradorId, data, id, file) => {
         const path = disciplinarStoragePath(colaboradorId, data, "outro", id, file);
@@ -27,6 +28,7 @@ export default function RegistrosDisciplinaresAdmin() {
         return { path, kind };
       }}
       formatarStatus={(tipo) => formatDisciplinarTipo(tipo)}
+      // Campos extras no formulário: tipo e dias de afastamento
       camposExtras={(form, setForm, busy) => (
         <>
           <div className="space-y-2">
@@ -70,20 +72,19 @@ export default function RegistrosDisciplinaresAdmin() {
           )}
         </>
       )}
+      // Colunas extras na tabela: tipo, dias, retorno
       colunasExtras={(doc) => {
         const dias = (doc as any).dias_afastamento || 0;
+        const dataRetorno = new Date(
+          new Date(doc.data).getTime() + dias * 24 * 60 * 60 * 1000
+        );
         return (
           <div className="text-sm space-y-1">
             <div><span className="font-semibold">Tipo:</span> {doc.tipo || "—"}</div>
             {dias > 0 && (
               <>
                 <div><span className="font-semibold">Dias:</span> {dias}</div>
-                <div>
-                  <span className="font-semibold">Retorno:</span>{" "}
-                  {new Date(
-                    new Date(doc.data).getTime() + dias * 24 * 60 * 60 * 1000
-                  ).toLocaleDateString("pt-BR")}
-                </div>
+                <div><span className="font-semibold">Retorno:</span> {dataRetorno.toLocaleDateString("pt-BR")}</div>
               </>
             )}
             {doc.observacao && (
@@ -94,6 +95,7 @@ export default function RegistrosDisciplinaresAdmin() {
           </div>
         );
       }}
+      // Campos extras na edição: tipo e dias
       editCamposExtras={(editForm, setEditForm) => (
         <>
           <div className="space-y-1 mt-2">
@@ -134,7 +136,7 @@ export default function RegistrosDisciplinaresAdmin() {
       beforeInsert={async (form, path, kind) => ({
         colaborador_id: form.colaborador_id,
         unidade_id: form.unidade_id,
-        data_ocorrencia: form.data_documento,
+        data_ocorrencia: form.data_documento, // 🔥 usa a coluna correta
         tipo: form.tipo || "outro",
         dias_afastamento: parseInt(form.dias_afastamento) || 0,
         observacao: form.observacao || null,
