@@ -1,1 +1,246 @@
-import type { DocumentParser, PageResult, ProfileForMatching } from "./document-parsers"; import type { PageText } from "../pdf-utils"; export class ContrachequeParser implements DocumentParser { parse(pages: PageText[], profiles: ProfileForMatching[]): PageResult[] { return pages.map((p) => { const text = p.text; // Isolate header block const headerBlock = this.extractHeaderBlock(text); console.log("[Parser][Contracheque] HEADER BLOCO:", headerBlock); // Extract fields from headerBlock only const nome = this.extractNomeFromHeader(headerBlock); const matricula = this.extractMatriculaFromHeader(headerBlock); const cargo = this.extractCargoFromHeader(headerBlock); const cpf = this.extractCpfFromHeader(headerBlock); const cnpj = this.extractCnpjFromHeader(headerBlock); const competencia = this.extractCompetenciaFromHeader(headerBlock); console.log("[Parser][Contracheque] Nome candidato:", nome); console.log("[Parser][Contracheque] Matrícula candidata:", matricula); console.log("[Parser][Contracheque] Cargo candidato:", cargo); console.log("[Parser][Contracheque] CPF candidato:", cpf); console.log("[Parser][Contracheque] CNPJ candidato:", cnpj); console.log("[Parser][Contracheque] Competência candidata:", competencia); // Match profile using existing logic (unchanged) const match = findBestProfileMatch(nome, cpf, profiles as any, matricula); const perfilVinculado = match.profile; return { pageNumber: p.pageNumber, text, nome, cpf, matricula, cnpj, mes: competencia?.mes ?? null, ano: competencia?.ano ?? null, unidadeId: null, cargo: null, regimeTrabalho: null, isNewCargo: false, suggestedCargoName: null, dataAdmissao: null, matchStatus: match.status as "automatico" | "sugerido" | "revisao", matchedProfile: perfilVinculado as any, confidence: match.confidence, vinculado: false, ignorado: false, }; }); } // ---------- Header isolation ---------- private extractHeaderBlock(text: string): string { const markers = [ "SALARIO", "SALÁRIO", "REFLEXO", "HORAS", "ADICIONAL", "NOTURNO", "PROVENTOS", "DESCONTOS", "INSS", "FGTS", "LIQUIDO", "LÍQUIDO", "TOTAL", "REFERENCIA", "REFERÊNCIA" ]; const upperText = text.toUpperCase(); let cutIndex = -1; for (const marker of markers) { const idx = upperText.indexOf(marker); if (idx !== -1 && (cutIndex === -1 || idx < cutIndex)) { cutIndex = idx; } } if (cutIndex === -1) { // fallback: use first 500 chars return text.substring(0, Math.min(500, text.length)); } // Return text before the first marker return text.substring(0, cutIndex).trim(); } // ---------- Field extraction from header ---------- private extractNomeFromHeader(header: string): string | null { const invalidHeaderTerms = [ "SALARIO","SALÁRIO","EMPREGADO","REFLEXO","HORAS","ADICIONAL", "NOTURNO","INTER","REFERENCIA","REFERÊNCIA","PROVENTOS","DESCONTOS", "INSS","FGTS","BASE","LIQUIDO","LÍQUIDO","TOTAL" ]; // Priority 1: name near CPF/matrícula const cpfMatch = this.extractCpfFromHeader(header); if (cpfMatch) { const cpfIndex = header.indexOf(cpfMatch); const beforeCpf = header.substring(0, cpfIndex); const nameCandidates = beforeCpf.match(/[A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]{10,}/); if (nameCandidates) { const candidate = nameCandidates[0].trim(); if (!invalidHeaderTerms.some(term => candidate.includes(term))) { return candidate; } } } // Priority 2: uppercase line that looks like a name const lines = header.split(/\r?\n/); for (const line of lines) { const trimmed = line.trim(); if (/^[A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]{10,}$/.test(trimmed) && !invalidHeaderTerms.some(term => trimmed.includes(term))) { return trimmed; } } return null; } private extractMatriculaFromHeader(header: string): string | null { const patterns = [ /(?:Matr[ií]cula|Matricula|C[oó]digo|Codigo)\s*[:]?\s*(\d{1,6})/i, /\b(\d{1,6})\b\s+(?:[A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]{10,})/i ]; for (const pattern of patterns) { const match = header.match(pattern); if (match) return match[1]; } return null; } private extractCpfFromHeader(header: string): string | null { const match = header.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/); return match ? match[0] : null; } private extractCnpjFromHeader(header: string): string | null { const match = header.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/); return match ? match[0] : null; } private extractCargoFromHeader(header: string): string | null { const patterns = [ /(?:Cargo|Fun[çc][ãa]o)\s*[:]?\s*([A-Za-zÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s\.\-]+)/i, ]; for (const pattern of patterns) { const match = header.match(pattern); if (match) { let cargo = match[1].trim(); // discard if it contains financial terms const invalidHeaderTerms = [ "SALARIO","SALÁRIO","EMPREGADO","REFLEXO","HORAS","ADICIONAL", "NOTURNO","INTER","REFERENCIA","REFERÊNCIA","PROVENTOS","DESCONTOS", "INSS","FGTS","BASE","LIQUIDO","LÍQUIDO","TOTAL" ]; if (invalidHeaderTerms.some(term => cargo.includes(term))) { return null; } return cargo; } } return null; } private extractCompetenciaFromHeader(header: string): { mes: number; ano: number } | null { const regexMesAno = /(\d{2})\/(\d{4})/i; const match = header.match(regexMesAno); if (match) { return { mes: parseInt(match[1]), ano: parseInt(match[2]) }; } return null; } }
+import type { DocumentParser, PageResult, ProfileForMatching } from "./document-parsers";
+import type { PageText } from "../pdf-utils";
+import { findBestProfileMatch } from "../documentos-matching";
+
+const INVALID_HEADER_TERMS = [
+  "SALARIO",
+  "SALÁRIO",
+  "EMPREGADO",
+  "REFLEXO",
+  "HORAS",
+  "ADICIONAL",
+  "NOTURNO",
+  "INTER",
+  "REFERENCIA",
+  "REFERÊNCIA",
+  "PROVENTOS",
+  "DESCONTOS",
+  "INSS",
+  "FGTS",
+  "BASE",
+  "LIQUIDO",
+  "LÍQUIDO",
+  "TOTAL",
+  "CONTRACHEQUE",
+  "HOLERITE",
+  "RECIBO",
+  "PAGAMENTO",
+  "EMPRESA",
+  "LTDA",
+];
+
+const FINANCIAL_SECTION_MARKERS = [
+  "PROVENTOS",
+  "DESCONTOS",
+  "INSS",
+  "FGTS",
+  "SALARIO",
+  "SALÁRIO",
+  "BASE DE CALCULO",
+  "BASE DE CÁLCULO",
+  "LIQUIDO",
+  "LÍQUIDO",
+  "TOTAL A RECEBER",
+  "TOTAL",
+];
+
+const MONTHS: Record<string, number> = {
+  janeiro: 1,
+  fevereiro: 2,
+  marco: 3,
+  abril: 4,
+  maio: 5,
+  junho: 6,
+  julho: 7,
+  agosto: 8,
+  setembro: 9,
+  outubro: 10,
+  novembro: 11,
+  dezembro: 12,
+};
+
+function collapseSpaces(value: string): string {
+  return value.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeForCompare(value: string): string {
+  return collapseSpaces(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+}
+
+function rejectInvalidHeaderValue(value: string | null | undefined): string | null {
+  const cleaned = collapseSpaces(value ?? "");
+  if (!cleaned) return null;
+
+  const normalized = normalizeForCompare(cleaned);
+  if (INVALID_HEADER_TERMS.some((term) => normalized.includes(normalizeForCompare(term)))) {
+    return null;
+  }
+
+  return cleaned;
+}
+
+function firstLineMatch(header: string, regex: RegExp): string | null {
+  for (const line of header.split(/\r?\n/)) {
+    const match = line.match(regex);
+    if (match?.[1]) return collapseSpaces(match[1]);
+  }
+
+  return null;
+}
+
+export class ContrachequeParser implements DocumentParser {
+  parse(pages: PageText[], profiles: ProfileForMatching[]): PageResult[] {
+    return pages.map((page) => {
+      const text = page.text;
+      const headerBlock = this.extractHeaderBlock(text);
+
+      const nome = this.extractNomeFromHeader(headerBlock);
+      const matricula = this.extractMatriculaFromHeader(headerBlock);
+      const cargo = this.extractCargoFromHeader(headerBlock);
+      const cpf = this.extractCpfFromHeader(headerBlock);
+      const cnpj = this.extractCnpjFromHeader(headerBlock);
+      const competencia = this.extractCompetenciaFromHeader(headerBlock);
+
+      const match = findBestProfileMatch(nome, cpf, profiles as any, matricula);
+
+      return {
+        pageNumber: page.pageNumber,
+        text,
+        nome,
+        cpf,
+        matricula,
+        cnpj,
+        mes: competencia?.mes ?? null,
+        ano: competencia?.ano ?? null,
+        unidadeId: null,
+        cargo,
+        regimeTrabalho: null,
+        isNewCargo: false,
+        suggestedCargoName: cargo,
+        dataAdmissao: null,
+        matchStatus: match.status as "automatico" | "sugerido" | "revisao",
+        matchedProfile: match.profile as any,
+        confidence: match.confidence,
+        vinculado: false,
+        ignorado: false,
+      };
+    });
+  }
+
+  private extractHeaderBlock(text: string): string {
+    const upperText = text.toUpperCase();
+    const markerIndexes = FINANCIAL_SECTION_MARKERS
+      .map((marker) => upperText.indexOf(marker))
+      .filter((index) => index >= 0)
+      .sort((a, b) => a - b);
+
+    const cutIndex = markerIndexes[0] ?? -1;
+    if (cutIndex === -1) return collapseSpaces(text.slice(0, Math.min(700, text.length)));
+
+    return collapseSpaces(text.slice(0, cutIndex));
+  }
+
+  private extractNomeFromHeader(header: string): string | null {
+    const cpf = this.extractCpfFromHeader(header);
+
+    if (cpf) {
+      const beforeCpf = header.slice(0, header.indexOf(cpf));
+      const labelMatch = beforeCpf.match(
+        /(?:Nome|Empregado|Colaborador|Funcion[aá]rio)\s*[:\-]?\s*([^\r\n]{3,})/i,
+      );
+
+      let candidate = labelMatch?.[1] ?? null;
+
+      if (!candidate) {
+        const lines = beforeCpf.split(/\r?\n/).map(collapseSpaces).filter(Boolean);
+        candidate = lines[lines.length - 1] ?? null;
+      }
+
+      candidate = candidate
+        ?.split(/(?:CPF|Matr[ií]cula|C[oó]digo|Cargo|Unidade|CNPJ|Compet[eê]ncia|Refer[eê]ncia)/i)[0]
+        ?? null;
+
+      const name = rejectInvalidHeaderValue(candidate);
+      if (name) return name;
+    }
+
+    const lineName = firstLineMatch(
+      header,
+      /^[A-Za-zÀ-ÖØ-öø-ÿÇç\s.\-]{3,}$/,
+    );
+
+    return rejectInvalidHeaderValue(lineName);
+  }
+
+  private extractMatriculaFromHeader(header: string): string | null {
+    const patterns = [
+      /(?:Matr[ií]cula|Matricula|C[oó]digo|Codigo)\s*[:\-]?\s*(\d{1,8})/i,
+      /\b(\d{1,8})\b\s+[A-Za-zÀ-ÖØ-öø-ÿÇç]/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = header.match(pattern);
+      if (match?.[1]) return match[1];
+    }
+
+    return null;
+  }
+
+  private extractCpfFromHeader(header: string): string | null {
+    const formatted = header.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/);
+    if (formatted) return formatted[0];
+
+    const digits = header.match(/\b\d{11}\b/);
+    if (!digits) return null;
+
+    const cpf = digits[0];
+    return `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}`;
+  }
+
+  private extractCnpjFromHeader(header: string): string | null {
+    return header.match(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/)?.[0] ?? null;
+  }
+
+  private extractCargoFromHeader(header: string): string | null {
+    const match = header.match(
+      /(?:Cargo|Fun[çc][ãa]o|Cargo\/Fun[çc][ãa]o)\s*[:\-]?\s*([^\r\n]{2,})/i,
+    );
+
+    const candidate = match?.[1]
+      ?.split(/(?:Proventos|Descontos|INSS|FGTS|Sal[aá]rio|Base|Refer[eê]ncia|Compet[eê]ncia|Periodo|Per[ií]odo)/i)[0]
+      ?? null;
+
+    return rejectInvalidHeaderValue(candidate);
+  }
+
+  private extractCompetenciaFromHeader(header: string): { mes: number; ano: number } | null {
+    const text = normalizeForCompare(header);
+
+    const monthNameMatch = text.match(
+      /\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b\s+(?:de\s+)?(\d{4})/i,
+    );
+
+    if (monthNameMatch?.[1] && monthNameMatch?.[2]) {
+      return { mes: MONTHS[monthNameMatch[1]], ano: Number(monthNameMatch[2]) };
+    }
+
+    const patterns = [
+      /competencia\s*[:\-]?\s*(\d{1,2})\s*\/\s*(\d{4})/i,
+      /referencia\s*[:\-]?\s*(\d{1,2})\s*\/\s*(\d{4})/i,
+      /periodo\s*[:\-]?\s*(\d{1,2})\s*\/\s*(\d{4})/i,
+      /\b(\d{1,2})\s*\/\s*(\d{4})\b/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match?.[1] && match?.[2]) {
+        return { mes: Number(match[1]), ano: Number(match[2]) };
+      }
+    }
+
+    return null;
+  }
+}
