@@ -65,13 +65,13 @@ const DIAS_SEMANA = [
   { value: "6", label: "Sábado" },
 ];
 
-// 🔥 Lista fixa com "Sócio" + cargos do banco
-const getCargoOptions = (cargos: Cargo[]) => {
-  const cargoNomes = cargos.map(c => c.nome);
-  if (!cargoNomes.includes("Sócio") && !cargoNomes.includes("SÓCIO")) {
-    return [...cargoNomes, "Sócio"];
+// 🔥 Retorna lista de cargos em MAIÚSCULAS + garante "SÓCIO"
+const getCargoOptions = (cargos: Cargo[]): string[] => {
+  const nomes = cargos.map(c => c.nome.trim().toUpperCase());
+  if (!nomes.includes("SÓCIO")) {
+    nomes.push("SÓCIO");
   }
-  return cargoNomes;
+  return nomes.sort();
 };
 
 export function ColaboradorFormDialog({
