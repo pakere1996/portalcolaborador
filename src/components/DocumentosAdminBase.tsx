@@ -36,18 +36,16 @@ interface DocumentoAdmin {
   id: string;
   colaborador_id: string;
   unidade_id: string;
-  data: string; // campo unificado (mapeado do campo real)
+  data: string;
   observacao: string | null;
   storage_path: string;
   storage_type: string;
   created_at: string;
   updated_at: string;
-  // Atestados
   dias_afastamento?: number | null;
   status?: string | null;
   observacao_admin?: string | null;
   respondido_em?: string | null;
-  // Disciplinares
   tipo?: string | null;
   [key: string]: any;
 }
@@ -58,7 +56,7 @@ interface DocumentosAdminBaseProps {
   icone: React.ReactNode;
   descricao: string;
   importTitle: string;
-  campoData: string; // ex: "data_atestado" ou "data_ocorrencia"
+  campoData: string;
   gerarStoragePath: (colaboradorId: string, data: string, id: string, file: File) => Promise<{ path: string; kind: "pdf" | "image" }>;
   formatarStatus?: (status: string) => string;
   statusClass?: (status: string) => string;
@@ -91,14 +89,12 @@ export function DocumentosAdminBase({
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Filtros
   const [filtroUnidade, setFiltroUnidade] = useState("todos");
   const [filtroColab, setFiltroColab] = useState("todos");
   const [filtroDataInicio, setFiltroDataInicio] = useState("");
   const [filtroDataFim, setFiltroDataFim] = useState("");
   const [filtroExtra, setFiltroExtra] = useState("todos");
 
-  // Formulário de importação
   const [form, setForm] = useState({
     colaborador_id: "",
     unidade_id: "",
@@ -110,7 +106,6 @@ export function DocumentosAdminBase({
   });
   const [uploading, setUploading] = useState(false);
 
-  // Edição
   const [editando, setEditando] = useState<DocumentoAdmin | null>(null);
   const [editForm, setEditForm] = useState({
     data_documento: "",
@@ -122,12 +117,10 @@ export function DocumentosAdminBase({
   });
   const [editBusy, setEditBusy] = useState(false);
 
-  // Exclusão
   const [excluirDialogOpen, setExcluirDialogOpen] = useState(false);
   const [documentoParaExcluir, setDocumentoParaExcluir] = useState<DocumentoAdmin | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
-  // Carregar dados
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -152,7 +145,6 @@ export function DocumentosAdminBase({
         .order("nome");
       if (unitsError) throw unitsError;
 
-      // Mapeia para unificar o campo "data"
       const docsMapeados = (docs ?? []).map((doc: any) => ({
         ...doc,
         data: doc[campoData] || doc.data || "",
@@ -173,7 +165,6 @@ export function DocumentosAdminBase({
     load();
   }, [load]);
 
-  // Filtrar documentos
   const filtrados = useMemo(() => {
     return documentos.filter((d) => {
       if (filtroUnidade !== "todos" && d.unidade_id !== filtroUnidade) return false;
@@ -189,7 +180,6 @@ export function DocumentosAdminBase({
     });
   }, [documentos, filtroUnidade, filtroColab, filtroDataInicio, filtroDataFim, filtroExtra, tipo]);
 
-  // Upload
   const handleUpload = async () => {
     if (!form.unidade_id || !form.colaborador_id || !form.data_documento || !form.arquivo) {
       toast.error("Preencha todos os campos obrigatórios");
@@ -245,7 +235,6 @@ export function DocumentosAdminBase({
     }
   };
 
-  // Download
   const handleDownload = useCallback(async (doc: DocumentoAdmin) => {
     const { data } = await supabase.storage
       .from("documentos_admin")
@@ -254,7 +243,6 @@ export function DocumentosAdminBase({
     else toast.error("Erro ao gerar link de download");
   }, []);
 
-  // Editar
   const handleEditSave = async () => {
     if (!editando) return;
     setEditBusy(true);
@@ -293,7 +281,6 @@ export function DocumentosAdminBase({
     }
   };
 
-  // Excluir
   const handleExcluir = useCallback((doc: DocumentoAdmin) => {
     setDocumentoParaExcluir(doc);
     setExcluirDialogOpen(true);
@@ -319,12 +306,10 @@ export function DocumentosAdminBase({
     }
   }, [documentoParaExcluir, load, tipo]);
 
-  // Colaboradores filtrados por unidade no formulário
   const colaboradoresFiltrados = profiles.filter(
     (p) => !form.unidade_id || p.unidade_id === form.unidade_id
   );
 
-  // Opções para filtro extra
   const filtroExtraOptions = useMemo(() => {
     if (tipo === "atestados") {
       return [
@@ -344,13 +329,12 @@ export function DocumentosAdminBase({
     }
   }, [tipo]);
 
-  // Função auxiliar para calcular data de retorno
   const calcularDataRetorno = (dataDoc: string, dias: number) => {
-  if (!dataDoc || !dias || dias <= 0) return null;
-  const dt = new Date(dataDoc + 'T00:00:00');
-  dt.setDate(dt.getDate() + dias);
-  return formatBR(dt);
-};
+    if (!dataDoc || !dias || dias <= 0) return null;
+    const dt = new Date(dataDoc + 'T00:00:00');
+    dt.setDate(dt.getDate() + dias);
+    return formatBR(dt);
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -361,7 +345,6 @@ export function DocumentosAdminBase({
         <p className="text-muted-foreground mt-1">{descricao}</p>
       </div>
 
-      {/* Abas */}
       <div className="flex gap-2 border-b border-border">
         <button
           onClick={() => setAba("importar")}
@@ -385,7 +368,6 @@ export function DocumentosAdminBase({
         </button>
       </div>
 
-      {/* Importar */}
       {aba === "importar" && (
         <Card className="border-border shadow-sm">
           <CardHeader>
@@ -482,7 +464,6 @@ export function DocumentosAdminBase({
         </Card>
       )}
 
-      {/* Histórico */}
       {aba === "historico" && (
         <div className="space-y-4">
           <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -548,7 +529,8 @@ export function DocumentosAdminBase({
                   <tr>
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground">Colaborador</th>
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground">Unidade</th>
-                    <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden md:table-cell">Data</th>
+                    <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground">Data</th>
+                    <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground">Data Retorno</th>
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden lg:table-cell">Observações</th>
                     <th className="text-center p-4 font-bold uppercase text-[10px] text-muted-foreground">
                       {tipo === "atestados" ? "Status" : "Tipo"}
@@ -571,7 +553,7 @@ export function DocumentosAdminBase({
                       <tr key={doc.id} className="hover:bg-muted/30 transition-colors">
                         <td className="p-4 font-medium">{profile?.nome ?? "—"}</td>
                         <td className="p-4 text-muted-foreground">{unidade?.nome ?? "—"}</td>
-                        <td className="p-4 hidden md:table-cell">
+                        <td className="p-4">
                           {isEditing ? (
                             <Input
                               type="date"
@@ -580,16 +562,11 @@ export function DocumentosAdminBase({
                               className="w-auto"
                             />
                           ) : (
-                            <>
-                              <div>{formatBR(new Date(dataDoc + "T00:00:00"))}</div>
-                              {/* 🔥 Exibe data de retorno se dias > 0 */}
-                              {dias > 0 && dataRetorno && (
-                                <div className="text-xs text-muted-foreground mt-0.5">
-                                  Retorno: {dataRetorno}
-                                </div>
-                              )}
-                            </>
+                            formatBR(new Date(dataDoc + "T00:00:00"))
                           )}
+                        </td>
+                        <td className="p-4">
+                          {dias > 0 && dataRetorno ? dataRetorno : "—"}
                         </td>
                         <td className="p-4 hidden lg:table-cell">
                           {isEditing ? (
@@ -607,28 +584,55 @@ export function DocumentosAdminBase({
                         </td>
                         <td className="p-4 text-center">
                           {isEditing ? (
-                            <div className="space-y-1">
+                            <div className="space-y-2 min-w-[200px]">
                               {tipo === "atestados" ? (
-                                <select
-                                  className="w-full rounded-md border border-border bg-background px-3 py-1 text-sm"
-                                  value={editForm.status || "pendente"}
-                                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                                >
-                                  <option value="pendente">Pendente</option>
-                                  <option value="aprovado">Aprovado</option>
-                                  <option value="rejeitado">Rejeitado</option>
-                                </select>
+                                <>
+                                  <select
+                                    className="w-full rounded-md border border-border bg-background px-3 py-1 text-sm"
+                                    value={editForm.status || "pendente"}
+                                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                                  >
+                                    <option value="pendente">Pendente</option>
+                                    <option value="aprovado">Aprovado</option>
+                                    <option value="rejeitado">Rejeitado</option>
+                                  </select>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    value={editForm.dias_afastamento || ""}
+                                    onChange={(e) => setEditForm({ ...editForm, dias_afastamento: e.target.value })}
+                                    placeholder="Dias"
+                                    className="w-full"
+                                  />
+                                  <Textarea
+                                    rows={2}
+                                    value={editForm.observacao_admin || ""}
+                                    onChange={(e) => setEditForm({ ...editForm, observacao_admin: e.target.value })}
+                                    placeholder="Observação do Admin"
+                                    className="w-full"
+                                  />
+                                </>
                               ) : (
-                                <select
-                                  className="w-full rounded-md border border-border bg-background px-3 py-1 text-sm"
-                                  value={editForm.tipo || "outro"}
-                                  onChange={(e) => setEditForm({ ...editForm, tipo: e.target.value })}
-                                >
-                                  <option value="advertencia">Advertência</option>
-                                  <option value="suspensao">Suspensão</option>
-                                  <option value="justa_causa">Justa Causa</option>
-                                  <option value="outro">Outro</option>
-                                </select>
+                                <>
+                                  <select
+                                    className="w-full rounded-md border border-border bg-background px-3 py-1 text-sm"
+                                    value={editForm.tipo || "outro"}
+                                    onChange={(e) => setEditForm({ ...editForm, tipo: e.target.value })}
+                                  >
+                                    <option value="advertencia">Advertência</option>
+                                    <option value="suspensao">Suspensão</option>
+                                    <option value="justa_causa">Justa Causa</option>
+                                    <option value="outro">Outro</option>
+                                  </select>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    value={editForm.dias_afastamento || ""}
+                                    onChange={(e) => setEditForm({ ...editForm, dias_afastamento: e.target.value })}
+                                    placeholder="Dias"
+                                    className="w-full"
+                                  />
+                                </>
                               )}
                               {editCamposExtras && editCamposExtras(editForm, setEditForm)}
                             </div>
@@ -744,7 +748,6 @@ export function DocumentosAdminBase({
         </div>
       )}
 
-      {/* Dialog de exclusão */}
       <AlertDialog open={excluirDialogOpen} onOpenChange={setExcluirDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
