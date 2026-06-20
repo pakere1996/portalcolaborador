@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { extractTextFromPDF, renderPdfPageAsImage } from "@/lib/pdf-utils";
 import { adminApi } from "@/lib/admin-api";
+import { PDFDocument } from "pdf-lib"; // 🔥 Nova importação
 
 interface ProfileForMatching {
   id: string;
@@ -87,6 +88,17 @@ export function DocumentImportForm() {
   const { user } = useAuth();
 
   const documentType = window.location.pathname.includes("ponto") ? "ponto" : "contracheque";
+
+  // 🔥 Função para extrair página individual do PDF
+  const extractPageFromPdf = async (file: File, pageNumber: number): Promise<Blob> => {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdfDoc = await PDFDocument.load(arrayBuffer);
+    const newPdf = await PDFDocument.create();
+    const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageNumber - 1]);
+    newPdf.addPage(copiedPage);
+    const pdfBytes = await newPdf.save();
+    return new Blob([pdfBytes], { type: "application/pdf" });
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -224,24 +236,18 @@ export function DocumentImportForm() {
     }
   };
 
-  // 🔥 Função centralizada para avançar para a próxima página pendente
   const avancarParaProximaPendente = () => {
     const proximoIndex = pageResults.findIndex((r, i) => i > currentPage && !r.resolvido && !r.ignorado);
     if (proximoIndex !== -1) {
       setCurrentPage(proximoIndex);
     } else {
-      // Verifica se há alguma página pendente antes da atual (caso o usuário tenha voltado)
       const qualquerPendente = pageResults.findIndex((r) => !r.resolvido && !r.ignorado);
       if (qualquerPendente === -1) {
         toast.success("Todas as páginas foram processadas! Clique em 'Aprovar e Salvar' para finalizar.");
-      } else {
-        // Se há pendentes, mas nenhuma depois da atual, fica na atual mesmo
-        // (o usuário pode estar revisando uma página anterior)
       }
     }
   };
 
-  // --- Ações que agora chamam avancarParaProximaPendente ---
   const handleVincular = (profileId: string) => {
     const profile = profiles.find(p => p.id === profileId);
     if (!profile) return;
@@ -306,7 +312,6 @@ export function DocumentImportForm() {
       setNovoColabForm({ nome: "", cpf: "", cargo: "", unidadeId: "", senha: "", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", whatsapp: "", perfil_acesso: "colaborador", matricula: "" });
       toast.success("Colaborador criado com sucesso! Vinculando página...");
 
-      // Vincula automaticamente a página atual ao colaborador recém-criado
       setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, matchedProfile: newProfile, matchStatus: "automatico", resolvido: true } : r));
       setManualProfileId(newProfile.id);
       avancarParaProximaPendente();
@@ -317,7 +322,6 @@ export function DocumentImportForm() {
     }
   };
 
-  // --- Decisão de duplicata (substituir/manter) também avança ---
   const handleDecisaoDuplicata = (acao: "substituir" | "manter_antigo") => {
     setPageResults(prev => prev.map((r, i) =>
       i === currentPage
@@ -333,14 +337,13 @@ export function DocumentImportForm() {
     avancarParaProximaPendente();
   };
 
-  // --- Navegação manual (Anterior/Próximo) ---
   const irParaPagina = (index: number) => {
     if (index >= 0 && index < pageResults.length) {
       setCurrentPage(index);
     }
   };
 
-  // --- Aprovar tudo (mantido igual, sem alterações) ---
+  // 🔥 handleAprovarTudo modificado para extrair página individual
   const handleAprovarTudo = async () => {
     const pendentes = pageResults.filter(r => !r.resolvido && !r.ignorado);
     if (pendentes.length > 0) {
@@ -364,9 +367,12 @@ export function DocumentImportForm() {
           continue;
         }
 
+        // 🔥 Extrai apenas a página do colaborador
+        const pagePdfBlob = await extractPageFromPdf(selectedFile!, result.pageNumber);
+
         const storagePath = `documentos/${documentType}/${result.matchedProfile.id}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}_${Date.now()}.pdf`;
         const { error: uploadError } = await supabase.storage.from("documentos")
-          .upload(storagePath, selectedFile!, { contentType: "application/pdf", upsert: true });
+          .upload(storagePath, pagePdfBlob, { contentType: "application/pdf", upsert: true });
         if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
 
         const { error: insertError } = await supabase.from("documentos").insert({
@@ -413,7 +419,6 @@ export function DocumentImportForm() {
   const todasResolvidas = totalPages > 0 && resolvidos === totalPages;
   const jaAprovado = pageResults.some(r => r.aprovado);
 
-  // 🔥 Componente de navegação reutilizável
   const Navegacao = ({ posicao }: { posicao: "topo" | "baixo" }) => (
     <div className={`flex items-center justify-between gap-2 ${posicao === "baixo" ? "mt-4 pt-4 border-t" : "mb-2"}`}>
       <Button
@@ -438,7 +443,6 @@ export function DocumentImportForm() {
     </div>
   );
 
-  // --- Renderização ---
   if (pageResults.length === 0) {
     return (
       <div className="space-y-4">
@@ -487,7 +491,6 @@ export function DocumentImportForm() {
         <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${(resolvidos / totalPages) * 100}%` }} />
       </div>
 
-      {/* Navegação no TOPO */}
       <Navegacao posicao="topo" />
 
       {result && (
@@ -500,7 +503,6 @@ export function DocumentImportForm() {
             </span>
           </div>
 
-          {/* Visualização da página com zoom */}
           <div className="space-y-2">
             {(loadingPageImage || pageImageUrl) && (
               <div className="flex items-center justify-end gap-1">
@@ -755,7 +757,6 @@ export function DocumentImportForm() {
         </div>
       )}
 
-      {/* Navegação na PARTE INFERIOR */}
       <Navegacao posicao="baixo" />
 
       <div className="space-y-1">
