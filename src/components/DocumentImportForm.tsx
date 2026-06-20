@@ -90,7 +90,6 @@ export function DocumentImportForm() {
 
   const documentType = window.location.pathname.includes("ponto") ? "ponto" : "contracheque";
 
-  // 🔥 useEffect para carregar perfis com filtro condicional
   useEffect(() => {
     if (!user) return;
     const fetchProfiles = async () => {
@@ -99,7 +98,6 @@ export function DocumentImportForm() {
         .select("id, nome, cpf, matricula, unidade_id, possui_folha_ponto")
         .eq("ativo", true);
       
-      // Se for folha de ponto, filtra apenas quem tem permissão
       if (documentType === "ponto") {
         query = query.eq("possui_folha_ponto", true);
       }
@@ -298,8 +296,8 @@ export function DocumentImportForm() {
         email: `${cleanCpf}@pakere.com.br`,
         senha: novoColabForm.senha || cleanCpf.slice(-6),
         cargo: cargoSelecionado?.nome ?? novoColabForm.cargo,
-        dataAdmissao: novoColabForm.dataAdmissao || null,
-        dataNascimento: novoColabForm.dataNascimento || null,
+        dataAdmissao: novoColabForm.dataAdmissao || null, // ← enviar null se vazio
+        dataNascimento: novoColabForm.dataNascimento || null, // ← enviar null se vazio
         folgaFixaSemana: novoColabForm.folgaFixa === "none" ? null : Number(novoColabForm.folgaFixa),
         role: novoColabForm.perfil_acesso,
       });
@@ -308,7 +306,7 @@ export function DocumentImportForm() {
         unidade_id: novoColabForm.unidadeId,
         whatsapp: novoColabForm.whatsapp || null,
         matricula: novoColabForm.matricula || null,
-        possui_folha_ponto: documentType === "ponto" ? true : false, // Se criou na importação de ponto, ativa por padrão
+        possui_folha_ponto: documentType === "ponto" ? true : false,
       }).eq("id", authUser.userId);
       if (profErr) throw profErr;
 
