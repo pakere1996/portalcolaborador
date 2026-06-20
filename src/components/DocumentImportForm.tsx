@@ -421,6 +421,19 @@ export function DocumentImportForm() {
             </span>
           </div>
 
+          {loadingPageImage ? (
+            <div className="flex items-center justify-center rounded-xl border border-border bg-muted/30 p-8">
+              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : pageImageUrl ? (
+            <div className="rounded-xl border border-border overflow-hidden bg-white">
+              <img src={pageImageUrl} alt={`Página ${result.pageNumber}`} className="w-full h-auto max-h-[500px] object-contain" />
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div><span className="text-muted-foreground">Nome PDF:</span><div className="font-medium">{result.nome ?? "Não identificado"}</div></div>
+            
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div><span className="text-muted-foreground">Nome PDF:</span><div className="font-medium">{result.nome ?? "Não identificado"}</div></div>
             <div><span className="text-muted-foreground">Período:</span><div className="font-medium">{result.mes && result.ano ? `${String(result.mes).padStart(2, "0")}/${result.ano}` : "Não identificado"}</div></div>
