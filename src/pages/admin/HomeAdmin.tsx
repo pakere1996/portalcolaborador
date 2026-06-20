@@ -226,25 +226,25 @@ const loadData = async () => {
   };
 
   const openEdit = (p: any) => {
-    setEditingProfile(p);
-    setEditForm({
-      nome: p.nome,
-      cpf: formatCPF(p.cpf),
-      matricula: p.matricula ?? "",
-      email: p.email_contato ?? "",
-      whatsapp: p.whatsapp ?? "",
-      cargo: p.cargo,
-      unidadeId: p.unidade_id ?? "", // usa unidade_id do banco
-      folgaFixa: p.folga_fixa_semana?.toString() ?? "none",
-      dataNascimento: p.data_nascimento ?? "",
-      dataAdmissao: p.data_admissao ?? "",
-      perfil_acesso: p.role ?? "colaborador",
-      ativo: p.ativo,
-      senha: "",
-      regime_trabalho: p.regime_trabalho ?? "none",
-      data_demissao: p.data_demissao ?? "",
-    });
-  };
+  setEditingProfile(p);
+  setEditForm({
+    nome: p.nome,
+    cpf: formatCPF(p.cpf),
+    matricula: p.matricula ?? "",
+    email: p.email_contato ?? "",
+    whatsapp: p.whatsapp ?? "",
+    cargo: p.cargo,
+    unidadeId: p.unidade_id ?? "",                     // <-- vem do banco como unidade_id
+    folgaFixa: p.folga_fixa_semana?.toString() ?? "none", // <-- vem do banco como folga_fixa_semana
+    dataNascimento: p.data_nascimento ?? "",
+    dataAdmissao: p.data_admissao ?? "",
+    perfil_acesso: p.role ?? "colaborador",
+    ativo: p.ativo,
+    senha: "",
+    regime_trabalho: p.regime_trabalho ?? "none",
+    data_demissao: p.data_demissao ?? "",
+  });
+};
 
   const handleUpdate = async () => {
     if (!editingProfile) return;
