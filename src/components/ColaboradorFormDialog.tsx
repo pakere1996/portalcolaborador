@@ -40,6 +40,7 @@ interface ColaboradorForm {
   senha: string;
   data_demissao: string;
   tipo_vinculo: string;
+  possui_folha_ponto: boolean;
 }
 
 interface ColaboradorFormDialogProps {
@@ -65,7 +66,6 @@ const DIAS_SEMANA = [
   { value: "6", label: "Sábado" },
 ];
 
-// 🔥 Retorna lista de cargos em MAIÚSCULAS + garante "SÓCIO"
 const getCargoOptions = (cargos: Cargo[]): string[] => {
   const nomes = cargos.map(c => c.nome.trim().toUpperCase());
   if (!nomes.includes("SÓCIO")) {
@@ -238,6 +238,16 @@ export function ColaboradorFormDialog({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* 🔥 Switch para Folha de Ponto */}
+          <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
+            <Switch
+              id="possui_folha_ponto"
+              checked={form.possui_folha_ponto || false}
+              onCheckedChange={(checked) => setForm({ ...form, possui_folha_ponto: checked })}
+            />
+            <Label htmlFor="possui_folha_ponto">Possui acesso a Folha de Ponto</Label>
           </div>
 
           {!isEdit && (
