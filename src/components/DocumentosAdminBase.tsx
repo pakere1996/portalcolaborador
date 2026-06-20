@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, History, Download, Pencil, Trash2, Loader2, X } from "lucide-react";
+import { Upload, History, Download, Pencil, Trash2, Loader2, X, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { formatBR } from "@/lib/folga-rules";
 import {
@@ -36,7 +36,7 @@ interface DocumentoAdmin {
   id: string;
   colaborador_id: string;
   unidade_id: string;
-  data: string; // campo unificado
+  data: string; // campo unificado (mapeado do campo real)
   observacao: string | null;
   storage_path: string;
   storage_type: string;
@@ -58,7 +58,7 @@ interface DocumentosAdminBaseProps {
   icone: React.ReactNode;
   descricao: string;
   importTitle: string;
-  campoData: string; // ex: "data_atestado" ou "data"
+  campoData: string; // ex: "data_atestado" ou "data_ocorrencia"
   gerarStoragePath: (colaboradorId: string, data: string, id: string, file: File) => Promise<{ path: string; kind: "pdf" | "image" }>;
   formatarStatus?: (status: string) => string;
   statusClass?: (status: string) => string;
@@ -98,7 +98,7 @@ export function DocumentosAdminBase({
   const [filtroDataFim, setFiltroDataFim] = useState("");
   const [filtroExtra, setFiltroExtra] = useState("todos");
 
-  // Formulário
+  // Formulário de importação
   const [form, setForm] = useState({
     colaborador_id: "",
     unidade_id: "",
@@ -127,6 +127,7 @@ export function DocumentosAdminBase({
   const [documentoParaExcluir, setDocumentoParaExcluir] = useState<DocumentoAdmin | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
+  // Carregar dados
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -151,10 +152,10 @@ export function DocumentosAdminBase({
         .order("nome");
       if (unitsError) throw unitsError;
 
-      // Mapeia para unificar o campo data
+      // Mapeia para unificar o campo "data"
       const docsMapeados = (docs ?? []).map((doc: any) => ({
         ...doc,
-        data: doc[campoData] || doc.data || doc.data_documento || "",
+        data: doc[campoData] || doc.data || "",
       }));
 
       setDocumentos(docsMapeados);
@@ -172,6 +173,7 @@ export function DocumentosAdminBase({
     load();
   }, [load]);
 
+  // Filtrar documentos
   const filtrados = useMemo(() => {
     return documentos.filter((d) => {
       if (filtroUnidade !== "todos" && d.unidade_id !== filtroUnidade) return false;
@@ -187,6 +189,7 @@ export function DocumentosAdminBase({
     });
   }, [documentos, filtroUnidade, filtroColab, filtroDataInicio, filtroDataFim, filtroExtra, tipo]);
 
+  // Upload
   const handleUpload = async () => {
     if (!form.unidade_id || !form.colaborador_id || !form.data_documento || !form.arquivo) {
       toast.error("Preencha todos os campos obrigatórios");
@@ -242,6 +245,7 @@ export function DocumentosAdminBase({
     }
   };
 
+  // Download
   const handleDownload = useCallback(async (doc: DocumentoAdmin) => {
     const { data } = await supabase.storage
       .from("documentos_admin")
@@ -250,6 +254,7 @@ export function DocumentosAdminBase({
     else toast.error("Erro ao gerar link de download");
   }, []);
 
+  // Editar
   const handleEditSave = async () => {
     if (!editando) return;
     setEditBusy(true);
@@ -271,6 +276,7 @@ export function DocumentosAdminBase({
         }
       } else {
         updates.tipo = editForm.tipo || "outro";
+        updates.dias_afastamento = parseInt(editForm.dias_afastamento) || 0;
       }
 
       const { error } = await supabase.from(table).update(updates).eq("id", editando.id);
@@ -287,6 +293,7 @@ export function DocumentosAdminBase({
     }
   };
 
+  // Excluir
   const handleExcluir = useCallback((doc: DocumentoAdmin) => {
     setDocumentoParaExcluir(doc);
     setExcluirDialogOpen(true);
@@ -312,10 +319,12 @@ export function DocumentosAdminBase({
     }
   }, [documentoParaExcluir, load, tipo]);
 
+  // Colaboradores filtrados por unidade no formulário
   const colaboradoresFiltrados = profiles.filter(
     (p) => !form.unidade_id || p.unidade_id === form.unidade_id
   );
 
+  // Opções para filtro extra
   const filtroExtraOptions = useMemo(() => {
     if (tipo === "atestados") {
       return [
@@ -335,6 +344,14 @@ export function DocumentosAdminBase({
     }
   }, [tipo]);
 
+  // Função auxiliar para calcular data de retorno
+  const calcularDataRetorno = (dataDoc: string, dias: number) => {
+    if (!dataDoc || !dias || dias <= 0) return null;
+    const dt = new Date(dataDoc + "T00:00:00");
+    dt.setDate(dt.getDate() + dias);
+    return formatBR(dt);
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div>
@@ -344,6 +361,7 @@ export function DocumentosAdminBase({
         <p className="text-muted-foreground mt-1">{descricao}</p>
       </div>
 
+      {/* Abas */}
       <div className="flex gap-2 border-b border-border">
         <button
           onClick={() => setAba("importar")}
@@ -367,6 +385,7 @@ export function DocumentosAdminBase({
         </button>
       </div>
 
+      {/* Importar */}
       {aba === "importar" && (
         <Card className="border-border shadow-sm">
           <CardHeader>
@@ -463,6 +482,7 @@ export function DocumentosAdminBase({
         </Card>
       )}
 
+      {/* Histórico */}
       {aba === "historico" && (
         <div className="space-y-4">
           <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -544,13 +564,8 @@ export function DocumentosAdminBase({
                     const unidade = unidades.find((u) => u.id === doc.unidade_id);
                     const isEditing = editando?.id === doc.id;
                     const dataDoc = doc.data;
-
-                    let dataRetorno = "";
-                    if (tipo === "atestados" && doc.dias_afastamento) {
-                      const dt = new Date(dataDoc + "T00:00:00");
-                      dt.setDate(dt.getDate() + (doc.dias_afastamento || 0));
-                      dataRetorno = formatBR(dt);
-                    }
+                    const dias = (doc as any).dias_afastamento || 0;
+                    const dataRetorno = calcularDataRetorno(dataDoc, dias);
 
                     return (
                       <tr key={doc.id} className="hover:bg-muted/30 transition-colors">
@@ -566,9 +581,10 @@ export function DocumentosAdminBase({
                             />
                           ) : (
                             <>
-                              {formatBR(new Date(dataDoc + "T00:00:00"))}
-                              {tipo === "atestados" && doc.dias_afastamento && (
-                                <div className="text-xs text-muted-foreground">
+                              <div>{formatBR(new Date(dataDoc + "T00:00:00"))}</div>
+                              {/* 🔥 Exibe data de retorno se dias > 0 */}
+                              {dias > 0 && dataRetorno && (
+                                <div className="text-xs text-muted-foreground mt-0.5">
                                   Retorno: {dataRetorno}
                                 </div>
                               )}
@@ -686,7 +702,7 @@ export function DocumentosAdminBase({
                                       setEditForm({
                                         data_documento: doc.data,
                                         observacao: doc.observacao || "",
-                                        dias_afastamento: "",
+                                        dias_afastamento: String(doc.dias_afastamento || ""),
                                         tipo: doc.tipo || "outro",
                                         status: "",
                                         observacao_admin: "",
@@ -728,6 +744,7 @@ export function DocumentosAdminBase({
         </div>
       )}
 
+      {/* Dialog de exclusão */}
       <AlertDialog open={excluirDialogOpen} onOpenChange={setExcluirDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
