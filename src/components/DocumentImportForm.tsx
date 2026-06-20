@@ -366,6 +366,8 @@ if (next !== -1) {
           storage_path: storagePath,
           status: "disponivel",
           nome_pdf: selectedFile!.name,
+          unidade_id: result.unidadeId,
+          aprovado_em: aprovadoEm,
         });
         if (insertError) throw insertError;
 
