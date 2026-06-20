@@ -13,13 +13,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { extractTextFromPDF, renderPdfPageAsImage } from "@/lib/pdf-utils";
 import { adminApi } from "@/lib/admin-api";
-import { PDFDocument } from "pdf-lib"; // 🔥 Nova importação
 
 interface ProfileForMatching {
   id: string;
   nome: string;
   cpf: string;
   matricula: string | null;
+  unidade_id: string | null; // 🔥 Adicionado para filtrar
 }
 
 interface Cargo {
@@ -89,20 +89,10 @@ export function DocumentImportForm() {
 
   const documentType = window.location.pathname.includes("ponto") ? "ponto" : "contracheque";
 
-  // 🔥 Função para extrair página individual do PDF
-  const extractPageFromPdf = async (file: File, pageNumber: number): Promise<Blob> => {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdfDoc = await PDFDocument.load(arrayBuffer);
-    const newPdf = await PDFDocument.create();
-    const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageNumber - 1]);
-    newPdf.addPage(copiedPage);
-    const pdfBytes = await newPdf.save();
-    return new Blob([pdfBytes], { type: "application/pdf" });
-  };
-
   useEffect(() => {
     if (!user) return;
-    supabase.from("profiles").select("id, nome, cpf, matricula").eq("ativo", true).order("nome")
+    // 🔥 Buscar também unidade_id para filtrar
+    supabase.from("profiles").select("id, nome, cpf, matricula, unidade_id").eq("ativo", true).order("nome")
       .then(({ data }) => setProfiles((data ?? []) as ProfileForMatching[]));
     supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome")
       .then(({ data }) => setUnidades(data ?? []));
@@ -306,7 +296,7 @@ export function DocumentImportForm() {
       }).eq("id", authUser.userId);
       if (profErr) throw profErr;
 
-      const newProfile: ProfileForMatching = { id: authUser.userId, nome: novoColabForm.nome, cpf: cleanCpf, matricula: novoColabForm.matricula || null };
+      const newProfile: ProfileForMatching = { id: authUser.userId, nome: novoColabForm.nome, cpf: cleanCpf, matricula: novoColabForm.matricula || null, unidade_id: novoColabForm.unidadeId };
       setProfiles(prev => [...prev, newProfile]);
       setShowNovoColab(false);
       setNovoColabForm({ nome: "", cpf: "", cargo: "", unidadeId: "", senha: "", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", whatsapp: "", perfil_acesso: "colaborador", matricula: "" });
@@ -343,7 +333,6 @@ export function DocumentImportForm() {
     }
   };
 
-  // 🔥 handleAprovarTudo modificado para extrair página individual
   const handleAprovarTudo = async () => {
     const pendentes = pageResults.filter(r => !r.resolvido && !r.ignorado);
     if (pendentes.length > 0) {
@@ -367,12 +356,9 @@ export function DocumentImportForm() {
           continue;
         }
 
-        // 🔥 Extrai apenas a página do colaborador
-        const pagePdfBlob = await extractPageFromPdf(selectedFile!, result.pageNumber);
-
         const storagePath = `documentos/${documentType}/${result.matchedProfile.id}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}_${Date.now()}.pdf`;
         const { error: uploadError } = await supabase.storage.from("documentos")
-          .upload(storagePath, pagePdfBlob, { contentType: "application/pdf", upsert: true });
+          .upload(storagePath, selectedFile!, { contentType: "application/pdf", upsert: true });
         if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
 
         const { error: insertError } = await supabase.from("documentos").insert({
@@ -443,6 +429,7 @@ export function DocumentImportForm() {
     </div>
   );
 
+  // --- Renderização ---
   if (pageResults.length === 0) {
     return (
       <div className="space-y-4">
@@ -579,7 +566,14 @@ export function DocumentImportForm() {
           {!result.resolvido && !result.ignorado && !result.duplicadoId && (
             <div className="space-y-3">
               <div className="space-y-2">
-                <Label className="text-xs">Vincular manualmente a outro colaborador:</Label>
+                <Label className="text-xs">
+                  Vincular manualmente a outro colaborador
+                  {result.unidadeId && (
+                    <span className="ml-1 text-blue-600 font-medium">
+                      (apenas colaboradores da unidade {unidades.find(u => u.id === result.unidadeId)?.nome})
+                    </span>
+                  )}
+                </Label>
                 <div className="flex gap-2">
                   <Select
                     value={manualProfileId}
@@ -589,9 +583,25 @@ export function DocumentImportForm() {
                       <SelectValue placeholder="Selecione o colaborador..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {profiles.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
-                      ))}
+                      {/* 🔥 FILTRO POR UNIDADE */}
+                      {profiles
+                        .filter(p => {
+                          // Se o documento tem unidade, filtra apenas colaboradores da mesma unidade
+                          if (result.unidadeId) {
+                            return p.unidade_id === result.unidadeId;
+                          }
+                          // Se não tem unidade identificada, mostra todos
+                          return true;
+                        })
+                        .map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                        ))}
+                      {/* Caso não haja colaboradores na unidade, exibe mensagem */}
+                      {result.unidadeId && profiles.filter(p => p.unidade_id === result.unidadeId).length === 0 && (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground text-center">
+                          Nenhum colaborador cadastrado nesta unidade
+                        </div>
+                      )}
                     </SelectContent>
                   </Select>
                   <Button
