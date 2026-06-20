@@ -17,7 +17,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2, Eye, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 interface Documento {
@@ -55,13 +62,26 @@ interface DocumentosBaseProps {
   importTitle: string;
 }
 
+// Hook para detectar mobile
+const useMediaQuery = (query: string) => {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    if (media.matches !== matches) setMatches(media.matches);
+    const listener = () => setMatches(media.matches);
+    media.addEventListener('change', listener);
+    return () => media.removeEventListener('change', listener);
+  }, [matches, query]);
+  return matches;
+};
+
 export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: DocumentosBaseProps) {
   const [aba, setAba] = useState<"importar" | "historico">("importar");
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [loading, setLoading] = useState(false);
-
+  
   // Filtros
   const [filtroColab, setFiltroColab] = useState("todos");
   const [filtroMes, setFiltroMes] = useState("todos");
@@ -69,15 +89,22 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [filtroUnidade, setFiltroUnidade] = useState("todos");
 
+  // Estados de edição
   const [editando, setEditando] = useState<string | null>(null);
   const [editMes, setEditMes] = useState("");
   const [editAno, setEditAno] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Estados para exclusão
+  // Estado para popout de detalhes (mobile)
+  const [selectedDoc, setSelectedDoc] = useState<Documento | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+
+  // Exclusão
   const [excluirDialogOpen, setExcluirDialogOpen] = useState(false);
   const [documentoParaExcluir, setDocumentoParaExcluir] = useState<Documento | null>(null);
   const [excluindo, setExcluindo] = useState(false);
+
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -104,24 +131,17 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
 
       if (unitsError) throw unitsError;
 
-      // Cria mapas para acesso rápido
       const profileMap = new Map(profs?.map(p => [p.id, p]) ?? []);
       const unitMap = new Map(units?.map(u => [u.id, u.nome]) ?? []);
 
-      // 🔥 Ordenação: Competência → Unidade → Nome
       const sortedDocs = (docs ?? []).sort((a, b) => {
-        // 1. Competência (ano/mês desc)
         if (a.ano !== b.ano) return b.ano - a.ano;
         if (a.mes !== b.mes) return b.mes - a.mes;
-
-        // 2. Unidade (nome da unidade)
         const unidadeA = profileMap.get(a.colaborador_id)?.unidade_id;
         const unidadeB = profileMap.get(b.colaborador_id)?.unidade_id;
         const nomeUnidadeA = unidadeA ? unitMap.get(unidadeA) || "" : "";
         const nomeUnidadeB = unidadeB ? unitMap.get(unidadeB) || "" : "";
         if (nomeUnidadeA !== nomeUnidadeB) return nomeUnidadeA.localeCompare(nomeUnidadeB);
-
-        // 3. Nome do colaborador
         const nomeA = profileMap.get(a.colaborador_id)?.nome ?? "";
         const nomeB = profileMap.get(b.colaborador_id)?.nome ?? "";
         return nomeA.localeCompare(nomeB);
@@ -147,21 +167,16 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
     [documentos]
   );
 
-  // Filtros combinados
   const filtrados = useMemo(() => {
     return documentos.filter((d) => {
       if (filtroColab !== "todos" && d.colaborador_id !== filtroColab) return false;
       if (filtroMes !== "todos" && d.mes !== parseInt(filtroMes)) return false;
       if (filtroAno !== "todos" && d.ano !== parseInt(filtroAno)) return false;
-
       const profile = profiles.find(p => p.id === d.colaborador_id);
       if (!profile) return false;
-
       if (filtroStatus === "ativo" && !profile.ativo) return false;
       if (filtroStatus === "inativo" && profile.ativo) return false;
-
       if (filtroUnidade !== "todos" && profile.unidade_id !== filtroUnidade) return false;
-
       return true;
     });
   }, [documentos, profiles, filtroColab, filtroMes, filtroAno, filtroStatus, filtroUnidade]);
@@ -190,6 +205,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
       } else {
         toast.success("Competência atualizada!");
         setEditando(null);
+        setIsDetailOpen(false);
         load();
       }
       setBusy(false);
@@ -207,6 +223,11 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
     setEditando(null);
   }, []);
 
+  const openDetail = useCallback((doc: Documento) => {
+    setSelectedDoc(doc);
+    setIsDetailOpen(true);
+  }, []);
+
   // Exclusão
   const handleExcluir = useCallback((doc: Documento) => {
     setDocumentoParaExcluir(doc);
@@ -215,16 +236,13 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
 
   const confirmarExclusao = useCallback(async () => {
     if (!documentoParaExcluir) return;
-
     setExcluindo(true);
     try {
       const { error: storageError } = await supabase.storage
         .from("documentos")
         .remove([documentoParaExcluir.storage_path]);
 
-      if (storageError) {
-        console.warn("Erro ao remover arquivo do storage:", storageError);
-      }
+      if (storageError) console.warn("Erro ao remover arquivo:", storageError);
 
       const { error: dbError } = await supabase
         .from("documentos")
@@ -236,10 +254,11 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
       toast.success("Documento excluído com sucesso!");
       setExcluirDialogOpen(false);
       setDocumentoParaExcluir(null);
+      setIsDetailOpen(false);
       load();
     } catch (error) {
-      console.error("Erro ao excluir documento:", error);
-      toast.error("Erro ao excluir documento", { description: (error as Error).message });
+      console.error("Erro ao excluir:", error);
+      toast.error("Erro ao excluir", { description: (error as Error).message });
     } finally {
       setExcluindo(false);
     }
@@ -293,8 +312,8 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
       {aba === "historico" && (
         <div className="space-y-4">
           {/* Filtros */}
-          <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            <div className="space-y-1">
+          <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="space-y-1 col-span-2 md:col-span-1">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Colaborador</Label>
               <Select value={filtroColab} onValueChange={setFiltroColab}>
                 <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
@@ -306,7 +325,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-1">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Mês</Label>
               <Select value={filtroMes} onValueChange={setFiltroMes}>
@@ -319,7 +337,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-1">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Ano</Label>
               <Select value={filtroAno} onValueChange={setFiltroAno}>
@@ -332,7 +349,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-1">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Status</Label>
               <Select value={filtroStatus} onValueChange={setFiltroStatus}>
@@ -344,8 +360,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="space-y-1">
+            <div className="space-y-1 col-span-2 md:col-span-1">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Unidade</Label>
               <Select value={filtroUnidade} onValueChange={setFiltroUnidade}>
                 <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
@@ -359,7 +374,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
             </div>
           </div>
 
-          {/* Tabela */}
           {loading ? (
             <div className="flex items-center justify-center p-12 text-muted-foreground">
               <Loader2 className="size-6 animate-spin mr-2" /> Carregando...
@@ -368,7 +382,78 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
             <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
               Nenhum documento encontrado com os filtros selecionados.
             </div>
+          ) : isMobile ? (
+            // VERSÃO MOBILE: cards
+            <div className="grid gap-3">
+              {filtrados.map((doc) => {
+                const profile = profiles.find((p) => p.id === doc.colaborador_id);
+                const unidade = profile?.unidade_id ? unidades.find(u => u.id === profile.unidade_id) : null;
+                const isEditing = editando === doc.id;
+                return (
+                  <div
+                    key={doc.id}
+                    className="bg-card border border-border rounded-2xl p-4 space-y-2 shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm truncate">{profile?.nome ?? "—"}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {unidade?.nome && <span>{unidade.nome} • </span>}
+                          {String(doc.mes).padStart(2, "0")}/{doc.ano}
+                        </div>
+                        <Badge
+                          className={
+                            doc.status === "disponivel" || doc.status === "vinculado"
+                              ? "bg-green-100 text-green-700 border-green-200 mt-1"
+                              : "bg-muted text-muted-foreground mt-1"
+                          }
+                        >
+                          {doc.status}
+                        </Badge>
+                        {!profile?.ativo && (
+                          <Badge variant="outline" className="ml-1 text-[10px] bg-red-50 text-red-600 border-red-200 mt-1">
+                            Inativo
+                          </Badge>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 shrink-0"
+                        onClick={() => openDetail(doc)}
+                      >
+                        <ChevronRight className="size-4" />
+                      </Button>
+                    </div>
+                    {isEditing ? (
+                      <div className="flex items-center gap-2 mt-2">
+                        <Select value={editMes} onValueChange={setEditMes}>
+                          <SelectTrigger className="w-[100px] h-8"><SelectValue placeholder="Mês" /></SelectTrigger>
+                          <SelectContent>
+                            {MESES.map((m, i) => <SelectItem key={i+1} value={String(i+1)}>{m}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          className="w-[90px] h-8"
+                          placeholder="Ano"
+                          value={editAno}
+                          onChange={(e) => setEditAno(e.target.value)}
+                          maxLength={4}
+                        />
+                        <Button size="icon" className="size-8" onClick={() => handleEditSave(doc.id)} disabled={busy}>
+                          {busy ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+                        </Button>
+                        <Button size="icon" variant="ghost" className="size-8" onClick={cancelEditing}>
+                          <X className="size-3" />
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
           ) : (
+            // VERSÃO DESKTOP: tabela
             <div className="bg-card border border-border rounded-2xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 border-b border-border">
@@ -400,36 +485,16 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                           {editando === doc.id ? (
                             <div className="flex items-center gap-2">
                               <Select value={editMes} onValueChange={setEditMes}>
-                                <SelectTrigger className="w-[100px] h-8">
-                                  <SelectValue placeholder="Mês" />
-                                </SelectTrigger>
+                                <SelectTrigger className="w-[100px] h-8"><SelectValue placeholder="Mês" /></SelectTrigger>
                                 <SelectContent>
-                                  {MESES.map((m, i) => (
-                                    <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
-                                  ))}
+                                  {MESES.map((m, i) => <SelectItem key={i+1} value={String(i+1)}>{m}</SelectItem>)}
                                 </SelectContent>
                               </Select>
-                              <Input
-                                className="w-[90px] h-8"
-                                placeholder="Ano"
-                                value={editAno}
-                                onChange={(e) => setEditAno(e.target.value)}
-                                maxLength={4}
-                              />
-                              <Button
-                                size="icon"
-                                className="size-8"
-                                onClick={() => handleEditSave(doc.id)}
-                                disabled={busy}
-                              >
+                              <Input className="w-[90px] h-8" placeholder="Ano" value={editAno} onChange={(e) => setEditAno(e.target.value)} maxLength={4} />
+                              <Button size="icon" className="size-8" onClick={() => handleEditSave(doc.id)} disabled={busy}>
                                 {busy ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
                               </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="size-8"
-                                onClick={cancelEditing}
-                              >
+                              <Button size="icon" variant="ghost" className="size-8" onClick={cancelEditing}>
                                 <X className="size-3" />
                               </Button>
                             </div>
@@ -505,21 +570,112 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
         </div>
       )}
 
-      {/* Dialog de confirmação de exclusão */}
+      {/* Dialog de detalhes (mobile) */}
+      <Dialog open={isDetailOpen} onOpenChange={(o) => !o && setIsDetailOpen(false)}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Detalhes do Documento</DialogTitle>
+          </DialogHeader>
+          {selectedDoc && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="text-muted-foreground">Colaborador</div>
+                <div className="font-medium">{profiles.find(p => p.id === selectedDoc.colaborador_id)?.nome ?? "—"}</div>
+                
+                <div className="text-muted-foreground">Competência</div>
+                <div className="font-medium">{String(selectedDoc.mes).padStart(2, "0")}/{selectedDoc.ano}</div>
+                
+                <div className="text-muted-foreground">Unidade</div>
+                <div className="font-medium">
+                  {profiles.find(p => p.id === selectedDoc.colaborador_id)?.unidade_id 
+                    ? unidades.find(u => u.id === profiles.find(p => p.id === selectedDoc.colaborador_id)?.unidade_id)?.nome 
+                    : "—"}
+                </div>
+                
+                <div className="text-muted-foreground">Status</div>
+                <div>
+                  <Badge
+                    className={
+                      selectedDoc.status === "disponivel" || selectedDoc.status === "vinculado"
+                        ? "bg-green-100 text-green-700 border-green-200"
+                        : "bg-muted text-muted-foreground"
+                    }
+                  >
+                    {selectedDoc.status}
+                  </Badge>
+                </div>
+
+                <div className="text-muted-foreground">Arquivo</div>
+                <div className="font-medium truncate">{selectedDoc.nome_pdf ?? "—"}</div>
+
+                <div className="text-muted-foreground">Aprovado em</div>
+                <div className="font-medium">
+                  {selectedDoc.aprovado_em
+                    ? new Date(selectedDoc.aprovado_em).toLocaleDateString("pt-BR") +
+                      " " +
+                      new Date(selectedDoc.aprovado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+                    : "—"}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-2 border-t">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => {
+                    handleDownload(selectedDoc);
+                    setIsDetailOpen(false);
+                  }}
+                >
+                  <Download className="size-4 mr-1" /> Baixar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => {
+                    setEditando(selectedDoc.id);
+                    setEditMes(String(selectedDoc.mes));
+                    setEditAno(String(selectedDoc.ano));
+                    setIsDetailOpen(false);
+                  }}
+                >
+                  <Pencil className="size-4 mr-1" /> Editar
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => {
+                    handleExcluir(selectedDoc);
+                    setIsDetailOpen(false);
+                  }}
+                >
+                  <Trash2 className="size-4 mr-1" /> Excluir
+                </Button>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsDetailOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de exclusão */}
       <AlertDialog open={excluirDialogOpen} onOpenChange={setExcluirDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir documento?</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir este documento?
-              <br />
-              <br />
+              <br /><br />
               <strong>Colaborador:</strong> {profiles.find(p => p.id === documentoParaExcluir?.colaborador_id)?.nome ?? "—"}
               <br />
               <strong>Competência:</strong> {documentoParaExcluir ? `${String(documentoParaExcluir.mes).padStart(2, "0")}/${documentoParaExcluir.ano}` : ""}
-              <br />
-              <br />
-              Esta ação <strong>não pode ser desfeita</strong>. O arquivo será removido do storage e o registro será excluído do banco de dados.
+              <br /><br />
+              Esta ação <strong>não pode ser desfeita</strong>.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
