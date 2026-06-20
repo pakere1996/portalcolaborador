@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, History, Download, Pencil, Trash2, Loader2, X } from "lucide-react";
+import { Upload, History, Download, Pencil, Trash2, Loader2, X, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { formatBR } from "@/lib/folga-rules";
 import {
@@ -36,7 +36,7 @@ interface DocumentoAdmin {
   id: string;
   colaborador_id: string;
   unidade_id: string;
-  data: string; // nome genérico, será mapeado para o campo real
+  data: string; // campo unificado para exibição
   observacao: string | null;
   storage_path: string;
   storage_type: string;
@@ -48,7 +48,7 @@ interface DocumentoAdmin {
   observacao_admin?: string | null;
   respondido_em?: string | null;
   tipo?: string | null;
-  [key: string]: any; // para acessar campos dinâmicos
+  [key: string]: any;
 }
 
 interface DocumentosAdminBaseProps {
@@ -130,7 +130,6 @@ export function DocumentosAdminBase({
     setLoading(true);
     try {
       const table = tipo === "atestados" ? "atestados" : "registros_disciplinares";
-      // Usa campoData para ordenação
       const { data: docs, error: docsError } = await supabase
         .from(table)
         .select("*")
@@ -336,8 +335,434 @@ export function DocumentosAdminBase({
     }
   }, [tipo]);
 
-  // Restante do JSX (tabela) – precisa usar d.data para exibir a data.
-  // O restante é igual ao que já temos, apenas na célula de data use `d.data`.
-  
-  // [Código do JSX omitido por brevidade, mas mantenha a tabela e filtros]
+  return (
+    <div className="max-w-6xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+          {icone} {titulo}
+        </h1>
+        <p className="text-muted-foreground mt-1">{descricao}</p>
+      </div>
+
+      <div className="flex gap-2 border-b border-border">
+        <button
+          onClick={() => setAba("importar")}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            aba === "importar"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Upload className="size-4" /> Importar
+        </button>
+        <button
+          onClick={() => { setAba("historico"); load(); }}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            aba === "historico"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <History className="size-4" /> Histórico
+        </button>
+      </div>
+
+      {aba === "importar" && (
+        <Card className="border-border shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Upload className="size-5 text-primary" /> {importTitle}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Unidade */}
+              <div className="space-y-2">
+                <Label>Unidade *</Label>
+                <Select
+                  value={form.unidade_id}
+                  onValueChange={(value) => setForm({ ...form, unidade_id: value, colaborador_id: "" })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
+                  <SelectContent>
+                    {unidades.map((u) => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Colaborador */}
+              <div className="space-y-2">
+                <Label>Colaborador *</Label>
+                <Select
+                  value={form.colaborador_id}
+                  onValueChange={(value) => setForm({ ...form, colaborador_id: value })}
+                  disabled={!form.unidade_id}
+                >
+                  <SelectTrigger><SelectValue placeholder="Selecione o colaborador" /></SelectTrigger>
+                  <SelectContent>
+                    {colaboradoresFiltrados.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                    ))}
+                    {colaboradoresFiltrados.length === 0 && (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground text-center">
+                        Nenhum colaborador nesta unidade
+                      </div>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Data do Documento */}
+              <div className="space-y-2">
+                <Label>Data do Documento *</Label>
+                <Input
+                  type="date"
+                  value={form.data_documento}
+                  onChange={(e) => setForm({ ...form, data_documento: e.target.value })}
+                />
+              </div>
+
+              {/* Campos extras */}
+              {camposExtras && camposExtras(form, setForm, uploading)}
+
+              {/* Arquivo */}
+              <div className="space-y-2">
+                <Label>Arquivo (PDF ou Imagem) *</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.webp"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setForm({ ...form, arquivo: file });
+                    }}
+                  />
+                  {form.arquivo && (
+                    <Button variant="ghost" size="sm" onClick={() => setForm({ ...form, arquivo: null })}>
+                      <X className="size-4" />
+                    </Button>
+                  )}
+                </div>
+                {form.arquivo && (
+                  <p className="text-xs text-muted-foreground">
+                    {form.arquivo.name} ({(form.arquivo.size / 1024).toFixed(1)} KB)
+                  </p>
+                )}
+              </div>
+
+              {/* Observações */}
+              <div className="space-y-2">
+                <Label>Observações</Label>
+                <Textarea
+                  rows={3}
+                  value={form.observacao}
+                  onChange={(e) => setForm({ ...form, observacao: e.target.value })}
+                  placeholder="Observações adicionais (opcional)"
+                />
+              </div>
+
+              <Button onClick={handleUpload} disabled={uploading} className="w-full">
+                {uploading ? <><Loader2 className="size-4 mr-2 animate-spin" /> Importando...</> : <><Upload className="size-4 mr-2" /> Importar</>}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {aba === "historico" && (
+        <div className="space-y-4">
+          {/* Filtros */}
+          <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs uppercase text-muted-foreground font-bold">Unidade</Label>
+              <Select value={filtroUnidade} onValueChange={setFiltroUnidade}>
+                <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas</SelectItem>
+                  {unidades.map((u) => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs uppercase text-muted-foreground font-bold">Colaborador</Label>
+              <Select value={filtroColab} onValueChange={setFiltroColab}>
+                <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  {profiles.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs uppercase text-muted-foreground font-bold">Data Início</Label>
+              <Input type="date" value={filtroDataInicio} onChange={(e) => setFiltroDataInicio(e.target.value)} />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs uppercase text-muted-foreground font-bold">Data Fim</Label>
+              <Input type="date" value={filtroDataFim} onChange={(e) => setFiltroDataFim(e.target.value)} />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs uppercase text-muted-foreground font-bold">
+                {tipo === "atestados" ? "Status" : "Tipo"}
+              </Label>
+              <Select value={filtroExtra} onValueChange={setFiltroExtra}>
+                <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectContent>
+                  {filtroExtraOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Tabela */}
+          {loading ? (
+            <div className="flex items-center justify-center p-12 text-muted-foreground">
+              <Loader2 className="size-6 animate-spin mr-2" /> Carregando...
+            </div>
+          ) : filtrados.length === 0 ? (
+            <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
+              Nenhum documento encontrado.
+            </div>
+          ) : (
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 border-b border-border">
+                  <tr>
+                    <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground">Colaborador</th>
+                    <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground">Unidade</th>
+                    <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden md:table-cell">Data</th>
+                    <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden lg:table-cell">Observações</th>
+                    <th className="text-center p-4 font-bold uppercase text-[10px] text-muted-foreground">
+                      {tipo === "atestados" ? "Status" : "Tipo"}
+                    </th>
+                    {colunasExtras && <th className="text-center p-4 font-bold uppercase text-[10px] text-muted-foreground">Detalhes</th>}
+                    <th className="text-center p-4 font-bold uppercase text-[10px] text-muted-foreground">Arquivo</th>
+                    <th className="text-right p-4 font-bold uppercase text-[10px] text-muted-foreground">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filtrados.map((doc) => {
+                    const profile = profiles.find((p) => p.id === doc.colaborador_id);
+                    const unidade = unidades.find((u) => u.id === doc.unidade_id);
+                    const isEditing = editando?.id === doc.id;
+
+                    // 🔥 Data de retorno para atestados
+                    let dataRetorno = "";
+                    if (tipo === "atestados" && doc.dias_afastamento) {
+                      const dt = new Date(doc.data + "T00:00:00");
+                      dt.setDate(dt.getDate() + (doc.dias_afastamento || 0));
+                      dataRetorno = formatBR(dt);
+                    }
+
+                    return (
+                      <tr key={doc.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="p-4 font-medium">{profile?.nome ?? "—"}</td>
+                        <td className="p-4 text-muted-foreground">{unidade?.nome ?? "—"}</td>
+                        <td className="p-4 hidden md:table-cell">
+                          {isEditing ? (
+                            <Input
+                              type="date"
+                              value={editForm.data_documento}
+                              onChange={(e) => setEditForm({ ...editForm, data_documento: e.target.value })}
+                              className="w-auto"
+                            />
+                          ) : (
+                            <>
+                              {formatBR(new Date(doc.data + "T00:00:00"))}
+                              {tipo === "atestados" && doc.dias_afastamento && (
+                                <div className="text-xs text-muted-foreground">
+                                  Retorno: {dataRetorno}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </td>
+                        <td className="p-4 hidden lg:table-cell">
+                          {isEditing ? (
+                            <Input
+                              value={editForm.observacao}
+                              onChange={(e) => setEditForm({ ...editForm, observacao: e.target.value })}
+                              className="w-auto"
+                              placeholder="Observações"
+                            />
+                          ) : (
+                            <span className="text-xs truncate max-w-[150px] block">
+                              {doc.observacao || "—"}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-4 text-center">
+                          {isEditing ? (
+                            <div className="space-y-1">
+                              {tipo === "atestados" ? (
+                                <select
+                                  className="w-full rounded-md border border-border bg-background px-3 py-1 text-sm"
+                                  value={editForm.status || "pendente"}
+                                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                                >
+                                  <option value="pendente">Pendente</option>
+                                  <option value="aprovado">Aprovado</option>
+                                  <option value="rejeitado">Rejeitado</option>
+                                </select>
+                              ) : (
+                                <select
+                                  className="w-full rounded-md border border-border bg-background px-3 py-1 text-sm"
+                                  value={editForm.tipo || "outro"}
+                                  onChange={(e) => setEditForm({ ...editForm, tipo: e.target.value })}
+                                >
+                                  <option value="advertencia">Advertência</option>
+                                  <option value="suspensao">Suspensão</option>
+                                  <option value="justa_causa">Justa Causa</option>
+                                  <option value="outro">Outro</option>
+                                </select>
+                              )}
+                              {editCamposExtras && editCamposExtras(editForm, setEditForm)}
+                            </div>
+                          ) : (
+                            <>
+                              {tipo === "atestados" ? (
+                                <Badge className={
+                                  doc.status === "aprovado" ? "bg-green-100 text-green-700 border-green-200" :
+                                  doc.status === "rejeitado" ? "bg-red-100 text-red-700 border-red-200" :
+                                  "bg-yellow-100 text-yellow-700 border-yellow-200"
+                                }>
+                                  {formatarStatus ? formatarStatus(doc.status || "pendente") : doc.status || "pendente"}
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-blue-100 text-blue-700 border-blue-200">
+                                  {doc.tipo || "outro"}
+                                </Badge>
+                              )}
+                            </>
+                          )}
+                        </td>
+                        {colunasExtras && (
+                          <td className="p-4 text-center">
+                            {isEditing ? (
+                              editCamposExtras ? editCamposExtras(editForm, setEditForm) : null
+                            ) : (
+                              colunasExtras(doc)
+                            )}
+                          </td>
+                        )}
+                        <td className="p-4 text-center">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-blue-600"
+                            onClick={() => handleDownload(doc)}
+                          >
+                            <FileText className="size-4 mr-1" /> {doc.storage_type === "pdf" ? "PDF" : "Imagem"}
+                          </Button>
+                        </td>
+                        <td className="p-4 text-right whitespace-nowrap">
+                          <div className="flex justify-end gap-1">
+                            {isEditing ? (
+                              <>
+                                <Button variant="default" size="sm" onClick={handleEditSave} disabled={editBusy}>
+                                  {editBusy ? <Loader2 className="size-4 animate-spin" /> : "Salvar"}
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => setEditando(null)}>
+                                  Cancelar
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8"
+                                  title="Editar"
+                                  onClick={() => {
+                                    setEditando(doc);
+                                    if (tipo === "atestados") {
+                                      setEditForm({
+                                        data_documento: doc.data || "",
+                                        observacao: doc.observacao || "",
+                                        dias_afastamento: String(doc.dias_afastamento || ""),
+                                        tipo: "",
+                                        status: doc.status || "pendente",
+                                        observacao_admin: doc.observacao_admin || "",
+                                      });
+                                    } else {
+                                      setEditForm({
+                                        data_documento: doc.data || "",
+                                        observacao: doc.observacao || "",
+                                        dias_afastamento: "",
+                                        tipo: doc.tipo || "outro",
+                                        status: "",
+                                        observacao_admin: "",
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <Pencil className="size-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8"
+                                  title="Baixar"
+                                  onClick={() => handleDownload(doc)}
+                                >
+                                  <Download className="size-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                  title="Excluir"
+                                  onClick={() => handleExcluir(doc)}
+                                >
+                                  <Trash2 className="size-4" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      <AlertDialog open={excluirDialogOpen} onOpenChange={setExcluirDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir documento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este documento?
+              <br /><br />
+              <strong>Colaborador:</strong> {profiles.find(p => p.id === documentoParaExcluir?.colaborador_id)?.nome ?? "—"}
+              <br />
+              <strong>Data:</strong> {documentoParaExcluir ? formatBR(new Date(documentoParaExcluir.data + "T00:00:00")) : ""}
+              <br /><br />
+              Esta ação <strong>não pode ser desfeita</strong>.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={excluindo}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmarExclusao}
+              disabled={excluindo}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {excluindo ? <Loader2 className="size-4 mr-2 animate-spin" /> : null}
+              {excluindo ? "Excluindo..." : "Sim, excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
 }
