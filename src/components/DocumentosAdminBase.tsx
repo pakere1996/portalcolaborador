@@ -346,11 +346,11 @@ export function DocumentosAdminBase({
 
   // Função auxiliar para calcular data de retorno
   const calcularDataRetorno = (dataDoc: string, dias: number) => {
-    if (!dataDoc || !dias || dias <= 0) return null;
-    const dt = new Date(dataDoc + "T00:00:00");
-    dt.setDate(dt.getDate() + dias);
-    return formatBR(dt);
-  };
+  if (!dataDoc || !dias || dias <= 0) return null;
+  const dt = new Date(dataDoc + 'T00:00:00');
+  dt.setDate(dt.getDate() + dias);
+  return formatBR(dt);
+};
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
