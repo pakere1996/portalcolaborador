@@ -199,6 +199,11 @@ export default function BloqueiosPage() {
     }
   };
 
+  // Helper para nome do mês
+  const getMonthName = (month: number) => {
+    return new Date(2000, month - 1, 1).toLocaleString('pt-BR', { month: 'long' });
+  };
+
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -226,7 +231,7 @@ export default function BloqueiosPage() {
           <select value={mesFiltro} onChange={(e) => setMesFiltro(e.target.value)} className="bg-input border border-border rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary w-[180px]">
             <option value="all">Todos os meses</option>
             {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-              <option key={m} value={m}>{m.toString().padStart(2, '0')}</option>
+              <option key={m} value={m}>{getMonthName(m)}</option>
             ))}
           </select>
         </div>
@@ -258,9 +263,9 @@ export default function BloqueiosPage() {
                       <div className="font-semibold">{r.descricao ?? ""}</div>
                       <div className="text-sm text-muted-foreground flex items-center gap-4 flex-wrap">
                         <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">{getTipoLabel(r.tipo ?? "")}</span>
-                        {r.tipo === "fixa_anual" && <span>Dia {r.dia}/{String(r.mes).padStart(2, '0')}</span>}
-                        {r.tipo === "dinamica" && <span>{r.ordinal}º dia {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"][r.dia_semana ?? 0]} do mês {r.mes}</span>}
-                        {r.tipo === "pos_pagamento" && <span>1º Sábado após dia 5 do mês {r.mes}</span>}
+                        {r.tipo === "fixa_anual" && <span>Dia {r.dia} de {getMonthName(r.mes ?? 1)}</span>}
+                        {r.tipo === "dinamica" && <span>{["Primeiro","Segundo","Terceiro","Quarto","Quinto"][(r.ordinal ?? 1) - 1]} {["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"][r.dia_semana ?? 0]} de {getMonthName(r.mes ?? 1)}</span>}
+                        {r.tipo === "pos_pagamento" && <span>1º Sábado após dia 5 de {getMonthName(r.mes ?? 1)}</span>}
                         {!r.ativo && <span className="text-red-500 font-medium">Inativa</span>}
                       </div>
                     </div>
@@ -381,19 +386,68 @@ export default function BloqueiosPage() {
             </div>
             {regraForm.tipo === "fixa_anual" && (
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2"><Label>Mês (1-12) *</Label><Input type="number" min={1} max={12} value={regraForm.mes ?? ""} onChange={(e) => setRegraForm({ ...regraForm, mes: Number(e.target.value) })} /></div>
-                <div className="space-y-2"><Label>Dia (1-31) *</Label><Input type="number" min={1} max={31} value={regraForm.dia ?? ""} onChange={(e) => setRegraForm({ ...regraForm, dia: Number(e.target.value) })} /></div>
+                <div className="space-y-2">
+                  <Label>Mês *</Label>
+                  <select value={regraForm.mes ?? ""} onChange={(e) => setRegraForm({ ...regraForm, mes: Number(e.target.value) })} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <option value="">Selecione</option>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                      <option key={m} value={m}>{getMonthName(m)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Dia (1-31) *</Label>
+                  <Input type="number" min={1} max={31} value={regraForm.dia ?? ""} onChange={(e) => setRegraForm({ ...regraForm, dia: Number(e.target.value) })} />
+                </div>
               </div>
             )}
             {regraForm.tipo === "dinamica" && (
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2"><Label>Mês (1-12) *</Label><Input type="number" min={1} max={12} value={regraForm.mes ?? ""} onChange={(e) => setRegraForm({ ...regraForm, mes: Number(e.target.value) })} /></div>
-                <div className="space-y-2"><Label>Dia da Semana (0=Dom...6=Sáb) *</Label><Input type="number" min={0} max={6} value={regraForm.dia_semana ?? ""} onChange={(e) => setRegraForm({ ...regraForm, dia_semana: Number(e.target.value) })} /></div>
-                <div className="space-y-2"><Label>Ordinal (1=primeiro, 2=segundo...) *</Label><Input type="number" min={1} max={5} value={regraForm.ordinal ?? ""} onChange={(e) => setRegraForm({ ...regraForm, ordinal: Number(e.target.value) })} /></div>
+                <div className="space-y-2">
+                  <Label>Mês *</Label>
+                  <select value={regraForm.mes ?? ""} onChange={(e) => setRegraForm({ ...regraForm, mes: Number(e.target.value) })} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <option value="">Selecione</option>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                      <option key={m} value={m}>{getMonthName(m)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Dia da Semana *</Label>
+                  <select value={regraForm.dia_semana ?? ""} onChange={(e) => setRegraForm({ ...regraForm, dia_semana: Number(e.target.value) })} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <option value="">Selecione</option>
+                    <option value="0">Domingo</option>
+                    <option value="1">Segunda-feira</option>
+                    <option value="2">Terça-feira</option>
+                    <option value="3">Quarta-feira</option>
+                    <option value="4">Quinta-feira</option>
+                    <option value="5">Sexta-feira</option>
+                    <option value="6">Sábado</option>
+                  </select>
+                </div>
+                <div className="col-span-2 space-y-2">
+                  <Label>Ordinal *</Label>
+                  <select value={regraForm.ordinal ?? ""} onChange={(e) => setRegraForm({ ...regraForm, ordinal: Number(e.target.value) })} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <option value="">Selecione</option>
+                    <option value="1">Primeiro</option>
+                    <option value="2">Segundo</option>
+                    <option value="3">Terceiro</option>
+                    <option value="4">Quarto</option>
+                    <option value="5">Quinto</option>
+                  </select>
+                </div>
               </div>
             )}
             {regraForm.tipo === "pos_pagamento" && (
-              <div className="space-y-2"><Label>Mês (1-12) *</Label><Input type="number" min={1} max={12} value={regraForm.mes ?? ""} onChange={(e) => setRegraForm({ ...regraForm, mes: Number(e.target.value) })} /></div>
+              <div className="space-y-2">
+                <Label>Mês *</Label>
+                <select value={regraForm.mes ?? ""} onChange={(e) => setRegraForm({ ...regraForm, mes: Number(e.target.value) })} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <option value="">Selecione</option>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                    <option key={m} value={m}>{getMonthName(m)}</option>
+                  ))}
+                </select>
+              </div>
             )}
             <div className="flex items-center gap-2">
               <input type="checkbox" id="ativo" checked={regraForm.ativo ?? true} onChange={(e) => setRegraForm({ ...regraForm, ativo: e.target.checked })} className="size-4" />
