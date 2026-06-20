@@ -17,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2 } from "lucide-react";
+import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2, Search } from "lucide-react";
 import { toast } from "sonner";
 
 interface Documento {
@@ -56,13 +56,15 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
   const [filtroColab, setFiltroColab] = useState("todos");
   const [filtroMes, setFiltroMes] = useState("todos");
   const [filtroAno, setFiltroAno] = useState("todos");
+  const [buscaNome, setBuscaNome] = useState(""); // 🔥 NOVO: busca textual
   const [editando, setEditando] = useState<string | null>(null);
   const [editMes, setEditMes] = useState("");
   const [editAno, setEditAno] = useState("");
   const [busy, setBusy] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  const [excluirDialogOpen, setExcluirDialogOpen] = useState(false);
   const [documentoParaExcluir, setDocumentoParaExcluir] = useState<Documento | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -111,14 +113,26 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
     [documentos]
   );
 
+  // 🔥 Filtro combinado: select + busca textual
   const filtrados = useMemo(() => {
+    const buscaLower = buscaNome.toLowerCase().trim();
+    
     return documentos.filter((d) => {
+      // Filtros por select
       if (filtroColab !== "todos" && d.colaborador_id !== filtroColab) return false;
       if (filtroMes !== "todos" && d.mes !== parseInt(filtroMes)) return false;
       if (filtroAno !== "todos" && d.ano !== parseInt(filtroAno)) return false;
+
+      // 🔥 Busca textual por nome do colaborador
+      if (buscaLower) {
+        const profile = profiles.find(p => p.id === d.colaborador_id);
+        const nomeColaborador = profile?.nome?.toLowerCase() ?? "";
+        if (!nomeColaborador.includes(buscaLower)) return false;
+      }
+
       return true;
     });
-  }, [documentos, filtroColab, filtroMes, filtroAno]);
+  }, [documentos, filtroColab, filtroMes, filtroAno, buscaNome, profiles]);
 
   const handleDownload = useCallback(async (doc: Documento) => {
     const { data } = await supabase.storage
@@ -161,27 +175,24 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
     setEditando(null);
   }, []);
 
-  // 🔥 Função de exclusão
-  const confirmDelete = useCallback((doc: Documento) => {
+  const handleExcluir = useCallback((doc: Documento) => {
     setDocumentoParaExcluir(doc);
-    setDeleteDialogOpen(true);
+    setExcluirDialogOpen(true);
   }, []);
 
-  const handleDelete = useCallback(async () => {
+  const confirmarExclusao = useCallback(async () => {
     if (!documentoParaExcluir) return;
-    setDeleting(true);
+
+    setExcluindo(true);
     try {
-      // 1. Remove o arquivo do storage
       const { error: storageError } = await supabase.storage
         .from("documentos")
         .remove([documentoParaExcluir.storage_path]);
 
       if (storageError) {
-        console.error("Erro ao remover arquivo:", storageError);
-        // Continua mesmo se falhar a remoção do storage (pode já ter sido removido)
+        console.warn("Erro ao remover arquivo do storage:", storageError);
       }
 
-      // 2. Remove o registro do banco
       const { error: dbError } = await supabase
         .from("documentos")
         .delete()
@@ -189,15 +200,15 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
 
       if (dbError) throw dbError;
 
-      toast.success(`Documento de ${documentoParaExcluir.mes}/${documentoParaExcluir.ano} excluído com sucesso!`);
-      setDeleteDialogOpen(false);
+      toast.success("Documento excluído com sucesso!");
+      setExcluirDialogOpen(false);
       setDocumentoParaExcluir(null);
-      load(); // recarrega a lista
+      load();
     } catch (error) {
       console.error("Erro ao excluir documento:", error);
       toast.error("Erro ao excluir documento", { description: (error as Error).message });
     } finally {
-      setDeleting(false);
+      setExcluindo(false);
     }
   }, [documentoParaExcluir, load]);
 
@@ -248,7 +259,23 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
 
       {aba === "historico" && (
         <div className="space-y-4">
-          <div className="bg-card border border-border rounded-2xl p-4 flex flex-wrap gap-3">
+          {/* 🔥 Filtros melhorados com busca textual */}
+          <div className="bg-card border border-border rounded-2xl p-4 flex flex-wrap gap-3 items-end">
+            {/* Busca por nome */}
+            <div className="space-y-1 flex-1 min-w-[200px]">
+              <Label className="text-xs uppercase text-muted-foreground font-bold">Buscar por nome</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <Input
+                  placeholder="Digite o nome do colaborador..."
+                  value={buscaNome}
+                  onChange={(e) => setBuscaNome(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            {/* Filtro por colaborador (select) */}
             <div className="space-y-1 flex-1 min-w-[180px]">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Colaborador</Label>
               <Select value={filtroColab} onValueChange={setFiltroColab}>
@@ -261,6 +288,8 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Filtro por mês */}
             <div className="space-y-1 w-[140px]">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Mês</Label>
               <Select value={filtroMes} onValueChange={setFiltroMes}>
@@ -273,6 +302,8 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Filtro por ano */}
             <div className="space-y-1 w-[120px]">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Ano</Label>
               <Select value={filtroAno} onValueChange={setFiltroAno}>
@@ -285,8 +316,24 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Botão para limpar filtros */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setBuscaNome("");
+                setFiltroColab("todos");
+                setFiltroMes("todos");
+                setFiltroAno("todos");
+              }}
+              className="h-10"
+            >
+              Limpar filtros
+            </Button>
           </div>
 
+          {/* Tabela de resultados */}
           {loading ? (
             <div className="flex items-center justify-center p-12 text-muted-foreground">
               <Loader2 className="size-6 animate-spin mr-2" /> Carregando...
@@ -294,6 +341,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
           ) : filtrados.length === 0 ? (
             <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
               Nenhum documento encontrado.
+              {buscaNome && ` (busca por "${buscaNome}")`}
             </div>
           ) : (
             <div className="bg-card border border-border rounded-2xl overflow-hidden">
@@ -404,7 +452,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                               size="icon"
                               className="size-8 text-red-500 hover:text-red-700 hover:bg-red-50"
                               title="Excluir documento"
-                              onClick={() => confirmDelete(doc)}
+                              onClick={() => handleExcluir(doc)}
                             >
                               <Trash2 className="size-4" />
                             </Button>
@@ -420,42 +468,32 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
         </div>
       )}
 
-      {/* 🔥 Dialog de confirmação de exclusão */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      {/* Dialog de confirmação de exclusão */}
+      <AlertDialog open={excluirDialogOpen} onOpenChange={setExcluirDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir documento?</AlertDialogTitle>
             <AlertDialogDescription>
-              {documentoParaExcluir && (
-                <>
-                  <p className="mb-2">
-                    Você está prestes a excluir o documento de <strong>
-                      {profiles.find(p => p.id === documentoParaExcluir.colaborador_id)?.nome ?? "Colaborador"}
-                    </strong> referente à competência <strong>
-                      {String(documentoParaExcluir.mes).padStart(2, "0")}/{documentoParaExcluir.ano}
-                    </strong>.
-                  </p>
-                  <p className="text-destructive font-medium">
-                    Esta ação é irreversível. O arquivo será removido permanentemente do sistema.
-                  </p>
-                </>
-              )}
+              Tem certeza que deseja excluir este documento?
+              <br />
+              <br />
+              <strong>Colaborador:</strong> {profiles.find(p => p.id === documentoParaExcluir?.colaborador_id)?.nome ?? "—"}
+              <br />
+              <strong>Competência:</strong> {documentoParaExcluir ? `${String(documentoParaExcluir.mes).padStart(2, "0")}/${documentoParaExcluir.ano}` : ""}
+              <br />
+              <br />
+              Esta ação <strong>não pode ser desfeita</strong>. O arquivo será removido do storage e o registro será excluído do banco de dados.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={excluindo}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDelete}
-              disabled={deleting}
-              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={confirmarExclusao}
+              disabled={excluindo}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleting ? (
-                <>
-                  <Loader2 className="size-4 mr-2 animate-spin" /> Excluindo...
-                </>
-              ) : (
-                "Sim, excluir documento"
-              )}
+              {excluindo ? <Loader2 className="size-4 mr-2 animate-spin" /> : null}
+              {excluindo ? "Excluindo..." : "Sim, excluir"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
