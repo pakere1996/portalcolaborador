@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +33,20 @@ const blankEditForm = {
   data_demissao: "",
   tipo_vinculo: "CLT",
   possui_folha_ponto: false,
+};
+
+// 🔥 Validação de campos obrigatórios
+const validateForm = (form: typeof blankEditForm) => {
+  const errors: string[] = [];
+  
+  if (!form.nome.trim()) errors.push("Nome é obrigatório");
+  if (!form.cpf.trim() || !isValidCPFLength(onlyDigits(form.cpf))) errors.push("CPF inválido");
+  if (!form.cargo.trim()) errors.push("Cargo é obrigatório");
+  if (!form.unidadeId || form.unidadeId === "none") errors.push("Unidade é obrigatória");
+  if (!form.dataAdmissao) errors.push("Data de Admissão é obrigatória");
+  if (!form.dataNascimento) errors.push("Data de Nascimento é obrigatória");
+  
+  return errors;
 };
 
 export default function Colaboradores() {
@@ -91,19 +105,58 @@ export default function Colaboradores() {
 
   useEffect(() => { loadData(); }, []);
 
-  const filteredProfiles = profiles.filter(p => {
-    const matchesSearch = p.nome.toLowerCase().includes(search.toLowerCase()) || p.cpf.includes(search.replace(/\D/g, ""));
-    const matchesUnidade = filtroUnidade === "all" || p.unidade_id === filtroUnidade;
-    const matchesStatus = filtroStatus === "all" || (filtroStatus === "ativo" ? p.ativo : !p.ativo);
-    const matchesCargo = filtroCargo === "all" || p.cargo === filtroCargo;
-    return matchesSearch && matchesUnidade && matchesStatus && matchesCargo;
-  });
+  // 🔥 Mapa de unidade para acesso rápido
+  const unidadeMap = useMemo(() => {
+    const map = new Map<string, string>();
+    unidades.forEach(u => map.set(u.id, u.nome));
+    return map;
+  }, [unidades]);
+
+  // 🔥 Função de ordenação: Unidade (asc) → Status (ativo primeiro) → Nome (asc)
+  const sortProfiles = (list: Profile[]) => {
+    return [...list].sort((a, b) => {
+      // Primeiro por Unidade (nome)
+      const nomeUnidadeA = unidadeMap.get(a.unidade_id || '') || '';
+      const nomeUnidadeB = unidadeMap.get(b.unidade_id || '') || '';
+      if (nomeUnidadeA !== nomeUnidadeB) {
+        return nomeUnidadeA.localeCompare(nomeUnidadeB);
+      }
+      // Depois por Status (ativos primeiro)
+      if (a.ativo !== b.ativo) {
+        return a.ativo ? -1 : 1;
+      }
+      // Por fim por Nome
+      return a.nome.localeCompare(b.nome);
+    });
+  };
+
+  // Aplicar filtros e depois ordenar
+  const filteredAndSortedProfiles = useMemo(() => {
+    let filtered = profiles.filter(p => {
+      const matchesSearch = p.nome.toLowerCase().includes(search.toLowerCase()) || p.cpf.includes(search.replace(/\D/g, ""));
+      const matchesUnidade = filtroUnidade === "all" || p.unidade_id === filtroUnidade;
+      const matchesStatus = filtroStatus === "all" || (filtroStatus === "ativo" ? p.ativo : !p.ativo);
+      const matchesCargo = filtroCargo === "all" || p.cargo === filtroCargo;
+      return matchesSearch && matchesUnidade && matchesStatus && matchesCargo;
+    });
+    return sortProfiles(filtered);
+  }, [profiles, search, filtroUnidade, filtroStatus, filtroCargo, sortProfiles]);
 
   const uniqueCargos = [...new Set(profiles.map(p => p.cargo).filter(Boolean))];
 
   const toUpperCaseTrim = (str: string) => str.trim().toUpperCase();
 
+  // 🔥 Validação e criação com tratamento de datas vazias
   const handleCreate = async () => {
+    // Validação dos campos obrigatórios
+    const errors = validateForm(newForm);
+    if (errors.length > 0) {
+      toast.error("Preencha todos os campos obrigatórios", {
+        description: errors.join(" • "),
+      });
+      return;
+    }
+
     setBusy(true);
     try {
       const cleanCpf = onlyDigits(newForm.cpf);
@@ -115,15 +168,14 @@ export default function Colaboradores() {
         email: newForm.email.trim().toLowerCase() || `${cleanCpf}@pakere.com.br`,
         senha: newForm.senha || cleanCpf.slice(-6),
         cargo: toUpperCaseTrim(newForm.cargo),
-        dataAdmissao: newForm.dataAdmissao,
-        dataNascimento: newForm.dataNascimento,
+        dataAdmissao: newForm.dataAdmissao || null, // 🔥 null se vazio
+        dataNascimento: newForm.dataNascimento || null, // 🔥 null se vazio
         folgaFixaSemana: newForm.folgaFixa === "none" ? null : Number(newForm.folgaFixa),
         role: newForm.perfil_acesso,
       });
 
       if (authErr) throw authErr;
 
-      // Verifica se a unidade selecionada tem relógio para definir o default
       const unidadeSelecionada = unidades.find(u => u.id === newForm.unidadeId);
       const possuiFolhaPontoDefault = unidadeSelecionada?.possui_relogio_ponto || false;
 
@@ -145,37 +197,26 @@ export default function Colaboradores() {
       setNewForm(blankEditForm);
       loadData();
     } catch (e) {
+      console.error("Erro ao criar colaborador:", e);
       toast.error("Erro ao criar colaborador", { description: (e as Error).message });
     } finally {
       setBusy(false);
     }
   };
 
-  const openEdit = (p: Profile) => {
-    setEditingProfile(p);
-    setEditForm({
-      nome: p.nome,
-      cpf: formatCPF(p.cpf),
-      matricula: p.matricula ?? "",
-      email: p.email_contato ?? "",
-      whatsapp: p.whatsapp ?? "",
-      cargo: p.cargo,
-      unidadeId: p.unidade_id ?? "none",
-      folgaFixa: p.folga_fixa_semana?.toString() ?? "none",
-      dataNascimento: p.data_nascimento ?? "",
-      dataAdmissao: p.data_admissao ?? "",
-      perfil_acesso: p.role ?? "colaborador",
-      ativo: p.ativo,
-      senha: "",
-      regime_trabalho: p.regime_trabalho ?? "none",
-      data_demissao: p.data_demissao ?? "",
-      tipo_vinculo: p.tipo_vinculo ?? "CLT",
-      possui_folha_ponto: p.possui_folha_ponto ?? false,
-    });
-  };
-
+  // 🔥 Validação para edição também (campos obrigatórios)
   const handleUpdate = async () => {
     if (!editingProfile) return;
+
+    // Validação dos campos obrigatórios (exceto CPF que já está preenchido)
+    const errors = validateForm(editForm);
+    if (errors.length > 0) {
+      toast.error("Preencha todos os campos obrigatórios", {
+        description: errors.join(" • "),
+      });
+      return;
+    }
+
     setBusy(true);
     try {
       const cleanCpf = onlyDigits(editForm.cpf);
@@ -326,7 +367,7 @@ export default function Colaboradores() {
             <Loader2 className="size-8 animate-spin mx-auto mb-2 text-primary" />
             Carregando colaboradores...
           </div>
-        ) : filteredProfiles.length === 0 ? (
+        ) : filteredAndSortedProfiles.length === 0 ? (
           <div className="p-12 text-center text-muted-foreground">Nenhum colaborador encontrado.</div>
         ) : (
           <div className="overflow-x-auto">
@@ -345,7 +386,7 @@ export default function Colaboradores() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filteredProfiles.map((p) => (
+                {filteredAndSortedProfiles.map((p) => (
                   <tr key={p.id} className={p.ativo ? "" : "opacity-50"}>
                     <td className="p-4 font-medium">{p.nome}</td>
                     <td className="p-4 hidden md:table-cell font-mono text-xs">{formatCPF(p.cpf)}</td>
@@ -378,7 +419,28 @@ export default function Colaboradores() {
                     </td>
                     <td className="p-4 text-right whitespace-nowrap">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={() => openEdit(p)}>
+                        <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={() => {
+                          setEditingProfile(p);
+                          setEditForm({
+                            nome: p.nome,
+                            cpf: formatCPF(p.cpf),
+                            matricula: p.matricula ?? "",
+                            email: p.email_contato ?? "",
+                            whatsapp: p.whatsapp ?? "",
+                            cargo: p.cargo,
+                            unidadeId: p.unidade_id ?? "none",
+                            folgaFixa: p.folga_fixa_semana?.toString() ?? "none",
+                            dataNascimento: p.data_nascimento ?? "",
+                            dataAdmissao: p.data_admissao ?? "",
+                            perfil_acesso: p.role ?? "colaborador",
+                            ativo: p.ativo,
+                            senha: "",
+                            regime_trabalho: p.regime_trabalho ?? "none",
+                            data_demissao: p.data_demissao ?? "",
+                            tipo_vinculo: p.tipo_vinculo ?? "CLT",
+                            possui_folha_ponto: p.possui_folha_ponto ?? false,
+                          });
+                        }}>
                           <Pencil className="size-4" />
                         </Button>
                         <Button variant="ghost" size="icon" className="size-8" title="Redefinir Senha" onClick={() => openResetPassword(p)}>
