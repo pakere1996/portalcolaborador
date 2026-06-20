@@ -64,6 +64,8 @@ export function DocumentImportForm() {
   const [listaCargos, setListaCargos] = useState<Cargo[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [manualProfileId, setManualProfileId] = useState<string>("");
+  const [pageImageUrl, setPageImageUrl] = useState<string | null>(null);
+  const [loadingPageImage, setLoadingPageImage] = useState(false);
 
   const [novoColabForm, setNovoColabForm] = useState({
     nome: "", cpf: "", cargo: "", unidadeId: "", senha: "",
