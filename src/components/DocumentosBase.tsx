@@ -62,13 +62,11 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Filtros existentes
+  // Filtros
   const [filtroColab, setFiltroColab] = useState("todos");
   const [filtroMes, setFiltroMes] = useState("todos");
   const [filtroAno, setFiltroAno] = useState("todos");
-  
-  // 🔥 NOVOS FILTROS
-  const [filtroStatus, setFiltroStatus] = useState("todos"); // "todos", "ativo", "inativo"
+  const [filtroStatus, setFiltroStatus] = useState("todos");
   const [filtroUnidade, setFiltroUnidade] = useState("todos");
 
   const [editando, setEditando] = useState<string | null>(null);
@@ -84,7 +82,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Busca documentos do tipo específico
       const { data: docs, error: docsError } = await supabase
         .from("documentos")
         .select("*")
@@ -92,7 +89,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
 
       if (docsError) throw docsError;
 
-      // Busca todos os perfis (incluindo ativo e unidade_id)
       const { data: profs, error: profsError } = await supabase
         .from("profiles")
         .select("id, nome, ativo, unidade_id")
@@ -100,7 +96,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
 
       if (profsError) throw profsError;
 
-      // Busca todas as unidades ativas
       const { data: units, error: unitsError } = await supabase
         .from("unidades")
         .select("id, nome")
@@ -113,10 +108,20 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
       const profileMap = new Map(profs?.map(p => [p.id, p]) ?? []);
       const unitMap = new Map(units?.map(u => [u.id, u.nome]) ?? []);
 
-      // Ordena documentos: ano/mês decrescente, depois nome do colaborador
+      // 🔥 Ordenação: Competência → Unidade → Nome
       const sortedDocs = (docs ?? []).sort((a, b) => {
+        // 1. Competência (ano/mês desc)
         if (a.ano !== b.ano) return b.ano - a.ano;
         if (a.mes !== b.mes) return b.mes - a.mes;
+
+        // 2. Unidade (nome da unidade)
+        const unidadeA = profileMap.get(a.colaborador_id)?.unidade_id;
+        const unidadeB = profileMap.get(b.colaborador_id)?.unidade_id;
+        const nomeUnidadeA = unidadeA ? unitMap.get(unidadeA) || "" : "";
+        const nomeUnidadeB = unidadeB ? unitMap.get(unidadeB) || "" : "";
+        if (nomeUnidadeA !== nomeUnidadeB) return nomeUnidadeA.localeCompare(nomeUnidadeB);
+
+        // 3. Nome do colaborador
         const nomeA = profileMap.get(a.colaborador_id)?.nome ?? "";
         const nomeB = profileMap.get(b.colaborador_id)?.nome ?? "";
         return nomeA.localeCompare(nomeB);
@@ -137,33 +142,24 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
     load();
   }, [load]);
 
-  // Anos disponíveis para filtro
   const anos = useMemo(
     () => [...new Set(documentos.map((d) => d.ano))].sort((a, b) => b - a),
     [documentos]
   );
 
-  // 🔥 Aplicação dos filtros (incluindo status e unidade)
+  // Filtros combinados
   const filtrados = useMemo(() => {
     return documentos.filter((d) => {
-      // Filtro por colaborador
       if (filtroColab !== "todos" && d.colaborador_id !== filtroColab) return false;
-      
-      // Filtro por mês
       if (filtroMes !== "todos" && d.mes !== parseInt(filtroMes)) return false;
-      
-      // Filtro por ano
       if (filtroAno !== "todos" && d.ano !== parseInt(filtroAno)) return false;
 
-      // Busca o perfil do colaborador
       const profile = profiles.find(p => p.id === d.colaborador_id);
       if (!profile) return false;
 
-      // 🔥 Filtro por status do colaborador
       if (filtroStatus === "ativo" && !profile.ativo) return false;
       if (filtroStatus === "inativo" && profile.ativo) return false;
 
-      // 🔥 Filtro por unidade
       if (filtroUnidade !== "todos" && profile.unidade_id !== filtroUnidade) return false;
 
       return true;
@@ -296,7 +292,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
 
       {aba === "historico" && (
         <div className="space-y-4">
-          {/* 🔥 Filtros (agora com Status e Unidade) */}
+          {/* Filtros */}
           <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
             <div className="space-y-1">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Colaborador</Label>
@@ -337,7 +333,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
               </Select>
             </div>
 
-            {/* 🔥 NOVO FILTRO: Status do colaborador */}
             <div className="space-y-1">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Status</Label>
               <Select value={filtroStatus} onValueChange={setFiltroStatus}>
@@ -350,7 +345,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
               </Select>
             </div>
 
-            {/* 🔥 NOVO FILTRO: Unidade */}
             <div className="space-y-1">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Unidade</Label>
               <Select value={filtroUnidade} onValueChange={setFiltroUnidade}>
@@ -382,6 +376,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground">Colaborador</th>
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground">Competência</th>
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden md:table-cell">Arquivo</th>
+                    <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden lg:table-cell">Unidade</th>
                     <th className="text-center p-4 font-bold uppercase text-[10px] text-muted-foreground">Status</th>
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden md:table-cell">Aprovado em</th>
                     <th className="text-right p-4 font-bold uppercase text-[10px] text-muted-foreground">Ações</th>
@@ -390,6 +385,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                 <tbody className="divide-y divide-border">
                   {filtrados.map((doc) => {
                     const profile = profiles.find((p) => p.id === doc.colaborador_id);
+                    const unidade = profile?.unidade_id ? unidades.find(u => u.id === profile.unidade_id) : null;
                     return (
                       <tr key={doc.id} className="hover:bg-muted/30 transition-colors">
                         <td className="p-4 font-medium">
@@ -443,6 +439,9 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                         </td>
                         <td className="p-4 hidden md:table-cell text-muted-foreground text-xs truncate max-w-[200px]">
                           {doc.nome_pdf ?? "—"}
+                        </td>
+                        <td className="p-4 hidden lg:table-cell text-muted-foreground">
+                          {unidade?.nome ?? "—"}
                         </td>
                         <td className="p-4 text-center">
                           <Badge
