@@ -1,13 +1,5 @@
 import { Profile } from "@/integrations/supabase/types";
 
-export interface ProfileForMatching {
-  id: string;
-  nome: string;
-  cpf: string;
-  matricula: string | null;
-  regime_trabalho?: string | null;
-}
-
 export interface MatchResult {
   profile: Profile | null;
   matchBy: string;
@@ -35,23 +27,6 @@ export function extractCPF(text: string): string | null {
   return null;
 }
 
-export function extractCPFFromText(text: string): string | null {
-  return extractCPF(text);
-}
-
-function cpfDifference(cpf1: string, cpf2: string): number {
-  const c1 = cpf1.replace(/\D/g, "");
-  const c2 = cpf2.replace(/\D/g, "");
-  
-  if (c1.length !== 11 || c2.length !== 11) return 999;
-
-  let diff = 0;
-  for (let i = 0; i < 11; i++) {
-    if (c1[i] !== c2[i]) diff++;
-  }
-  return diff;
-}
-
 function calculateNameSimilarity(nomePdf: string, nomeBanco: string): number {
   const tokensBanco = normalizeText(nomeBanco).split(" ").filter(t => t.length >= 3);
   const textPdf = normalizeText(nomePdf);
@@ -72,49 +47,43 @@ export function findBestProfileMatch(
   const nomeNormalizado = nomePDF ? normalizeText(nomePDF) : "";
   const matriculaLimpa = matriculaPDF?.trim() || "";
 
-  // 1. MATRÍCULA EXATA (Prioridade Máxima conforme auditoria)
+  // 1. PRIORIDADE MÁXIMA: MATRÍCULA EXATA
   if (matriculaLimpa) {
-    const matriculaExata = profiles.find(p => p.matricula === matriculaLimpa);
-    if (matriculaExata) {
-      console.log(`[Matching] Match por Matrícula: ${matriculaLimpa}`);
-      return { profile: matriculaExata, matchBy: "matricula", confidence: 1, status: "automatico" };
+    const matchMatricula = profiles.find(p => p.matricula === matriculaLimpa);
+    if (matchMatricula) {
+      return { profile: matchMatricula, matchBy: "matricula", confidence: 1, status: "automatico" };
     }
   }
 
-  // 2. CPF EXATO (Segunda Prioridade)
+  // 2. SEGUNDA PRIORIDADE: CPF EXATO
   if (cpfLimpo.length === 11) {
-    const cpfExato = profiles.find(p => p.cpf?.replace(/\D/g, "") === cpfLimpo);
-    if (cpfExato) {
-      console.log(`[Matching] Match por CPF: ${cpfLimpo}`);
-      return { profile: cpfExato, matchBy: "cpf", confidence: 1, status: "automatico" };
+    const matchCpf = profiles.find(p => p.cpf?.replace(/\D/g, "") === cpfLimpo);
+    if (matchCpf) {
+      return { profile: matchCpf, matchBy: "cpf", confidence: 1, status: "automatico" };
     }
   }
 
-  // 3. Busca por similaridade de Nome
-  let melhorPerfil: Profile | null = null;
-  let maiorConfianca = 0;
-  let matchTipo = "novo";
+  // 3. TERCEIRA PRIORIDADE: SIMILARIDADE DE NOME (Mínimo 80%)
+  if (nomeNormalizado) {
+    let melhorPerfil: Profile | null = null;
+    let maiorConfianca = 0;
 
-  for (const profile of profiles) {
-    const cpfBanco = profile.cpf?.replace(/\D/g, "") || "";
-    const diff = cpfLimpo.length === 11 ? cpfDifference(cpfBanco, cpfLimpo) : 999;
-    const simNome = nomeNormalizado ? calculateNameSimilarity(nomeNormalizado, profile.nome || "") : 0;
-
-    // Se o CPF for muito parecido (até 2 dígitos de erro) e o nome bater minimamente
-    if (diff <= 2 && simNome >= 0.5) {
-      return { profile, matchBy: "cpf_proximo", confidence: 0.9, status: "sugerido" };
+    for (const profile of profiles) {
+      const simNome = calculateNameSimilarity(nomeNormalizado, profile.nome || "");
+      if (simNome > maiorConfianca) {
+        maiorConfianca = simNome;
+        melhorPerfil = profile;
+      }
     }
 
-    // Se o nome for muito parecido (75% dos tokens) mesmo sem CPF
-    if (simNome >= 0.75 && simNome > maiorConfianca) {
-      maiorConfianca = simNome;
-      melhorPerfil = profile;
-      matchTipo = "nome";
+    if (melhorPerfil && maiorConfianca >= 0.8) {
+      return { 
+        profile: melhorPerfil, 
+        matchBy: "nome", 
+        confidence: maiorConfianca, 
+        status: maiorConfianca >= 0.95 ? "automatico" : "sugerido" 
+      };
     }
-  }
-
-  if (melhorPerfil && maiorConfianca >= 0.75) {
-    return { profile: melhorPerfil, matchBy: matchTipo, confidence: maiorConfianca, status: "sugerido" };
   }
 
   return { profile: null, matchBy: "novo", confidence: 0, status: "novo_colaborador" };

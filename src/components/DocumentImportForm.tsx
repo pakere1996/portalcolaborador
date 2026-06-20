@@ -74,42 +74,22 @@ export function DocumentImportForm() {
   const documentType = window.location.pathname.includes("ponto") ? "folha_ponto" : "contracheque";
 
   const loadData = useCallback(async () => {
-    console.log("--- INICIANDO AUDITORIA DE CARREGAMENTO ---");
-
-    // 1. Consulta mínima de teste
-    const testRes = await supabase.from("profiles").select("*").limit(1);
-    console.log("TESTE MINIMO (select * limit 1):", {
-      error: testRes.error,
-      data: testRes.data,
-      columns: testRes.data?.[0] ? Object.keys(testRes.data[0]) : "Nenhum dado retornado"
-    });
-
-    // 2. Consulta principal com logs de erro detalhados
-    // Removi 'regime_trabalho' temporariamente para validar se é a causa do 400
+    // Query completa incluindo as colunas necessárias para o filtro e regime de trabalho
     const [pRes, uRes, cRes] = await Promise.all([
-      supabase.from("profiles").select("id, nome, cpf, matricula, cargo, unidade_id, ativo").eq("ativo", true).order("nome"),
+      supabase.from("profiles").select("id, nome, cpf, matricula, cargo, unidade_id, regime_trabalho, ativo").eq("ativo", true).order("nome"),
       supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome"),
       supabase.from("cargos").select("id, nome").order("nome")
     ]);
     
-    console.log("PROFILE ERROR:", pRes.error);
-    console.log("PROFILE DATA:", pRes.data);
-    
     if (pRes.error) {
-      console.error("ERRO 400 DETECTADO. Provável coluna inexistente na query.");
-      // Tenta carregar apenas o básico se falhar
-      const fallbackRes = await supabase.from("profiles").select("id, nome, cpf").eq("ativo", true).limit(100);
-      console.log("FALLBACK RESULT:", fallbackRes.data?.length ?? 0, "registros");
-      if (fallbackRes.data) setProfiles(fallbackRes.data);
+      console.error("Erro ao carregar perfis:", pRes.error);
+      toast.error("Erro ao carregar lista de colaboradores");
     } else {
       setProfiles(pRes.data ?? []);
     }
 
     setUnidades(uRes.data ?? []);
     setListaCargos(cRes.data ?? []);
-    
-    console.log("TOTAL PROFILES CARREGADOS:", pRes.data?.length ?? 0);
-    console.log("--- FIM DA AUDITORIA ---");
   }, []);
 
   useEffect(() => {
@@ -243,6 +223,7 @@ export function DocumentImportForm() {
         matricula: newColabForm.matricula.trim() || null,
         whatsapp: newColabForm.whatsapp.trim() || null,
         unidade_id: newColabForm.unidadeId === "none" ? null : newColabForm.unidadeId,
+        regime_trabalho: newColabForm.regime_trabalho === "none" ? null : newColabForm.regime_trabalho,
         ativo: true,
       }).eq("id", authUser.userId);
 
@@ -283,6 +264,7 @@ export function DocumentImportForm() {
                          (p.cpf && p.cpf.includes(searchTerm.replace(/\D/g, ""))) ||
                          (p.matricula && p.matricula.includes(term));
     
+    // Se a unidade foi detectada no PDF, filtra apenas colaboradores daquela unidade
     if (unidadeId && p.unidade_id !== unidadeId) {
       return false;
     }
