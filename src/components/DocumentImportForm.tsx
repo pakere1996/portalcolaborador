@@ -19,7 +19,8 @@ interface ProfileForMatching {
   nome: string;
   cpf: string;
   matricula: string | null;
-  unidade_id: string | null; // 🔥 Adicionado para filtrar
+  unidade_id: string | null;
+  possui_folha_ponto?: boolean; // 🔥 NOVO (opcional, para evitar erro)
 }
 
 interface Cargo {
@@ -91,14 +92,27 @@ export function DocumentImportForm() {
 
   useEffect(() => {
     if (!user) return;
-    // 🔥 Buscar também unidade_id para filtrar
-    supabase.from("profiles").select("id, nome, cpf, matricula, unidade_id").eq("ativo", true).order("nome")
-      .then(({ data }) => setProfiles((data ?? []) as ProfileForMatching[]));
+    const fetchProfiles = async () => {
+      let query = supabase
+        .from("profiles")
+        .select("id, nome, cpf, matricula, unidade_id, possui_folha_ponto")
+        .eq("ativo", true);
+      
+      // 🔥 Se for folha de ponto, filtra apenas quem tem permissão
+      if (documentType === "ponto") {
+        query = query.eq("possui_folha_ponto", true);
+      }
+      
+      const { data } = await query.order("nome");
+      setProfiles((data ?? []) as ProfileForMatching[]);
+    };
+    fetchProfiles();
+    
     supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome")
       .then(({ data }) => setUnidades(data ?? []));
     supabase.from("cargos").select("id, nome").order("nome")
       .then(({ data }) => setListaCargos(data ?? []));
-  }, [user?.id]);
+  }, [user?.id, documentType]);
 
   useEffect(() => {
     setShowNovoColab(false);
@@ -278,7 +292,7 @@ export function DocumentImportForm() {
       const cleanCpf = novoColabForm.cpf.replace(/\D/g, "");
       const cargoSelecionado = listaCargos.find(c => c.id === novoColabForm.cargo);
       const authUser = await adminApi.createUser({
-        nome: novoColabForm.nome.trim(),
+        nome: novoColabForm.nome.trim().toUpperCase(),
         cpf: cleanCpf,
         email: `${cleanCpf}@pakere.com.br`,
         senha: novoColabForm.senha || cleanCpf.slice(-6),
@@ -296,7 +310,13 @@ export function DocumentImportForm() {
       }).eq("id", authUser.userId);
       if (profErr) throw profErr;
 
-      const newProfile: ProfileForMatching = { id: authUser.userId, nome: novoColabForm.nome, cpf: cleanCpf, matricula: novoColabForm.matricula || null, unidade_id: novoColabForm.unidadeId };
+      const newProfile: ProfileForMatching = { 
+        id: authUser.userId, 
+        nome: novoColabForm.nome.trim().toUpperCase(), 
+        cpf: cleanCpf, 
+        matricula: novoColabForm.matricula || null, 
+        unidade_id: novoColabForm.unidadeId 
+      };
       setProfiles(prev => [...prev, newProfile]);
       setShowNovoColab(false);
       setNovoColabForm({ nome: "", cpf: "", cargo: "", unidadeId: "", senha: "", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", whatsapp: "", perfil_acesso: "colaborador", matricula: "" });
@@ -429,7 +449,6 @@ export function DocumentImportForm() {
     </div>
   );
 
-  // --- Renderização ---
   if (pageResults.length === 0) {
     return (
       <div className="space-y-4">
@@ -583,20 +602,16 @@ export function DocumentImportForm() {
                       <SelectValue placeholder="Selecione o colaborador..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {/* 🔥 FILTRO POR UNIDADE */}
                       {profiles
                         .filter(p => {
-                          // Se o documento tem unidade, filtra apenas colaboradores da mesma unidade
                           if (result.unidadeId) {
                             return p.unidade_id === result.unidadeId;
                           }
-                          // Se não tem unidade identificada, mostra todos
                           return true;
                         })
                         .map(p => (
                           <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
                         ))}
-                      {/* Caso não haja colaboradores na unidade, exibe mensagem */}
                       {result.unidadeId && profiles.filter(p => p.unidade_id === result.unidadeId).length === 0 && (
                         <div className="px-2 py-1.5 text-sm text-muted-foreground text-center">
                           Nenhum colaborador cadastrado nesta unidade
