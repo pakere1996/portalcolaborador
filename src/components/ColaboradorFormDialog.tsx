@@ -183,6 +183,22 @@ export function ColaboradorFormDialog({
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2">
+  <Label>Tipo de Vínculo</Label>
+  <Select 
+    value={form.tipo_vinculo || "CLT"} 
+    onValueChange={(v) => setForm({ ...form, tipo_vinculo: v })}
+  >
+    <SelectTrigger>
+      <SelectValue placeholder="Selecione o tipo" />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="CLT">Colaborador CLT</SelectItem>
+      <SelectItem value="Socio">Sócio (Pró-labore)</SelectItem>
+    </SelectContent>
+  </Select>
+</div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
