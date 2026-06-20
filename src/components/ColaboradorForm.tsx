@@ -205,6 +205,8 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
             </SelectContent>
           </Select>
         </div>
+
+        
       </div>
 
       {/* 🔥 NOVO CAMPO: Data de Demissão */}
