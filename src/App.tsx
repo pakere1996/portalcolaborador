@@ -29,17 +29,47 @@ import AtestadosAdmin from "./pages/admin/AtestadosAdmin";
 import RegistrosDisciplinaresAdmin from "./pages/admin/RegistrosDisciplinaresAdmin";
 import SetupAdmin from "./pages/SetupAdmin";
 
+// 🔥 Componente para proteger rotas admin
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { role, session, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-red-600"></div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (role !== "admin") {
+    return <Navigate to="/home" replace />;
+  }
+
+  return <>{children}</>;
+}
+
 function AuthenticatedRoutes() {
-  const { session, role } = useAuth();
+  const { session, role, loading } = useAuth();
   const isAuthenticated = !!session;
+  const isAdmin = role === "admin";
+
+  // 🔥 Aguarda o carregamento do perfil antes de renderizar
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-red-600"></div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  const isAdmin = role === "admin";
-
-  // Todas as rotas autenticadas são renderizadas dentro do AppShell
   return (
     <AppShell>
       <Routes>
@@ -53,11 +83,11 @@ function AuthenticatedRoutes() {
         <Route path="/documentos/atestados" element={<DocumentosAtestados />} />
         <Route path="/documentos/ponto" element={<Documentos />} />
 
-        {/* Employee Home */}
+        {/* 🔥 Rotas de Home com redirecionamento correto */}
         <Route path="/home" element={<Home />} />
         <Route path="/" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
 
-        {/* Admin Routes */}
+        {/* Admin Routes protegidas */}
         {isAdmin ? (
           <>
             <Route path="/admin" element={<Navigate to="/admin/home" replace />} />
@@ -89,7 +119,7 @@ function AuthenticatedRoutes() {
           <Route path="/admin/*" element={<Navigate to="/home" replace />} />
         )}
 
-        {/* Fallback for authenticated users */}
+        {/* Fallback para usuários autenticados */}
         <Route path="*" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
       </Routes>
     </AppShell>
