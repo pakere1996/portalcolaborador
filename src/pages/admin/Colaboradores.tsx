@@ -31,6 +31,7 @@ const blankEditForm = {
   senha: "",
   regime_trabalho: "none",
   data_demissao: "",
+  tipo_vinculo: "CLT", // 🔥 NOVO
 };
 
 export default function Colaboradores() {
@@ -54,7 +55,6 @@ export default function Colaboradores() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // 🔥 USE SELECT * para evitar erro de coluna inexistente
       const [pRes, uRes, cRes] = await Promise.all([
         supabase.from("profiles").select("*").order("nome"),
         supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
@@ -127,6 +127,7 @@ export default function Colaboradores() {
         ativo: true,
         regime_trabalho: newForm.regime_trabalho === "none" ? null : newForm.regime_trabalho,
         data_demissao: newForm.data_demissao || null,
+        tipo_vinculo: newForm.tipo_vinculo || "CLT", // 🔥 NOVO
       }).eq("id", authUser.userId);
 
       if (profErr) throw profErr;
@@ -160,6 +161,7 @@ export default function Colaboradores() {
       senha: "",
       regime_trabalho: p.regime_trabalho ?? "none",
       data_demissao: p.data_demissao ?? "",
+      tipo_vinculo: p.tipo_vinculo ?? "CLT", // 🔥 NOVO
     });
   };
 
@@ -185,6 +187,7 @@ export default function Colaboradores() {
         updated_at: new Date().toISOString(),
         regime_trabalho: editForm.regime_trabalho === "none" ? null : editForm.regime_trabalho,
         data_demissao: editForm.data_demissao || null,
+        tipo_vinculo: editForm.tipo_vinculo || "CLT", // 🔥 NOVO
       }).eq("id", editingProfile.id);
 
       if (profErr) throw profErr;
@@ -324,6 +327,7 @@ export default function Colaboradores() {
                   <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">CPF</th>
                   <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">Cargo</th>
                   <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden xl:table-cell">Unidade</th>
+                  <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Vínculo</th>
                   <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
                   <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Perfil</th>
                   <th className="text-right p-4 font-bold uppercase tracking-wider text-[10px]">Ações</th>
@@ -337,6 +341,11 @@ export default function Colaboradores() {
                     <td className="p-4 hidden lg:table-cell text-muted-foreground">{p.cargo}</td>
                     <td className="p-4 hidden xl:table-cell text-muted-foreground">
                       {unidades.find(u => u.id === p.unidade_id)?.nome ?? "—"}
+                    </td>
+                    <td className="p-4 text-center">
+                      <Badge className={p.tipo_vinculo === "Socio" ? "bg-purple-100 text-purple-700 border-purple-200" : "bg-blue-100 text-blue-700 border-blue-200"}>
+                        {p.tipo_vinculo === "Socio" ? "Sócio" : "CLT"}
+                      </Badge>
                     </td>
                     <td className="p-4 text-center">
                       <Switch checked={p.ativo} onCheckedChange={async (checked) => {
