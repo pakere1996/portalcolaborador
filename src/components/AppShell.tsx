@@ -40,10 +40,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const path = location.pathname;
   const [open, setOpen] = useState(false);
   
-  // Estados para controlar a abertura dos menus colapsáveis
+  // 🔥 Estados para controlar a abertura dos menus colapsáveis
   const [folgasOpen, setFolgasOpen] = useState(true);
   const [docsOpen, setDocsOpen] = useState(false);
   const [cadastroOpen, setCadastroOpen] = useState(false);
+
+  // 🔥 Determina se é admin (prioriza localStorage para consistência)
+  const getIsAdmin = () => {
+    const savedRole = localStorage.getItem('user_role');
+    if (savedRole) return savedRole === 'admin';
+    return role === 'admin';
+  };
+  
+  const isAdmin = getIsAdmin();
+  const homePath = isAdmin ? "/admin/home" : "/home";
 
   useEffect(() => {
     setOpen(false);
@@ -56,8 +66,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       setCadastroOpen(true);
     }
   }, [path]);
-
-  const isAdmin = role === "admin";
 
   const employeeFolgaNav: NavItem[] = [
     { to: "/calendario", label: "Calendário", icon: Calendar },
@@ -95,7 +103,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const folgaNav = isAdmin ? adminFolgaNav : employeeFolgaNav;
   const docsNav = isAdmin ? adminDocsNav : employeeDocsNav;
-  const homePath = isAdmin ? "/admin/home" : "/home";
 
   // Classes utilitárias para NavLink
   const getLinkClass = (isActive: boolean, isHome = false) => cn(
@@ -133,6 +140,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-180px)]">
+          {/* 🔥 Link "Início" com homePath correto */}
           <NavLink to={homePath} className={({ isActive }) => getLinkClass(isActive, true)}>
             <Home className="size-4" />
             <span>Início</span>
@@ -242,7 +250,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="px-3 py-2 mb-2">
             <div className="text-sm font-medium truncate">{profile?.nome ?? "—"}</div>
             <div className="text-xs text-muted-foreground">
-              {role === "admin" ? "Administrador" : profile?.cargo ?? "Funcionário"}
+              {isAdmin ? "Administrador" : profile?.cargo ?? "Funcionário"}
             </div>
           </div>
           <Button variant="ghost" size="sm" className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10" onClick={signOut}>
