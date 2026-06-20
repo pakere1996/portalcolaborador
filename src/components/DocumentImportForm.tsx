@@ -334,8 +334,20 @@ if (next !== -1) {
 
         // Se for substituição de duplicata, remove o documento antigo primeiro
         if (result.duplicadoId && result.acaoSeDuplicado === "substituir") {
-          await supabase.from("documentos").delete().eq("id", result.duplicadoId);
-          substituidos++;
+  // Verifica se o documento antigo é do mesmo tipo
+  const { data: docAntigo } = await supabase
+    .from("documentos")
+    .select("tipo")
+    .eq("id", result.duplicadoId)
+    .single();
+  
+  if (docAntigo?.tipo !== documentType) {
+    toast.error(`Erro: Conflito - documento existente é do tipo ${docAntigo?.tipo}, não ${documentType}`);
+    continue;
+  }
+  
+  await supabase.from("documentos").delete().eq("id", result.duplicadoId);
+  substituidos++;
         } else if (result.duplicadoId) {
           // Duplicata sem decisão de substituir (não deveria chegar aqui, mas por segurança pula)
           continue;
