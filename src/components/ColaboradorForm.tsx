@@ -147,6 +147,25 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
         </div>
 
         <div className="space-y-2">
+          <Label htmlFor="tipo_vinculo">Tipo de Vínculo</Label>
+          <Select 
+            value={form.tipo_vinculo || "CLT"} 
+            onValueChange={(value) => handleFormChange('tipo_vinculo', value)}
+            disabled={busy}
+          >
+            <SelectTrigger id="tipo_vinculo">
+              <SelectValue placeholder="Selecione o tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="CLT">Colaborador CLT</SelectItem>
+              <SelectItem value="Socio">Sócio (Pró-labore)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="space-y-2">
           <Label htmlFor="regime_trabalho">Regime de Trabalho</Label>
           <Select 
             value={form.regime_trabalho || "null"} 
@@ -163,9 +182,7 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
             </SelectContent>
           </Select>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label htmlFor="data_nascimento">Data de Nascimento *</Label>
           <Input 
@@ -186,7 +203,9 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
             disabled={busy}
           />
         </div>
-        
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label htmlFor="folga_fixa_semana">Folga Fixa Semanal *</Label>
           <Select 
@@ -206,25 +225,6 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
           </Select>
         </div>
 
-        <div className="space-y-2">
-  <Label>Tipo de Vínculo</Label>
-  <Select 
-    value={form.tipo_vinculo || "CLT"} 
-    onValueChange={(v) => setForm({ ...form, tipo_vinculo: v })}
-  >
-    <SelectTrigger>
-      <SelectValue placeholder="Selecione o tipo" />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="CLT">Colaborador CLT</SelectItem>
-      <SelectItem value="Socio">Sócio (Pró-labore)</SelectItem>
-    </SelectContent>
-  </Select>
-</div>
-      </div>
-
-      {/* 🔥 NOVO CAMPO: Data de Demissão */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label htmlFor="data_demissao">Data de Demissão</Label>
           <Input 
