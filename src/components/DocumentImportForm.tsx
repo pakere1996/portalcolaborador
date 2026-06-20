@@ -241,21 +241,23 @@ export function DocumentImportForm() {
     const profile = profiles.find(p => p.id === profileId);
     if (!profile) return;
 
-    setPageResults(prev =>
-      prev.map((r, i) =>
-        i === currentPage
-          ? { ...r, resolvido: true, matchedProfile: profile, matchStatus: "automatico" }
-          : r
-      )
-    );
+    setPageResults(prev => {
+  const updated = prev.map((r, i) =>
+    i === currentPage
+      ? { ...r, resolvido: true, matchedProfile: profile, matchStatus: "automatico" }
+      : r
+  );
+  // Auto-avança para próxima página pendente
+  const nextIndex = updated.findIndex((r, i) => i > currentPage && !r.resolvido && !r.ignorado);
+  if (nextIndex !== -1) {
+    setTimeout(() => setCurrentPage(nextIndex), 150);
+  }
+  return updated;
+});
 
-    setShowNovoColab(false);
-    setManualProfileId("");
-    toast.success(`Página vinculada a ${profile.nome}. Confirme as demais páginas e aprove ao final.`);
-
-    const next = pageResults.findIndex((r, i) => i > currentPage && !r.resolvido && !r.ignorado);
-    if (next !== -1) setCurrentPage(next);
-  };
+setShowNovoColab(false);
+setManualProfileId("");
+toast.success(`Página vinculada a ${profile.nome}. Próxima página pendente...`);
 
   const handleIgnorar = () => {
     setConfirmIgnorar(true);
