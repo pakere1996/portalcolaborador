@@ -57,26 +57,32 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
 
   const cargoOptions = getCargoOptions(cargos);
 
-  // 🔥 Efeito para controlar o switch "possui_folha_ponto" baseado na unidade selecionada
+  // 🔥 Lógica para controlar o switch baseado na unidade selecionada
   useEffect(() => {
-    // Se não for edição, ou se for edição mas o campo ainda não foi definido
-    if (!isEdit) {
-      const unidadeSelecionada = unidades.find(u => u.id === form.unidade_id);
-      if (unidadeSelecionada) {
-        // Se a unidade tem relógio de ponto, ativa o switch por padrão; senão, desativa e desabilita
-        const possuiFolhaPonto = unidadeSelecionada.possui_relogio_ponto || false;
-        // Se o valor atual for diferente, atualiza
-        if (form.possui_folha_ponto !== possuiFolhaPonto) {
-          setForm((prev: any) => ({ ...prev, possui_folha_ponto: possuiFolhaPonto }));
-        }
+    const unidadeId = form.unidade_id;
+    if (!unidadeId || unidadeId === 'null' || unidadeId === '') return;
+
+    const unidadeSelecionada = unidades.find(u => u.id === unidadeId);
+    if (!unidadeSelecionada) return;
+
+    const temRelogio = unidadeSelecionada.possui_relogio_ponto || false;
+
+    // Se a unidade NÃO tem relógio, força o switch para false e desabilita
+    if (!temRelogio) {
+      setForm((prev: any) => ({ ...prev, possui_folha_ponto: false }));
+    } else {
+      // Se a unidade tem relógio e é um novo cadastro (não edição), ativa por padrão
+      if (!isEdit) {
+        setForm((prev: any) => ({ ...prev, possui_folha_ponto: true }));
       }
+      // Em edição, mantém o valor salvo (não sobrescreve)
     }
-    // A dependência inclui form.unidade_id, unidades e isEdit
   }, [form.unidade_id, unidades, isEdit, setForm]);
 
-  // 🔥 Verifica se a unidade selecionada possui relógio de ponto
+  // 🔥 Determina se a unidade tem relógio para habilitar/desabilitar o switch
   const unidadeSelecionada = unidades.find(u => u.id === form.unidade_id);
   const unidadeTemRelogio = unidadeSelecionada?.possui_relogio_ponto || false;
+  const isSwitchDisabled = busy || !unidadeTemRelogio || !form.unidade_id || form.unidade_id === 'null' || form.unidade_id === '';
 
   return (
     <div className="space-y-4">
@@ -287,18 +293,24 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
         </div>
       </div>
 
-      {/* 🔥 Switch para Folha de Ponto – controlado pela unidade */}
+      {/* 🔥 Switch para Folha de Ponto */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
           <Switch 
             id="possui_folha_ponto" 
             checked={form.possui_folha_ponto || false} 
             onCheckedChange={(checked) => handleFormChange('possui_folha_ponto', checked)} 
-            disabled={busy || !unidadeTemRelogio} // 🔥 Desabilitado se a unidade NÃO tem relógio
+            disabled={isSwitchDisabled}
           />
-          <Label htmlFor="possui_folha_ponto" className={!unidadeTemRelogio ? "text-muted-foreground" : ""}>
+          <Label htmlFor="possui_folha_ponto" className={isSwitchDisabled ? "text-muted-foreground" : ""}>
             Possui acesso a Folha de Ponto
-            {!unidadeTemRelogio && <span className="ml-1 text-xs text-muted-foreground">(unidade sem relógio)</span>}
+            {isSwitchDisabled && !busy && (
+              <span className="ml-1 text-xs text-muted-foreground">
+                {!form.unidade_id || form.unidade_id === 'null' || form.unidade_id === '' 
+                  ? "(selecione uma unidade)" 
+                  : "(unidade sem relógio)"}
+              </span>
+            )}
           </Label>
         </div>
       </div>
