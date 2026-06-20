@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, History, Download, Pencil, Trash2, Loader2, X, FileText } from "lucide-react";
+import { Upload, History, Download, Pencil, Trash2, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { formatBR } from "@/lib/folga-rules";
 import {
@@ -36,17 +36,18 @@ interface DocumentoAdmin {
   id: string;
   colaborador_id: string;
   unidade_id: string;
-  data: string; // campo unificado para exibição
+  data: string; // campo unificado
   observacao: string | null;
   storage_path: string;
   storage_type: string;
   created_at: string;
   updated_at: string;
-  // Campos específicos
+  // Atestados
   dias_afastamento?: number | null;
   status?: string | null;
   observacao_admin?: string | null;
   respondido_em?: string | null;
+  // Disciplinares
   tipo?: string | null;
   [key: string]: any;
 }
@@ -57,7 +58,7 @@ interface DocumentosAdminBaseProps {
   icone: React.ReactNode;
   descricao: string;
   importTitle: string;
-  campoData: string; // nome da coluna de data (ex: "data_atestado", "data")
+  campoData: string; // ex: "data_atestado" ou "data"
   gerarStoragePath: (colaboradorId: string, data: string, id: string, file: File) => Promise<{ path: string; kind: "pdf" | "image" }>;
   formatarStatus?: (status: string) => string;
   statusClass?: (status: string) => string;
@@ -150,7 +151,7 @@ export function DocumentosAdminBase({
         .order("nome");
       if (unitsError) throw unitsError;
 
-      // Mapeia para garantir que o campo "data" seja preenchido
+      // Mapeia para unificar o campo data
       const docsMapeados = (docs ?? []).map((doc: any) => ({
         ...doc,
         data: doc[campoData] || doc.data || doc.data_documento || "",
@@ -311,7 +312,6 @@ export function DocumentosAdminBase({
     }
   }, [documentoParaExcluir, load, tipo]);
 
-  // Filtrar colaboradores
   const colaboradoresFiltrados = profiles.filter(
     (p) => !form.unidade_id || p.unidade_id === form.unidade_id
   );
@@ -376,7 +376,6 @@ export function DocumentosAdminBase({
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {/* Unidade */}
               <div className="space-y-2">
                 <Label>Unidade *</Label>
                 <Select
@@ -390,7 +389,6 @@ export function DocumentosAdminBase({
                 </Select>
               </div>
 
-              {/* Colaborador */}
               <div className="space-y-2">
                 <Label>Colaborador *</Label>
                 <Select
@@ -412,7 +410,6 @@ export function DocumentosAdminBase({
                 </Select>
               </div>
 
-              {/* Data do Documento */}
               <div className="space-y-2">
                 <Label>Data do Documento *</Label>
                 <Input
@@ -422,10 +419,8 @@ export function DocumentosAdminBase({
                 />
               </div>
 
-              {/* Campos extras */}
               {camposExtras && camposExtras(form, setForm, uploading)}
 
-              {/* Arquivo */}
               <div className="space-y-2">
                 <Label>Arquivo (PDF ou Imagem) *</Label>
                 <div className="flex items-center gap-2">
@@ -450,7 +445,6 @@ export function DocumentosAdminBase({
                 )}
               </div>
 
-              {/* Observações */}
               <div className="space-y-2">
                 <Label>Observações</Label>
                 <Textarea
@@ -471,7 +465,6 @@ export function DocumentosAdminBase({
 
       {aba === "historico" && (
         <div className="space-y-4">
-          {/* Filtros */}
           <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
             <div className="space-y-1">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Unidade</Label>
@@ -520,7 +513,6 @@ export function DocumentosAdminBase({
             </div>
           </div>
 
-          {/* Tabela */}
           {loading ? (
             <div className="flex items-center justify-center p-12 text-muted-foreground">
               <Loader2 className="size-6 animate-spin mr-2" /> Carregando...
@@ -551,11 +543,11 @@ export function DocumentosAdminBase({
                     const profile = profiles.find((p) => p.id === doc.colaborador_id);
                     const unidade = unidades.find((u) => u.id === doc.unidade_id);
                     const isEditing = editando?.id === doc.id;
+                    const dataDoc = doc.data;
 
-                    // 🔥 Data de retorno para atestados
                     let dataRetorno = "";
                     if (tipo === "atestados" && doc.dias_afastamento) {
-                      const dt = new Date(doc.data + "T00:00:00");
+                      const dt = new Date(dataDoc + "T00:00:00");
                       dt.setDate(dt.getDate() + (doc.dias_afastamento || 0));
                       dataRetorno = formatBR(dt);
                     }
@@ -574,7 +566,7 @@ export function DocumentosAdminBase({
                             />
                           ) : (
                             <>
-                              {formatBR(new Date(doc.data + "T00:00:00"))}
+                              {formatBR(new Date(dataDoc + "T00:00:00"))}
                               {tipo === "atestados" && doc.dias_afastamento && (
                                 <div className="text-xs text-muted-foreground">
                                   Retorno: {dataRetorno}
@@ -683,7 +675,7 @@ export function DocumentosAdminBase({
                                     setEditando(doc);
                                     if (tipo === "atestados") {
                                       setEditForm({
-                                        data_documento: doc.data || "",
+                                        data_documento: doc.data,
                                         observacao: doc.observacao || "",
                                         dias_afastamento: String(doc.dias_afastamento || ""),
                                         tipo: "",
@@ -692,7 +684,7 @@ export function DocumentosAdminBase({
                                       });
                                     } else {
                                       setEditForm({
-                                        data_documento: doc.data || "",
+                                        data_documento: doc.data,
                                         observacao: doc.observacao || "",
                                         dias_afastamento: "",
                                         tipo: doc.tipo || "outro",
