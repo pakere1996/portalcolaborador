@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Upload, FileText, X, Loader2, CheckCircle2, AlertTriangle, XCircle, ChevronLeft, ChevronRight, UserPlus } from "lucide-react";
 import { extractTextFromPDF, renderPdfPageAsImage } from "@/lib/pdf-utils";
-import { adminApi } from "@/lib/admin-api"pdf;
+import { adminApi } from "@/lib/admin-api";
 
 interface ProfileForMatching {
   id: string;
