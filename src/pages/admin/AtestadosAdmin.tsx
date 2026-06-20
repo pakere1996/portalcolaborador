@@ -70,61 +70,23 @@ export default function AtestadosAdmin() {
           </div>
         );
       }}
-      editCamposExtras={(editForm, setEditForm) => (
-        <>
-          <div className="space-y-1 mt-2">
-            <Label className="text-xs">Dias de Afastamento</Label>
-            <Input
-              type="number"
-              min="0"
-              value={editForm.dias_afastamento || ""}
-              onChange={(e) => setEditForm({ ...editForm, dias_afastamento: e.target.value })}
-            />
-          </div>
-          <div className="space-y-1 mt-2">
-            <Label className="text-xs">Status</Label>
-            <select
-              className="w-full rounded-md border border-border bg-background px-3 py-1 text-sm"
-              value={editForm.status || "pendente"}
-              onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-            >
-              <option value="pendente">Pendente</option>
-              <option value="aprovado">Aprovado</option>
-              <option value="rejeitado">Rejeitado</option>
-            </select>
-          </div>
-          <div className="space-y-1 mt-2">
-            <Label className="text-xs">Observação do Admin</Label>
-            <Textarea
-              rows={2}
-              value={editForm.observacao_admin || ""}
-              onChange={(e) => setEditForm({ ...editForm, observacao_admin: e.target.value })}
-              placeholder="Motivo da rejeição ou observação..."
-            />
-          </div>
-        </>
-      )}
+      // 🔥 editCamposExtras removido – a base já renderiza status e dias
       validarForm={(form) => {
         if (!form.dias_afastamento || parseInt(form.dias_afastamento) < 0) {
           return "Informe um número válido de dias de afastamento";
         }
         return null;
       }}
-      // 🔥 beforeInsert com auto‑aprovação para admin
       beforeInsert={async (form, path, kind) => {
         const { data: userData } = await supabase.auth.getUser();
         const userId = userData?.user?.id;
-
-        // Verifica se o usuário é admin
         const { data: roles } = await supabase
           .from('user_roles')
           .select('role')
           .eq('user_id', userId)
           .eq('role', 'admin')
           .maybeSingle();
-
         const isAdmin = !!roles;
-
         const baseData = {
           colaborador_id: form.colaborador_id,
           unidade_id: form.unidade_id,
@@ -136,24 +98,15 @@ export default function AtestadosAdmin() {
           criado_por: userId,
           observacao_admin: null,
         };
-
         if (isAdmin) {
-          // Admin cadastra como aprovado automaticamente
           return {
             ...baseData,
             status: 'aprovado',
             respondido_em: new Date().toISOString(),
             respondido_por: userId,
           };
-        } else {
-          // Caso não seja admin (nunca deve ocorrer no admin, mas por segurança)
-          return {
-            ...baseData,
-            status: 'pendente',
-            respondido_em: null,
-            respondido_por: null,
-          };
         }
+        return { ...baseData, status: 'pendente', respondido_em: null, respondido_por: null };
       }}
     />
   );
