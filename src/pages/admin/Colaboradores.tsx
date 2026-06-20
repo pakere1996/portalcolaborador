@@ -57,7 +57,7 @@ export default function Colaboradores() {
     try {
       const [pRes, uRes, cRes] = await Promise.all([
         // 🔥 Adicionados regime_trabalho e data_demissao no SELECT
-        supabase.from("profiles").select("id, nome, cpf, cargo, matricula, unidade_id, folga_fixa_semana, regime_trabalho, perfil_acesso, data_admissao, data_nascimento, email_contato, whatsapp, ativo, data_demissao, created_at, updated_at").order("nome"),
+        supabase.from("profiles").select("*").order("nome"),
         supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
         supabase.from("cargos").select("*").eq("ativo", true).order("nome"),
       ]);
