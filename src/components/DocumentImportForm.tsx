@@ -42,15 +42,14 @@ interface PageResult {
   unidadeId: string | null;
   matchStatus: "automatico" | "revisao";
   matchedProfile: ProfileForMatching | null;
-  resolvido: boolean; // true quando vinculado (pendente de aprovação final) ou ignorado
+  resolvido: boolean;
   ignorado: boolean;
-  aprovado: boolean; // true só depois do "Aprovar e Salvar"
-  aprovadoEm?: string; // data/hora da aprovação
-  duplicadoId: string | null; // id do documento existente, se já houver essa competência para o colaborador
+  aprovado: boolean;
+  aprovadoEm?: string;
+  duplicadoId: string | null;
   acaoSeDuplicado: "substituir" | "manter_antigo" | null;
 }
 
-// Remove acentos e normaliza para comparação exata de nomes
 const normalizeNome = (str: string): string => {
   return str
     .toUpperCase()
@@ -139,10 +138,8 @@ export function DocumentImportForm() {
     return null;
   };
 
-  // Varre o texto inteiro do PDF procurando o nome exato de algum colaborador cadastrado.
   const findExactMatchInText = (text: string, profilesList: ProfileForMatching[]): { profile: ProfileForMatching | null; nomeEncontrado: string | null } => {
     const textoNormalizado = ` ${normalizeNome(text)} `;
-
     const matches = profilesList.filter(p => {
       const nomeNormalizado = normalizeNome(p.nome);
       return textoNormalizado.includes(` ${nomeNormalizado} `) ||
@@ -150,7 +147,6 @@ export function DocumentImportForm() {
              textoNormalizado.endsWith(` ${nomeNormalizado}`) ||
              textoNormalizado === nomeNormalizado;
     });
-
     if (matches.length === 1) {
       return { profile: matches[0], nomeEncontrado: matches[0].nome };
     }
@@ -165,7 +161,6 @@ export function DocumentImportForm() {
     setCurrentPage(0);
   };
 
-  // Apenas analisa o PDF e monta os resultados — NÃO faz upload nem grava no banco ainda.
   const handleProcessar = async () => {
     if (!selectedFile) return;
     setIsProcessing(true);
@@ -173,14 +168,11 @@ export function DocumentImportForm() {
       const pages = await extractTextFromPDF(selectedFile);
       const resultsComMatch = pages.map((p) => {
         const text = p.text;
-
         const { profile: matchedProfile, nomeEncontrado: nome } = findExactMatchInText(text, profiles);
-
         const cnpjMatch = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
         const cnpj = cnpjMatch ? cnpjMatch[0] : null;
         const unidade = cnpj ? unidades.find(u => u.cnpj && cleanCNPJ(u.cnpj) === cleanCNPJ(cnpj)) : null;
         const periodo = extractPeriodo(text);
-
         return {
           pageNumber: p.pageNumber,
           text,
@@ -199,12 +191,9 @@ export function DocumentImportForm() {
         } as PageResult;
       });
 
-      // Verifica duplicatas: para cada página com colaborador + mês/ano identificados,
-      // checa se já existe um documento dessa competência para esse colaborador.
       const results: PageResult[] = await Promise.all(
         resultsComMatch.map(async (r) => {
           if (!r.matchedProfile || !r.mes || !r.ano) return r;
-
           const { data: existente } = await supabase
             .from("documentos")
             .select("id")
@@ -213,7 +202,6 @@ export function DocumentImportForm() {
             .eq("mes", r.mes)
             .eq("ano", r.ano)
             .maybeSingle();
-
           if (existente) {
             return { ...r, duplicadoId: existente.id, resolvido: false };
           }
@@ -236,7 +224,24 @@ export function DocumentImportForm() {
     }
   };
 
-  // Apenas marca a página como "resolvida" (vinculada a um colaborador). Não salva no banco ainda.
+  // 🔥 Função centralizada para avançar para a próxima página pendente
+  const avancarParaProximaPendente = () => {
+    const proximoIndex = pageResults.findIndex((r, i) => i > currentPage && !r.resolvido && !r.ignorado);
+    if (proximoIndex !== -1) {
+      setCurrentPage(proximoIndex);
+    } else {
+      // Verifica se há alguma página pendente antes da atual (caso o usuário tenha voltado)
+      const qualquerPendente = pageResults.findIndex((r) => !r.resolvido && !r.ignorado);
+      if (qualquerPendente === -1) {
+        toast.success("Todas as páginas foram processadas! Clique em 'Aprovar e Salvar' para finalizar.");
+      } else {
+        // Se há pendentes, mas nenhuma depois da atual, fica na atual mesmo
+        // (o usuário pode estar revisando uma página anterior)
+      }
+    }
+  };
+
+  // --- Ações que agora chamam avancarParaProximaPendente ---
   const handleVincular = (profileId: string) => {
     const profile = profiles.find(p => p.id === profileId);
     if (!profile) return;
@@ -247,29 +252,24 @@ export function DocumentImportForm() {
           ? { ...r, resolvido: true, matchedProfile: profile, matchStatus: "automatico" }
           : r
       );
-      const nextIndex = updated.findIndex((r, i) => i > currentPage && !r.resolvido && !r.ignorado);
-      if (nextIndex !== -1) {
-        setTimeout(() => setCurrentPage(nextIndex), 150);
-      }
       return updated;
     });
 
     setShowNovoColab(false);
     setManualProfileId("");
-    toast.success(`Página vinculada a ${profile.nome}. Próxima página pendente...`);
+    toast.success(`Página vinculada a ${profile.nome}.`);
+    avancarParaProximaPendente();
   };
 
   const handleIgnorar = () => {
     setConfirmIgnorar(true);
   };
 
-   const confirmarIgnorar = () => {
+  const confirmarIgnorar = () => {
     setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, ignorado: true, resolvido: true } : r));
     setConfirmIgnorar(false);
-    const next = pageResults.findIndex((r, i) => i > currentPage && !r.resolvido && !r.ignorado);
-    if (next !== -1) {
-      setTimeout(() => setCurrentPage(next), 150);
-    }
+    toast.info("Página ignorada.");
+    avancarParaProximaPendente();
   };
 
   const handleCriarColab = async () => {
@@ -304,11 +304,12 @@ export function DocumentImportForm() {
       setProfiles(prev => [...prev, newProfile]);
       setShowNovoColab(false);
       setNovoColabForm({ nome: "", cpf: "", cargo: "", unidadeId: "", senha: "", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", whatsapp: "", perfil_acesso: "colaborador", matricula: "" });
-      toast.success("Colaborador criado com sucesso! Agora vincule esta página a ele.");
+      toast.success("Colaborador criado com sucesso! Vinculando página...");
 
       // Vincula automaticamente a página atual ao colaborador recém-criado
       setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, matchedProfile: newProfile, matchStatus: "automatico", resolvido: true } : r));
       setManualProfileId(newProfile.id);
+      avancarParaProximaPendente();
     } catch (err) {
       toast.error("Erro ao criar colaborador", { description: (err as Error).message });
     } finally {
@@ -316,7 +317,30 @@ export function DocumentImportForm() {
     }
   };
 
-  // Só aqui de fato faz upload e grava no banco — depois que TODAS as páginas foram resolvidas.
+  // --- Decisão de duplicata (substituir/manter) também avança ---
+  const handleDecisaoDuplicata = (acao: "substituir" | "manter_antigo") => {
+    setPageResults(prev => prev.map((r, i) =>
+      i === currentPage
+        ? {
+            ...r,
+            acaoSeDuplicado: acao,
+            resolvido: true,
+            ignorado: acao === "manter_antigo",
+          }
+        : r
+    ));
+    toast.info(acao === "substituir" ? "Documento será substituído ao aprovar." : "Página ignorada, mantendo o documento antigo.");
+    avancarParaProximaPendente();
+  };
+
+  // --- Navegação manual (Anterior/Próximo) ---
+  const irParaPagina = (index: number) => {
+    if (index >= 0 && index < pageResults.length) {
+      setCurrentPage(index);
+    }
+  };
+
+  // --- Aprovar tudo (mantido igual, sem alterações) ---
   const handleAprovarTudo = async () => {
     const pendentes = pageResults.filter(r => !r.resolvido && !r.ignorado);
     if (pendentes.length > 0) {
@@ -333,26 +357,10 @@ export function DocumentImportForm() {
       for (const result of pageResults) {
         if (result.ignorado || !result.matchedProfile || !result.mes || !result.ano) continue;
 
-        // Se for substituição de duplicata, remove o documento antigo primeiro
         if (result.duplicadoId && result.acaoSeDuplicado === "substituir") {
-  const { data: docAntigo } = await supabase
-    .from("documentos")
-    .select("id, tipo")
-    .eq("id", result.duplicadoId)
-    .single();
-  
-  // Se o documento antigo não tem tipo definido ou é diferente, apenas substitui
-  if (docAntigo) {
-    console.log("Substituindo documento:", docAntigo.id, "tipo:", docAntigo.tipo);
-  }
-  
-  await supabase.from("documentos").delete().eq("id", result.duplicadoId);
-  substituidos++;
-          
           await supabase.from("documentos").delete().eq("id", result.duplicadoId);
           substituidos++;
         } else if (result.duplicadoId) {
-          // Duplicata sem decisão de substituir (não deveria chegar aqui, mas por segurança pula)
           continue;
         }
 
@@ -375,24 +383,22 @@ export function DocumentImportForm() {
         if (insertError) throw insertError;
 
         salvos++;
-        // Marca a página como aprovada
-setPageResults(prev => prev.map(r => 
-  r.pageNumber === result.pageNumber 
-    ? { ...r, aprovado: true, aprovadoEm } 
-    : r
-));
+        setPageResults(prev => prev.map(r =>
+          r.pageNumber === result.pageNumber
+            ? { ...r, aprovado: true, aprovadoEm }
+            : r
+        ));
       }
 
       let msg = `${salvos} documento(s) salvo(s) com sucesso!`;
       if (substituidos > 0) msg += ` ${substituidos} substituído(s).`;
       toast.success(msg);
 
-      // Reseta a tela após 2 segundos
-setTimeout(() => {
-  setPageResults([]);
-  setSelectedFile(null);
-  setCurrentPage(0);
-}, 2000);
+      setTimeout(() => {
+        setPageResults([]);
+        setSelectedFile(null);
+        setCurrentPage(0);
+      }, 2000);
     } catch (err) {
       toast.error("Erro ao salvar documentos", { description: (err as Error).message });
     } finally {
@@ -407,6 +413,32 @@ setTimeout(() => {
   const todasResolvidas = totalPages > 0 && resolvidos === totalPages;
   const jaAprovado = pageResults.some(r => r.aprovado);
 
+  // 🔥 Componente de navegação reutilizável
+  const Navegacao = ({ posicao }: { posicao: "topo" | "baixo" }) => (
+    <div className={`flex items-center justify-between gap-2 ${posicao === "baixo" ? "mt-4 pt-4 border-t" : "mb-2"}`}>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => irParaPagina(currentPage - 1)}
+        disabled={currentPage === 0}
+      >
+        <ChevronLeft className="size-4 mr-1" /> Anterior
+      </Button>
+      <span className="text-sm font-medium">
+        Página {currentPage + 1} de {totalPages}
+      </span>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => irParaPagina(currentPage + 1)}
+        disabled={currentPage === totalPages - 1}
+      >
+        Próximo <ChevronRight className="size-4 ml-1" />
+      </Button>
+    </div>
+  );
+
+  // --- Renderização ---
   if (pageResults.length === 0) {
     return (
       <div className="space-y-4">
@@ -455,15 +487,8 @@ setTimeout(() => {
         <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${(resolvidos / totalPages) * 100}%` }} />
       </div>
 
-      <div className="flex items-center justify-between">
-        <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(0, p - 1))} disabled={currentPage === 0}>
-          <ChevronLeft className="size-4" />
-        </Button>
-        <span className="text-sm font-medium">Página {result?.pageNumber} de {totalPages}</span>
-        <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))} disabled={currentPage === totalPages - 1}>
-          <ChevronRight className="size-4" />
-        </Button>
-      </div>
+      {/* Navegação no TOPO */}
+      <Navegacao posicao="topo" />
 
       {result && (
         <div className={`rounded-2xl border-2 p-5 space-y-4 ${result.ignorado ? "border-gray-200 bg-gray-50 opacity-60" : result.duplicadoId && !result.acaoSeDuplicado ? "border-amber-300 bg-amber-50/50" : result.resolvido ? "border-green-300 bg-green-50" : "border-red-200 bg-red-50/50"}`}>
@@ -530,8 +555,7 @@ setTimeout(() => {
                 <Button
                   size="sm"
                   className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
-                  onClick={() => setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, acaoSeDuplicado: "substituir", resolvido: true } : r))}
-                  variant={result.acaoSeDuplicado === "substituir" ? "default" : "outline"}
+                  onClick={() => handleDecisaoDuplicata("substituir")}
                 >
                   Substituir documento existente
                 </Button>
@@ -539,7 +563,7 @@ setTimeout(() => {
                   size="sm"
                   variant="outline"
                   className="flex-1"
-                  onClick={() => setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, acaoSeDuplicado: "manter_antigo", resolvido: true, ignorado: true } : r))}
+                  onClick={() => handleDecisaoDuplicata("manter_antigo")}
                 >
                   Manter o antigo (ignorar esta página)
                 </Button>
@@ -730,6 +754,9 @@ setTimeout(() => {
           )}
         </div>
       )}
+
+      {/* Navegação na PARTE INFERIOR */}
+      <Navegacao posicao="baixo" />
 
       <div className="space-y-1">
         <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Todas as páginas</div>
