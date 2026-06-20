@@ -10,13 +10,12 @@ import { formatCPF } from "@/lib/cpf";
 import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
-  const navigate = useNavigate();
   const { session, loading } = useAuth();
   const [cpf, setCpf] = useState("");
   const [senha, setSenha] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // 🔥 Função para buscar o role e redirecionar
+  // Função para buscar role e redirecionar com replace forçado
   const redirectUser = async (userId: string) => {
     try {
       const { data: rolesData, error: rolesError } = await supabase
@@ -34,18 +33,17 @@ export default function LoginPage() {
       const role = rolesData?.role;
       console.log('🔍 Role encontrado:', role);
 
-      // Armazena no localStorage para uso futuro
       if (role) {
         localStorage.setItem('user_role', role);
       } else {
         localStorage.removeItem('user_role');
       }
 
-      // Redireciona com base no role
+      // 🔥 Força o redirecionamento com reload da página para garantir que o contexto seja atualizado
       if (role === "admin") {
-        navigate("/admin/home", { replace: true });
+        window.location.replace("/admin/home");
       } else {
-        navigate("/home", { replace: true });
+        window.location.replace("/home");
       }
     } catch (error) {
       console.error("Erro ao redirecionar:", error);
@@ -53,27 +51,24 @@ export default function LoginPage() {
     }
   };
 
-  // 🔥 Se já houver sessão ativa, redireciona automaticamente (evita ficar na tela de login)
+  // Se já estiver logado, redireciona
   useEffect(() => {
     if (loading) return;
 
     if (session?.user?.id) {
-      // Verifica se já tem role no localStorage (para redirecionamento rápido)
       const savedRole = localStorage.getItem('user_role');
       if (savedRole) {
         console.log('🔍 Role do localStorage:', savedRole);
         if (savedRole === "admin") {
-          navigate("/admin/home", { replace: true });
+          window.location.replace("/admin/home");
         } else {
-          navigate("/home", { replace: true });
+          window.location.replace("/home");
         }
         return;
       }
-
-      // Se não tiver role salvo, busca e redireciona
       redirectUser(session.user.id);
     }
-  }, [session, loading, navigate]);
+  }, [session, loading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,11 +88,10 @@ export default function LoginPage() {
         await supabase.auth.setSession(data.session);
         toast.success("Login realizado com sucesso!");
         
-        // 🔥 Redireciona após o login
         if (data.user?.id) {
           await redirectUser(data.user.id);
         } else {
-          navigate("/home", { replace: true });
+          window.location.replace("/home");
         }
       } else {
         toast.error("Resposta inválida do servidor");
