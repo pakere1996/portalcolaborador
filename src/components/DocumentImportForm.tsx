@@ -325,6 +325,7 @@ if (next !== -1) {
 
     setIsApproving(true);
     try {
+      const aprovadoEm = new Date().toISOString();
       let salvos = 0;
       let substituidos = 0;
 
