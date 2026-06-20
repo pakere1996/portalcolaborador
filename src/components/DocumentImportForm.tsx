@@ -1,6 +1,4 @@
-"use client";
-
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
@@ -8,18 +6,51 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, FileText, X, Loader2, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight, UserPlus, Search, Check, Building, Briefcase, Clock } from "lucide-react";
+import { Upload, FileText, X, Loader2, CheckCircle2, AlertTriangle, XCircle, ChevronLeft, ChevronRight, UserPlus } from "lucide-react";
 import { extractTextFromPDF } from "@/lib/pdf-utils";
-import { FolhaPontoParser, ContrachequeParser, PageResult } from "@/lib/parsers";
-import { cn, cleanCNPJ } from "@/lib/utils";
-import { PDFDocument } from "pdf-lib";
 import { adminApi } from "@/lib/admin-api";
-import { ColaboradorFormDialog } from "./ColaboradorFormDialog";
 
-interface Unidade { id: string; nome: string; cnpj: string | null; }
-interface Cargo { id: string; nome: string; }
+interface ProfileForMatching {
+  id: string;
+  nome: string;
+  cpf: string;
+  matricula: string | null;
+}
 
-const blankColabForm = { nome: "", cpf: "", matricula: "", email: "", whatsapp: "", cargo: "", unidadeId: "none", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", perfil_acesso: "colaborador", regime_trabalho: "none", ativo: true, senha: "" };
+interface Cargo {
+  id: string;
+  nome: string;
+}
+
+interface Unidade {
+  id: string;
+  nome: string;
+  cnpj: string | null;
+}
+
+interface PageResult {
+  pageNumber: number;
+  text: string;
+  nome: string | null;
+  cnpj: string | null;
+  mes: number | null;
+  ano: number | null;
+  unidadeId: string | null;
+  matchStatus: "automatico" | "revisao";
+  matchedProfile: ProfileForMatching | null;
+  vinculado: boolean;
+  ignorado: boolean;
+}
+
+// Remove acentos e normaliza para comparação exata de nomes
+const normalizeNome = (str: string): string => {
+  return str
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+};
 
 export function DocumentImportForm() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -27,97 +58,81 @@ export function DocumentImportForm() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [pageResults, setPageResults] = useState<PageResult[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
-  const [profiles, setProfiles] = useState<any[]>([]);
+  const [profiles, setProfiles] = useState<ProfileForMatching[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [listaCargos, setListaCargos] = useState<Cargo[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showNewColab, setShowNewColab] = useState(false);
-  const [newColabForm, setNewColabForm] = useState(blankColabForm);
-  const [busyNewColab, setBusyNewColab] = useState(false);
+  const [manualProfileId, setManualProfileId] = useState<string>("");
+
+  const [novoColabForm, setNovoColabForm] = useState({
+    nome: "", cpf: "", cargo: "", unidadeId: "", senha: "",
+    folgaFixa: "none", dataAdmissao: "", dataNascimento: "",
+    whatsapp: "", perfil_acesso: "colaborador", matricula: "",
+  });
+  const [showNovoColab, setShowNovoColab] = useState(false);
   const { user } = useAuth();
 
-  const documentType = window.location.pathname.includes("ponto") ? "folha_ponto" : "contracheque";
-
-  const loadData = useCallback(async () => {
-    console.log("=== LOAD DATA PROFILES ===");
-    
-    // Query principal: sempre buscar todos os campos necessários
-    const [pRes, uRes, cRes] = await Promise.all([
-      supabase.from("profiles")
-        .select("id, nome, cpf, matricula, cargo, unidade_id, regime_trabalho, ativo")
-        .eq("ativo", true)
-        .order("nome"),
-      supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome"),
-      supabase.from("cargos").select("id, nome").order("nome")
-    ]);
-    
-    console.log("PROFILE ERROR:", pRes.error);
-    console.log("PROFILE DATA LENGTH:", pRes.data?.length ?? 0);
-    console.log("PROFILE DATA SAMPLE:", (pRes.data ?? []).slice(0, 3));
-
-    if (pRes.error) {
-      console.error("Erro ao carregar perfis:", pRes.error);
-      toast.error("Erro ao carregar lista de colaboradores");
-      
-      // Fallback: mesma query completa, sem remover campos
-      console.log("=== FALLBACK PROFILES (mesma query completa) ===");
-      const fallbackRes = await supabase.from("profiles")
-        .select("id, nome, cpf, matricula, cargo, unidade_id, regime_trabalho, ativo")
-        .eq("ativo", true)
-        .order("nome");
-      console.log("FALLBACK ERROR:", fallbackRes.error);
-      console.log("FALLBACK DATA LENGTH:", fallbackRes.data?.length ?? 0);
-      console.log("FALLBACK DATA SAMPLE:", (fallbackRes.data ?? []).slice(0, 3));
-      
-      if (!fallbackRes.error) {
-        setProfiles(fallbackRes.data ?? []);
-      }
-    } else {
-      setProfiles(pRes.data ?? []);
-    }
-
-    setUnidades(uRes.data ?? []);
-    setListaCargos(cRes.data ?? []);
-  }, []);
+  const documentType = window.location.pathname.includes("ponto") ? "ponto" : "contracheque";
 
   useEffect(() => {
-    if (user) loadData();
-  }, [user?.id, loadData]);
+    if (!user) return;
+    supabase.from("profiles").select("id, nome, cpf, matricula").eq("ativo", true).order("nome")
+      .then(({ data }) => setProfiles((data ?? []) as ProfileForMatching[]));
+    supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome")
+      .then(({ data }) => setUnidades(data ?? []));
+    supabase.from("cargos").select("id, nome").order("nome")
+      .then(({ data }) => setListaCargos(data ?? []));
+  }, [user?.id]);
 
-  const extractPageAsBlob = async (file: File, pageIndex: number): Promise<Blob> => {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdfDoc = await PDFDocument.load(arrayBuffer);
-    const newPdf = await PDFDocument.create();
-    const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageIndex]);
-    newPdf.addPage(copiedPage);
-    const pdfBytes = await newPdf.save();
-    return new Blob([pdfBytes], { type: "application/pdf" });
+  useEffect(() => {
+    setShowNovoColab(false);
+    setManualProfileId("");
+  }, [currentPage]);
+
+  const cleanCNPJ = (cnpj: string) => cnpj.replace(/\D/g, "");
+
+  const extractPeriodo = (text: string): { mes: number; ano: number } | null => {
+    const regexPonto = /Per[ií]odo de refer[eê]ncia:\s*de\s*(\d{2}\/\d{2}\/\d{4})\s+(?:a|à)\s+(\d{2}\/\d{2}\/\d{4})/i;
+    const matchPonto = text.match(regexPonto);
+    if (matchPonto) {
+      const [, dataInicio] = matchPonto;
+      const [, mes, ano] = dataInicio.split("/");
+      return { mes: parseInt(mes), ano: parseInt(ano) };
+    }
+    const meses: Record<string, number> = {
+      janeiro: 1, fevereiro: 2, março: 3, abril: 4, maio: 5, junho: 6,
+      julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
+    };
+    const regexContracheque = /\b(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})\b/i;
+    const matchContracheque = text.match(regexContracheque);
+    if (matchContracheque) {
+      return { mes: meses[matchContracheque[1].toLowerCase()], ano: parseInt(matchContracheque[2]) };
+    }
+    return null;
   };
 
-  const handleVinculo = async (profileId: string, result: PageResult, silent = false) => {
-    if (!selectedFile || isUploading) return;
-    if (!silent) setIsUploading(true);
+  // Extrai o nome do colaborador do texto do PDF (formato cartão de ponto/contracheque)
+  const extractNomePDF = (text: string): string | null => {
+    const nameMatch = text.match(/\d{2}\/\d{2}\/\d{4}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+?)\s+\d+\s+[A-Z]/);
+    if (nameMatch) return nameMatch[1].trim().replace(/\s+/g, " ");
+    return null;
+  };
 
-    try {
-      const pageBlob = await extractPageAsBlob(selectedFile, result.pageNumber - 1);
-      const fileName = `${result.ano}-${String(result.mes).padStart(2, '0')}_${profileId}_${documentType}.pdf`;
-      const storagePath = `documentos/${documentType}/${profileId}/${fileName}`;
+  // Match exato por nome (ignorando acentos e caixa). Retorna null se 0 ou 2+ matches.
+  const findExactMatch = (nomePDF: string | null, profilesList: ProfileForMatching[]): ProfileForMatching | null => {
+    if (!nomePDF) return null;
+    const nomeNormalizado = normalizeNome(nomePDF);
+    const matches = profilesList.filter(p => normalizeNome(p.nome) === nomeNormalizado);
+    if (matches.length === 1) return matches[0];
+    return null; // 0 ou ambíguo (2+) -> revisão manual
+  };
 
-      const { error: uploadError } = await supabase.storage.from("documentos").upload(storagePath, pageBlob, { contentType: "application/pdf", upsert: true });
-      if (uploadError) throw uploadError;
-
-      const { error: dbError } = await supabase.from("documentos").insert({ colaborador_id: profileId, tipo: documentType, mes: result.mes!, ano: result.ano!, storage_path: storagePath, status: "vinculado", nome_pdf: fileName });
-      if (dbError) throw dbError;
-
-      setPageResults(prev => prev.map((r) => r.pageNumber === result.pageNumber ? { ...r, vinculado: true, matchedProfile: profiles.find(p => p.id === profileId) || r.matchedProfile } : r));
-      if (!silent) { toast.success("Documento vinculado com sucesso!"); if (currentPage < pageResults.length - 1) setCurrentPage(prev => prev + 1); }
-    } catch (err) {
-      if (!silent) toast.error("Erro ao vincular documento", { description: (err as Error).message });
-      console.error("Erro no vínculo:", err);
-    } finally {
-      if (!silent) setIsUploading(false);
-    }
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+    setPageResults([]);
+    setCurrentPage(0);
   };
 
   const handleProcessar = async () => {
@@ -125,35 +140,50 @@ export function DocumentImportForm() {
     setIsProcessing(true);
     try {
       const pages = await extractTextFromPDF(selectedFile);
-      const parser = documentType === "folha_ponto" ? new FolhaPontoParser() : new ContrachequeParser();
-      const results = parser.parse(pages, profiles);
+      const results: PageResult[] = pages.map((p) => {
+        const text = p.text;
 
-      const processedResults = results.map(r => {
-        let unitId = null;
-        if (r.cnpj) {
-          const cleanPdfCnpj = cleanCNPJ(r.cnpj);
-          const unit = unidades.find(u => u.cnpj && cleanCNPJ(u.cnpj) === cleanPdfCnpj);
-          if (unit) unitId = unit.id;
-        }
-        let isNew = false;
-        if (r.suggestedCargoName) {
-          const normalizedSuggested = r.suggestedCargoName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-          const cargoExists = listaCargos.some(c => c.nome.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim() === normalizedSuggested);
-          isNew = !cargoExists;
-        }
-        return { ...r, unidadeId: unitId, isNewCargo: isNew };
+        const nome = extractNomePDF(text);
+        const matchedProfile = findExactMatch(nome, profiles);
+
+        const cnpjMatch = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
+        const cnpj = cnpjMatch ? cnpjMatch[0] : null;
+        const unidade = cnpj ? unidades.find(u => u.cnpj && cleanCNPJ(u.cnpj) === cleanCNPJ(cnpj)) : null;
+        const periodo = extractPeriodo(text);
+
+        return {
+          pageNumber: p.pageNumber,
+          text,
+          nome,
+          cnpj,
+          mes: periodo?.mes ?? null,
+          ano: periodo?.ano ?? null,
+          unidadeId: unidade?.id ?? null,
+          matchStatus: matchedProfile ? "automatico" : "revisao",
+          matchedProfile,
+          vinculado: false,
+          ignorado: false,
+        } as PageResult;
       });
 
-      setPageResults(processedResults);
-      toast.success(`${pages.length} páginas processadas.`);
-      let autoCount = 0;
-      for (const r of processedResults) {
-        if (r.matchStatus === "automatico" && r.matchedProfile && r.mes && r.ano) {
-          await handleVinculo(r.matchedProfile.id, r, true);
-          autoCount++;
+      setPageResults(results);
+
+      // Vincula automaticamente todas as páginas com match exato
+      for (const result of results) {
+        if (result.matchedProfile && result.mes && result.ano) {
+          await handleVinculoAutomatico(result.matchedProfile.id, result);
         }
       }
-      if (autoCount > 0) { toast.success(`${autoCount} documentos vinculados automaticamente.`); }
+
+      setPageResults(prev =>
+        prev.map(r => (r.matchedProfile ? { ...r, vinculado: true } : r))
+      );
+
+      const primeiroPendente = results.findIndex(r => !r.matchedProfile && !r.ignorado);
+      setCurrentPage(primeiroPendente >= 0 ? primeiroPendente : 0);
+
+      const qtdAuto = results.filter(r => r.matchedProfile).length;
+      toast.success(`${pages.length} páginas processadas (${qtdAuto} vinculadas automaticamente)`);
     } catch (err) {
       toast.error("Erro ao processar PDF", { description: (err as Error).message });
     } finally {
@@ -161,233 +191,414 @@ export function DocumentImportForm() {
     }
   };
 
-  const handleCreateColab = async () => {
-    setBusyNewColab(true);
+  const handleVinculoAutomatico = async (profileId: string, result: PageResult) => {
     try {
-      const { data: authUser, error: authErr } = await adminApi.createUser({ nome: newColabForm.nome.trim(), cpf: newColabForm.cpf.replace(/\D/g, ""), email: newColabForm.email.trim().toLowerCase() || `${newColabForm.cpf.replace(/\D/g, "")}@pakere.com.br`, senha: newColabForm.senha || newColabForm.cpf.replace(/\D/g, "").slice(-6), cargo: newColabForm.cargo, dataAdmissao: newColabForm.dataAdmissao, dataNascimento: newColabForm.dataNascimento, folgaFixaSemana: newColabForm.folgaFixa === "none" ? null : Number(newColabForm.folgaFixa), role: newColabForm.perfil_acesso });
-      if (authErr) throw authErr;
-      await supabase.from("profiles").update({ matricula: newColabForm.matricula.trim() || null, whatsapp: newColabForm.whatsapp.trim() || null, unidade_id: newColabForm.unidadeId === "none" ? null : newColabForm.unidadeId, regime_trabalho: newColabForm.regime_trabalho === "none" ? null : newColabForm.regime_trabalho, ativo: true }).eq("id", authUser.userId);
-      toast.success("Colaborador criado!");
-      setShowNewColab(false);
-      await loadData();
-      const current = pageResults[currentPage];
-      handleVinculo(authUser.userId, current);
-    } catch (e) {
-      toast.error("Erro ao criar colaborador", { description: (e as Error).message });
-    } finally {
-      setBusyNewColab(false);
+      if (!result.mes || !result.ano) return;
+
+      const { count } = await supabase.from("documentos")
+        .select("id", { count: "exact", head: true })
+        .eq("colaborador_id", profileId)
+        .eq("tipo", documentType)
+        .eq("mes", result.mes)
+        .eq("ano", result.ano);
+
+      if (count && count > 0) return;
+
+      const storagePath = `documentos/${documentType}/${profileId}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}.pdf`;
+      const { error: uploadError } = await supabase.storage.from("documentos")
+        .upload(storagePath, selectedFile!, { contentType: "application/pdf", upsert: false });
+      if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
+
+      const { error: insertError } = await supabase.from("documentos").insert({
+        colaborador_id: profileId,
+        tipo: documentType,
+        mes: result.mes,
+        ano: result.ano,
+        storage_path: storagePath,
+        status: "disponivel",
+        nome_pdf: selectedFile!.name,
+      });
+      if (insertError) throw insertError;
+    } catch (err) {
+      console.error("Erro no vínculo automático:", err);
     }
   };
 
-  const openNewColab = () => {
-    const current = pageResults[currentPage];
-    setNewColabForm({ ...blankColabForm, nome: current.nome || "", cpf: current.cpf || "", cargo: current.suggestedCargoName || "", dataAdmissao: current.dataAdmissao || "", unidadeId: current.unidadeId || "none", regime_trabalho: current.regimeTrabalho || "none" });
-    setShowNewColab(true);
+  const handleVincular = async (profileId: string) => {
+    const result = pageResults[currentPage];
+    if (!result || !result.mes || !result.ano) {
+      toast.error("Mês/ano não identificado nesta página.");
+      return;
+    }
+    setIsUploading(true);
+    try {
+      const { count } = await supabase.from("documentos")
+        .select("id", { count: "exact", head: true })
+        .eq("colaborador_id", profileId)
+        .eq("tipo", documentType)
+        .eq("mes", result.mes)
+        .eq("ano", result.ano);
+
+      if (count && count > 0) {
+        toast.error("Documento duplicado — já existe para este colaborador, mês e ano.");
+        setIsUploading(false);
+        return;
+      }
+
+      const storagePath = `documentos/${documentType}/${profileId}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}.pdf`;
+      const { error: uploadError } = await supabase.storage.from("documentos")
+        .upload(storagePath, selectedFile!, { contentType: "application/pdf", upsert: false });
+      if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
+
+      const { error: insertError } = await supabase.from("documentos").insert({
+        colaborador_id: profileId,
+        tipo: documentType,
+        mes: result.mes,
+        ano: result.ano,
+        storage_path: storagePath,
+        status: "disponivel",
+        nome_pdf: selectedFile!.name,
+      });
+      if (insertError) throw insertError;
+
+      setPageResults(prev =>
+        prev.map((r, i) =>
+          i === currentPage
+            ? { ...r, vinculado: true, matchedProfile: profiles.find(p => p.id === profileId) ?? r.matchedProfile }
+            : r
+        )
+      );
+
+      setShowNovoColab(false);
+      toast.success("Documento vinculado com sucesso!");
+      setManualProfileId("");
+
+      const next = pageResults.findIndex((r, i) => i > currentPage && !r.vinculado && !r.ignorado);
+      if (next !== -1) setCurrentPage(next);
+    } catch (err) {
+      toast.error("Erro ao vincular", { description: (err as Error).message });
+    } finally {
+      setIsUploading(false);
+    }
   };
 
-  const current = pageResults[currentPage];
-  const unidadeId = current?.unidadeId;
-  
-  // === DIAGNÓSTICO DO FILTRO ===
-  console.log("=== FILTRO DE COLABORADORES ===");
-  console.log("UNIDADE DETECTADA:", unidadeId);
-  console.log("TOTAL PROFILES:", profiles.length);
+  const handleIgnorar = () => {
+    setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, ignorado: true } : r));
+    const next = pageResults.findIndex((r, i) => i > currentPage && !r.vinculado && !r.ignorado);
+    if (next !== -1) setCurrentPage(next);
+  };
 
-  // Etapa A — filtro por unidade (defensivo)
-  const profilesDaUnidade = !unidadeId
-    ? profiles
-    : profiles.filter(p => String(p.unidade_id ?? "") === String(unidadeId ?? ""));
+  const handleCriarColab = async () => {
+    if (!novoColabForm.nome || !novoColabForm.cpf || !novoColabForm.cargo || !novoColabForm.unidadeId) {
+      toast.error("Nome, CPF, cargo e unidade são obrigatórios.");
+      return;
+    }
+    setIsUploading(true);
+    try {
+      const cleanCpf = novoColabForm.cpf.replace(/\D/g, "");
+      const authUser = await adminApi.createUser({
+        nome: novoColabForm.nome.trim(),
+        cpf: cleanCpf,
+        email: `${cleanCpf}@pakere.com.br`,
+        senha: novoColabForm.senha || cleanCpf.slice(-6),
+        cargo: novoColabForm.cargo,
+        dataAdmissao: novoColabForm.dataAdmissao || null,
+        dataNascimento: novoColabForm.dataNascimento || null,
+        folgaFixaSemana: novoColabForm.folgaFixa === "none" ? null : Number(novoColabForm.folgaFixa),
+        role: novoColabForm.perfil_acesso,
+      });
 
-  console.log("TOTAL PROFILES DA UNIDADE:", profilesDaUnidade.length);
-  console.log("SAMPLE PROFILES DA UNIDADE:", profilesDaUnidade.slice(0, 5));
+      const { error: profErr } = await supabase.from("profiles").update({
+        unidade_id: novoColabForm.unidadeId,
+        whatsapp: novoColabForm.whatsapp || null,
+        matricula: novoColabForm.matricula || null,
+      }).eq("id", authUser.userId);
+      if (profErr) throw profErr;
 
-  // Etapa B — filtro por busca textual
-  const colaboradoresFiltrados = profilesDaUnidade.filter(p => {
-    const term = searchTerm.toLowerCase();
-    if (!term) return true;
-    const nome = (p.nome || "").toLowerCase();
-    const cpf = (p.cpf || "").toLowerCase();
-    const matricula = (p.matricula || "").toLowerCase();
-    return nome.includes(term) || cpf.includes(term) || matricula.includes(term);
-  });
+      const newProfile: ProfileForMatching = { id: authUser.userId, nome: novoColabForm.nome, cpf: cleanCpf, matricula: novoColabForm.matricula || null };
+      setProfiles(prev => [...prev, newProfile]);
+      setShowNovoColab(false);
+      setNovoColabForm({ nome: "", cpf: "", cargo: "", unidadeId: "", senha: "", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", whatsapp: "", perfil_acesso: "colaborador", matricula: "" });
+      toast.success("Colaborador criado com sucesso! Clique em 'Vincular' para finalizar.");
+      setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, matchedProfile: newProfile, matchStatus: "automatico" } : r));
+      setManualProfileId(newProfile.id);
+    } catch (err) {
+      toast.error("Erro ao criar colaborador", { description: (err as Error).message });
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
-  console.log("COLABORADORES FILTRADOS:", colaboradoresFiltrados.length);
-  
+  const result = pageResults[currentPage];
+  const totalPages = pageResults.length;
+  const vinculados = pageResults.filter(r => r.vinculado).length;
+  const ignorados = pageResults.filter(r => r.ignorado).length;
+
   if (pageResults.length === 0) {
     return (
       <div className="space-y-4">
-        <div className={cn("border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors", isDragging ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30")} onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) setSelectedFile(f); }} onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onClick={() => document.getElementById("file-import-input")?.click()} >
-          <Input id="file-import-input" type="file" accept=".pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) setSelectedFile(f); }} className="hidden" />
+        <div
+          className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${isDragging ? "border-primary bg-muted/50" : "border-border hover:bg-muted/30"}`}
+          onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) setSelectedFile(f); }}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onClick={() => document.getElementById("file-import-input")?.click()}
+        >
+          <Input id="file-import-input" type="file" accept=".pdf" onChange={handleFileChange} className="hidden" />
           <Upload className="size-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground font-medium">Arraste um PDF ou clique para selecionar</p>
-          <p className="text-xs text-muted-foreground mt-1">O arquivo será dividido por páginas para cada colaborador</p>
+          <p className="text-sm text-muted-foreground">Arraste um PDF ou clique para selecionar</p>
+          <p className="text-xs text-muted-foreground mt-1">Apenas arquivos PDF</p>
         </div>
+
         {selectedFile && (
           <div className="flex items-center justify-between p-3 bg-muted/50 rounded-xl border border-border">
             <div className="flex items-center gap-2">
-              <FileText className="size-4 text-primary" />
+              <FileText className="size-4 text-muted-foreground" />
               <div>
                 <div className="text-sm font-medium">{selectedFile.name}</div>
                 <div className="text-xs text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB</div>
               </div>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => setSelectedFile(null)} disabled={isProcessing}>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedFile(null)} disabled={isProcessing}>
               <X className="size-4" />
             </Button>
           </div>
         )}
-        <Button onClick={handleProcessar} disabled={!selectedFile || isProcessing} className="w-full h-12 font-bold">
-          {isProcessing ? <><Loader2 className="size-4 mr-2 animate-spin" /> Processando...</> : <><Upload className="size-4 mr-2" /> Iniciar Processamento</>}
+
+        <Button onClick={handleProcessar} disabled={!selectedFile || isProcessing} className="w-full">
+          {isProcessing ? <><Loader2 className="size-4 mr-2 animate-spin" /> Processando...</> : <><Upload className="size-4 mr-2" /> Processar PDF</>}
         </Button>
       </div>
     );
   }
 
-  const totalPages = pageResults.length;
-  const vinculados = pageResults.filter(r => r.vinculado).length;
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between bg-muted/30 p-4 rounded-2xl border border-border">
-        <div className="flex items-center justify-between bg-muted/30 p-4 rounded-2xl border border-border">
-          <div className="flex items-center gap-4">
-            <Button variant="outline" size="icon" onClick={() => setCurrentPage(p => Math.max(0, p - 1))} disabled={currentPage === 0}>
-              <ChevronLeft className="size-4" />
-            </Button>
-            <div className="text-center">
-              <div className="text-xs font-bold uppercase text-muted-foreground">Página</div>
-              <div className="text-lg font-black">{currentPage + 1} / {totalPages}</div>
-            </div>
-            <Button variant="outline" size="icon" onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))} disabled={currentPage === totalPages - 1}>
-              <ChevronRight className="size-4" />
-            </Button>
-          </div>
-          <div className="text-right">
-            <div className="text-xs font-bold uppercase text-muted-foreground">Progresso</div>
-            <div className="text-sm font-bold text-primary">{vinculados} de {totalPages} vinculados</div>
-          </div>
-        </div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between text-sm">
+        <span className="font-semibold">{selectedFile?.name}</span>
+        <span className="text-muted-foreground">{vinculados} vinculados · {ignorados} ignorados · {totalPages - vinculados - ignorados} pendentes</span>
+      </div>
+      <div className="w-full bg-muted rounded-full h-2">
+        <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${((vinculados + ignorados) / totalPages) * 100}%` }} />
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <div className="space-y-4">
-          <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
-            <h3 className="font-bold flex items-center gap-2 text-primary">
-              <Search className="size-4" /> Dados Extraídos
-            </h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div className="col-span-2">
-                <Label className="text-[10px] uppercase text-muted-foreground">Nome no PDF</Label>
-                <div className="font-bold text-base truncate">{current.nome || "Não identificado"}</div>
-              </div>
-              <div>
-                <Label className="text-[10px] uppercase text-muted-foreground">CPF no PDF</Label>
-                <div className="font-mono">{current.cpf || "Não identificado"}</div>
-              </div>
-              <div>
-                <Label className="text-[10px] uppercase text-muted-foreground">Matrícula no PDF</Label>
-                <div className="font-mono">{current.matricula || "Não identificada"}</div>
-              </div>
-              <div>
-                <Label className="text-[10px] uppercase text-muted-foreground">Competência</Label>
-                <div className="font-medium">{current.mes && current.ano ? `${String(current.mes).padStart(2, '0')}/${current.ano}` : "Não identificada"}</div>
-              </div>
-              <div>
-                <Label className="text-[10px] uppercase text-muted-foreground flex items-center gap-1">
-                  <Briefcase className="size-3" /> Cargo
-                </Label>
-                <div className="font-medium truncate">{current.suggestedCargoName || "—"} {current.isNewCargo && <span className="ml-2 text-[8px] h-4 px-1 bg-amber-50 text-amber-600 border border-amber-200 rounded-full">Novo</span>}</div>
-              </div>
-              <div>
-                <Label className="text-[10px] uppercase text-muted-foreground flex items-center gap-1">
-                  <Clock className="size-3" /> Regime
-                </Label>
-                <div className="font-medium">{current.regimeTrabalho || "—"}</div>
-              </div>
-              <div className="col-span-2">
-                <Label className="text-[10px] uppercase text-muted-foreground flex items-center gap-1">
-                  <Building className="size-3" /> Unidade (via CNPJ)
-                </Label>
-                <div className="font-medium">{current.unidadeId ? unidades.find(u => u.id === current.unidadeId)?.nome : (current.cnpj || "CNPJ não identificado")}</div>
-              </div>
-            </div>
+      <div className="flex items-center justify-between">
+        <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(0, p - 1))} disabled={currentPage === 0}>
+          <ChevronLeft className="size-4" />
+        </Button>
+        <span className="text-sm font-medium">Página {result?.pageNumber} de {totalPages}</span>
+        <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))} disabled={currentPage === totalPages - 1}>
+          <ChevronRight className="size-4" />
+        </Button>
+      </div>
+
+      {result && (
+        <div className={`rounded-2xl border-2 p-5 space-y-4 ${result.vinculado ? "border-green-300 bg-green-50" : result.ignorado ? "border-gray-200 bg-gray-50 opacity-60" : result.matchStatus === "automatico" ? "border-green-200 bg-green-50/50" : "border-red-200 bg-red-50/50"}`}>
+
+          <div className="flex items-center gap-2">
+            {result.vinculado ? <CheckCircle2 className="size-5 text-green-600" /> : result.ignorado ? <XCircle className="size-5 text-gray-400" /> : result.matchStatus === "automatico" ? <CheckCircle2 className="size-5 text-green-600" /> : <XCircle className="size-5 text-red-500" />}
+            <span className="font-semibold text-sm">
+              {result.vinculado ? "✅ Vinculado" : result.ignorado ? "⛔ Ignorado" : result.matchStatus === "automatico" ? "✅ Match automático (nome exato)" : "❌ Revisão manual necessária"}
+            </span>
           </div>
 
-          {current.vinculado ? (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-8 text-center space-y-3">
-              <CheckCircle2 className="size-12 text-emerald-500 mx-auto" />
-              <div className="font-bold text-emerald-900">Documento Vinculado</div>
-              <p className="text-sm text-emerald-700">Esta página já foi salva para {current.matchedProfile?.nome}.</p>
-              <Button variant="outline" className="w-full border-emerald-200 text-emerald-700" onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}>
-                Próxima Página
-              </Button>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div><span className="text-muted-foreground">Nome PDF:</span><div className="font-medium">{result.nome ?? "Não identificado"}</div></div>
+            <div><span className="text-muted-foreground">Período:</span><div className="font-medium">{result.mes && result.ano ? `${String(result.mes).padStart(2, "0")}/${result.ano}` : "Não identificado"}</div></div>
+            <div className="col-span-2"><span className="text-muted-foreground">Unidade:</span><div className="font-medium">{result.unidadeId ? unidades.find(u => u.id === result.unidadeId)?.nome : "Não identificada"}</div></div>
+          </div>
+
+          {result.matchedProfile && (
+            <div className="p-3 bg-white rounded-xl border border-border">
+              <div className="text-xs text-muted-foreground mb-1">Colaborador identificado:</div>
+              <div className="font-semibold">{result.matchedProfile.nome}</div>
+              <div className="text-xs text-muted-foreground">CPF: {result.matchedProfile.cpf}</div>
             </div>
-          ) : (
-            <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
-              <h3 className="font-bold flex items-center gap-2">
-                <Check className="size-4 text-primary" /> Confirmar Colaborador
-              </h3>
-              {current.matchedProfile ? (
-                <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className={cn("text-xs font-bold text-white px-2 py-1 rounded-full", current.matchStatus === "automatico" ? "bg-emerald-500" : "bg-amber-500")}>
-                      {current.matchStatus === "automatico" ? "Match Exato" : "Sugestão"}
-                    </span>
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase">Confiança: {Math.round(current.confidence * 100)}%</span>
-                  </div>
-                  <div className="font-bold text-lg">{current.matchedProfile.nome}</div>
-                  <div className="text-xs text-muted-foreground">
-                    Matrícula: {current.matchedProfile.matricula || "—"} • {current.matchedProfile.cargo || "Sem cargo"} • {current.matchedProfile.cpf}
-                  </div>
-                  <Button className="w-full" onClick={() => handleVinculo(current.matchedProfile!.id, current)} disabled={isUploading}>
-                    {isUploading ? <Loader2 className="size-4 animate-spin mr-2" /> : <Check className="size-4 mr-2" />}
-                    Confirmar e Vincular
+          )}
+
+          {!result.vinculado && !result.ignorado && (
+            <div className="space-y-3">
+              {result.matchedProfile && (
+                <Button className="w-full" onClick={() => handleVincular(result.matchedProfile!.id)} disabled={isUploading}>
+                  {isUploading ? <Loader2 className="size-4 mr-2 animate-spin" /> : <CheckCircle2 className="size-4 mr-2" />}
+                  Vincular a {result.matchedProfile.nome}
+                </Button>
+              )}
+
+              <div className="space-y-2">
+                <Label className="text-xs">Vincular manualmente a outro colaborador:</Label>
+                <div className="flex gap-2">
+                  <Select
+                    value={manualProfileId}
+                    onValueChange={(value) => { setManualProfileId(value); setShowNovoColab(false); }}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Selecione o colaborador..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {profiles.map(p => (
+                        <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    onClick={() => { setShowNovoColab(false); if (manualProfileId) handleVincular(manualProfileId); }}
+                    disabled={!manualProfileId || isUploading}
+                  >
+                    Vincular
                   </Button>
+                </div>
+              </div>
+
+              {(showNovoColab && !manualProfileId) ? (
+                <div className="space-y-3 p-4 bg-white rounded-xl border border-border">
+                  <div className="font-semibold text-sm">Cadastrar Novo Colaborador</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Nome Completo *</Label>
+                      <Input placeholder="Nome completo" value={novoColabForm.nome} onChange={e => setNovoColabForm(f => ({ ...f, nome: e.target.value }))} />
+                    </div>
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">CPF *</Label>
+                      <Input placeholder="000.000.000-00" value={novoColabForm.cpf} onChange={e => setNovoColabForm(f => ({ ...f, cpf: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Cargo *</Label>
+                      <Select value={novoColabForm.cargo} onValueChange={(v) => setNovoColabForm(f => ({ ...f, cargo: v }))}>
+                        <SelectTrigger><SelectValue placeholder="Selecione o cargo" /></SelectTrigger>
+                        <SelectContent>
+                          {listaCargos.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Matrícula (Opcional)</Label>
+                      <Input value={novoColabForm.matricula} onChange={e => setNovoColabForm(f => ({ ...f, matricula: e.target.value }))} placeholder="Matrícula" />
+                    </div>
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Unidade *</Label>
+                      <Select value={novoColabForm.unidadeId} onValueChange={v => setNovoColabForm(f => ({ ...f, unidadeId: v }))}>
+                        <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
+                        <SelectContent>
+                          {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Data de Admissão</Label>
+                      <Input type="date" value={novoColabForm.dataAdmissao} onChange={e => setNovoColabForm(f => ({ ...f, dataAdmissao: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Data de Nascimento</Label>
+                      <Input type="date" value={novoColabForm.dataNascimento} onChange={e => setNovoColabForm(f => ({ ...f, dataNascimento: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Folga Fixa Semanal</Label>
+                      <Select value={novoColabForm.folgaFixa} onValueChange={v => setNovoColabForm(f => ({ ...f, folgaFixa: v }))}>
+                        <SelectTrigger><SelectValue placeholder="Nenhuma" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhuma</SelectItem>
+                          <SelectItem value="0">Domingo</SelectItem>
+                          <SelectItem value="1">Segunda-feira</SelectItem>
+                          <SelectItem value="2">Terça-feira</SelectItem>
+                          <SelectItem value="3">Quarta-feira</SelectItem>
+                          <SelectItem value="4">Quinta-feira</SelectItem>
+                          <SelectItem value="5">Sexta-feira</SelectItem>
+                          <SelectItem value="6">Sábado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Perfil de Acesso</Label>
+                      <Select value={novoColabForm.perfil_acesso} onValueChange={v => setNovoColabForm(f => ({ ...f, perfil_acesso: v }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="colaborador">Colaborador</SelectItem>
+                          <SelectItem value="admin">Administrador</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">WhatsApp</Label>
+                      <Input placeholder="(00) 00000-0000" value={novoColabForm.whatsapp} onChange={e => setNovoColabForm(f => ({ ...f, whatsapp: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium flex items-center justify-between">
+                        <span>Senha Inicial</span>
+                        {novoColabForm.cpf && (
+                          <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            Sugerida: {novoColabForm.cpf.replace(/\D/g, "").slice(-6)}
+                          </span>
+                        )}
+                      </Label>
+                      <Input
+                        type="text"
+                        placeholder="Padrão: 6 últimos dígitos CPF"
+                        value={novoColabForm.senha}
+                        onChange={e => setNovoColabForm(f => ({ ...f, senha: e.target.value }))}
+                        className="font-mono bg-muted/30"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button className="flex-1" onClick={handleCriarColab} disabled={isUploading}>
+                      {isUploading ? <Loader2 className="size-4 mr-2 animate-spin" /> : <UserPlus className="size-4 mr-2" />} Criar Colaborador
+                    </Button>
+                    <Button variant="outline" onClick={() => setShowNovoColab(false)}>Cancelar</Button>
+                  </div>
                 </div>
               ) : (
-                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="size-5 text-rose-500 shrink-0 mt-0.5" />
-                    <p className="text-sm text-rose-800 font-medium">Nenhum colaborador correspondente encontrado automaticamente.</p>
-                  </div>
-                  <Button variant="outline" className="w-full border-rose-200 text-rose-700 hover:bg-rose-100" onClick={openNewColab}>
-                    <UserPlus className="size-4 mr-2" /> Cadastrar Novo Colaborador
-                  </Button>
-                </div>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setManualProfileId("");
+                    setShowNovoColab(true);
+                    setNovoColabForm({
+                      nome: result.nome ?? "",
+                      cpf: "",
+                      cargo: "",
+                      unidadeId: result.unidadeId ?? "",
+                      senha: "",
+                      folgaFixa: "none",
+                      dataAdmissao: "",
+                      dataNascimento: "",
+                      whatsapp: "",
+                      perfil_acesso: "colaborador",
+                      matricula: "",
+                    });
+                  }}
+                >
+                  <UserPlus className="size-4 mr-2" /> Cadastrar Novo Colaborador
+                </Button>
               )}
+
+              <Button variant="ghost" className="w-full text-muted-foreground" onClick={handleIgnorar}>
+                <XCircle className="size-4 mr-2" /> Ignorar esta página
+              </Button>
             </div>
           )}
         </div>
+      )}
 
-        <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
-          <h3 className="font-bold flex items-center gap-2">
-            <UserPlus className="size-4 text-primary" /> Busca Manual
-          </h3>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input placeholder="Buscar por nome, CPF ou matrícula..." className="pl-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-          </div>
-          <div className="max-h-[300px] overflow-y-auto border rounded-xl divide-y divide-border">
-            {colaboradoresFiltrados.length === 0 ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">Nenhum colaborador encontrado.</div>
-            ) : (
-              colaboradoresFiltrados.map(p => (
-                <button key={p.id} className="w-full text-left p-3 hover:bg-muted transition-colors flex items-center justify-between group" onClick={() => handleVinculo(p.id, current)} disabled={isUploading || current.vinculado}>
-                  <div>
-                    <div className="font-bold text-sm group-hover:text-primary transition-colors">{p.nome}</div>
-                    <div className="text-[10px] text-muted-foreground uppercase">
-                      Matrícula: {p.matricula || "—"} • {p.cargo || "Sem cargo"} • {p.cpf}
-                    </div>
-                  </div>
-                  <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all" />
-                </button>
-              ))
-            )}
-          </div>
-        </div>
+      <div className="space-y-1">
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Todas as páginas</div>
+        {pageResults.map((r, i) => (
+          <button key={i} onClick={() => setCurrentPage(i)} className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors ${i === currentPage ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"}`}>
+            <span>Pág. {r.pageNumber} — {r.nome ?? "Nome não identificado"}</span>
+            <span>{r.vinculado ? "✅" : r.ignorado ? "⛔" : r.matchStatus === "automatico" ? "🟢" : "🔴"}</span>
+          </button>
+        ))}
       </div>
 
-      <ColaboradorFormDialog open={showNewColab} onOpenChange={setShowNewColab} form={newColabForm as any} setForm={setNewColabForm as any} unidades={unidades} cargos={listaCargos} busy={busyNewColab} isEdit={false} onSave={handleCreateColab} />
+      {vinculados + ignorados === totalPages && (
+        <Button className="w-full" onClick={() => { setPageResults([]); setSelectedFile(null); setCurrentPage(0); }}>
+          Processar Novo Documento
+        </Button>
+      )}
     </div>
   );
 }
