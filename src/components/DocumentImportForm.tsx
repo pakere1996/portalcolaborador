@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, FileText, X, Loader2, CheckCircle2, AlertTriangle, XCircle, ChevronLeft, ChevronRight, UserPlus } from "lucide-react";
+import { Upload, FileText, X, Loader2, CheckCircle2, AlertTriangle, XCircle, ChevronLeft, ChevronRight, UserPlus, ZoomIn, ZoomOut } from "lucide-react";
 import { extractTextFromPDF, renderPdfPageAsImage } from "@/lib/pdf-utils";
 import { adminApi } from "@/lib/admin-api";
 
@@ -38,8 +38,9 @@ interface PageResult {
   unidadeId: string | null;
   matchStatus: "automatico" | "revisao";
   matchedProfile: ProfileForMatching | null;
-  vinculado: boolean;
+  resolvido: boolean; // true quando vinculado (pendente de aprovação final) ou ignorado
   ignorado: boolean;
+  aprovado: boolean; // true só depois do "Aprovar e Salvar"
 }
 
 // Remove acentos e normaliza para comparação exata de nomes
@@ -63,9 +64,11 @@ export function DocumentImportForm() {
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [listaCargos, setListaCargos] = useState<Cargo[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
   const [manualProfileId, setManualProfileId] = useState<string>("");
   const [pageImageUrl, setPageImageUrl] = useState<string | null>(null);
   const [loadingPageImage, setLoadingPageImage] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   const [novoColabForm, setNovoColabForm] = useState({
     nome: "", cpf: "", cargo: "", unidadeId: "", senha: "",
@@ -91,6 +94,7 @@ export function DocumentImportForm() {
     setShowNovoColab(false);
     setManualProfileId("");
     setPageImageUrl(null);
+    setZoomLevel(1);
 
     if (selectedFile && pageResults.length > 0) {
       const pageNum = pageResults[currentPage]?.pageNumber;
@@ -127,14 +131,11 @@ export function DocumentImportForm() {
   };
 
   // Varre o texto inteiro do PDF procurando o nome exato de algum colaborador cadastrado.
-  // Funciona independente do layout do documento (contracheque, ponto, etc).
   const findExactMatchInText = (text: string, profilesList: ProfileForMatching[]): { profile: ProfileForMatching | null; nomeEncontrado: string | null } => {
     const textoNormalizado = ` ${normalizeNome(text)} `;
 
     const matches = profilesList.filter(p => {
       const nomeNormalizado = normalizeNome(p.nome);
-      // Garante que o nome aparece como sequência completa de palavras no texto
-      // (usa espaço normalizado como delimitador para evitar match parcial de palavra)
       return textoNormalizado.includes(` ${nomeNormalizado} `) ||
              textoNormalizado.startsWith(`${nomeNormalizado} `) ||
              textoNormalizado.endsWith(` ${nomeNormalizado}`) ||
@@ -155,6 +156,7 @@ export function DocumentImportForm() {
     setCurrentPage(0);
   };
 
+  // Apenas analisa o PDF e monta os resultados — NÃO faz upload nem grava no banco ainda.
   const handleProcessar = async () => {
     if (!selectedFile) return;
     setIsProcessing(true);
@@ -163,7 +165,7 @@ export function DocumentImportForm() {
       const results: PageResult[] = pages.map((p) => {
         const text = p.text;
 
-          const { profile: matchedProfile, nomeEncontrado: nome } = findExactMatchInText(text, profiles);
+        const { profile: matchedProfile, nomeEncontrado: nome } = findExactMatchInText(text, profiles);
 
         const cnpjMatch = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
         const cnpj = cnpjMatch ? cnpjMatch[0] : null;
@@ -180,29 +182,17 @@ export function DocumentImportForm() {
           unidadeId: unidade?.id ?? null,
           matchStatus: matchedProfile ? "automatico" : "revisao",
           matchedProfile,
-          vinculado: false,
+          resolvido: false,
           ignorado: false,
+          aprovado: false,
         } as PageResult;
       });
 
       setPageResults(results);
-
-      // Vincula automaticamente todas as páginas com match exato
-      for (const result of results) {
-        if (result.matchedProfile && result.mes && result.ano) {
-          await handleVinculoAutomatico(result.matchedProfile.id, result);
-        }
-      }
-
-      setPageResults(prev =>
-        prev.map(r => (r.matchedProfile ? { ...r, vinculado: true } : r))
-      );
-
-      const primeiroPendente = results.findIndex(r => !r.matchedProfile && !r.ignorado);
-      setCurrentPage(primeiroPendente >= 0 ? primeiroPendente : 0);
+      setCurrentPage(0);
 
       const qtdAuto = results.filter(r => r.matchedProfile).length;
-      toast.success(`${pages.length} páginas processadas (${qtdAuto} vinculadas automaticamente)`);
+      toast.success(`${pages.length} páginas processadas (${qtdAuto} com colaborador identificado). Confira cada página antes de aprovar.`);
     } catch (err) {
       toast.error("Erro ao processar PDF", { description: (err as Error).message });
     } finally {
@@ -210,100 +200,30 @@ export function DocumentImportForm() {
     }
   };
 
-  const handleVinculoAutomatico = async (profileId: string, result: PageResult) => {
-    try {
-      if (!result.mes || !result.ano) return;
+  // Apenas marca a página como "resolvida" (vinculada a um colaborador). Não salva no banco ainda.
+  const handleVincular = (profileId: string) => {
+    const profile = profiles.find(p => p.id === profileId);
+    if (!profile) return;
 
-      const { count } = await supabase.from("documentos")
-        .select("id", { count: "exact", head: true })
-        .eq("colaborador_id", profileId)
-        .eq("tipo", documentType)
-        .eq("mes", result.mes)
-        .eq("ano", result.ano);
+    setPageResults(prev =>
+      prev.map((r, i) =>
+        i === currentPage
+          ? { ...r, resolvido: true, matchedProfile: profile, matchStatus: "automatico" }
+          : r
+      )
+    );
 
-      if (count && count > 0) return;
+    setShowNovoColab(false);
+    setManualProfileId("");
+    toast.success(`Página vinculada a ${profile.nome}. Confirme as demais páginas e aprove ao final.`);
 
-      const storagePath = `documentos/${documentType}/${profileId}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}.pdf`;
-      const { error: uploadError } = await supabase.storage.from("documentos")
-        .upload(storagePath, selectedFile!, { contentType: "application/pdf", upsert: false });
-      if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
-
-      const { error: insertError } = await supabase.from("documentos").insert({
-        colaborador_id: profileId,
-        tipo: documentType,
-        mes: result.mes,
-        ano: result.ano,
-        storage_path: storagePath,
-        status: "disponivel",
-        nome_pdf: selectedFile!.name,
-      });
-      if (insertError) throw insertError;
-    } catch (err) {
-      console.error("Erro no vínculo automático:", err);
-    }
-  };
-
-  const handleVincular = async (profileId: string) => {
-    const result = pageResults[currentPage];
-    if (!result || !result.mes || !result.ano) {
-      toast.error("Mês/ano não identificado nesta página.");
-      return;
-    }
-    setIsUploading(true);
-    try {
-      const { count } = await supabase.from("documentos")
-        .select("id", { count: "exact", head: true })
-        .eq("colaborador_id", profileId)
-        .eq("tipo", documentType)
-        .eq("mes", result.mes)
-        .eq("ano", result.ano);
-
-      if (count && count > 0) {
-        toast.error("Documento duplicado — já existe para este colaborador, mês e ano.");
-        setIsUploading(false);
-        return;
-      }
-
-      const storagePath = `documentos/${documentType}/${profileId}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}.pdf`;
-      const { error: uploadError } = await supabase.storage.from("documentos")
-        .upload(storagePath, selectedFile!, { contentType: "application/pdf", upsert: false });
-      if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
-
-      const { error: insertError } = await supabase.from("documentos").insert({
-        colaborador_id: profileId,
-        tipo: documentType,
-        mes: result.mes,
-        ano: result.ano,
-        storage_path: storagePath,
-        status: "disponivel",
-        nome_pdf: selectedFile!.name,
-      });
-      if (insertError) throw insertError;
-
-      setPageResults(prev =>
-        prev.map((r, i) =>
-          i === currentPage
-            ? { ...r, vinculado: true, matchedProfile: profiles.find(p => p.id === profileId) ?? r.matchedProfile }
-            : r
-        )
-      );
-
-      setShowNovoColab(false);
-      toast.success("Documento vinculado com sucesso!");
-      setManualProfileId("");
-
-      const next = pageResults.findIndex((r, i) => i > currentPage && !r.vinculado && !r.ignorado);
-      if (next !== -1) setCurrentPage(next);
-    } catch (err) {
-      toast.error("Erro ao vincular", { description: (err as Error).message });
-    } finally {
-      setIsUploading(false);
-    }
+    const next = pageResults.findIndex((r, i) => i > currentPage && !r.resolvido && !r.ignorado);
+    if (next !== -1) setCurrentPage(next);
   };
 
   const handleIgnorar = () => {
-    setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, ignorado: true } : r));
-    const next = pageResults.findIndex((r, i) => i > currentPage && !r.vinculado && !r.ignorado);
+    setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, ignorado: true, resolvido: true } : r));
+    const next = pageResults.findIndex((r, i) => i > currentPage && !r.resolvido && !r.ignorado);
     if (next !== -1) setCurrentPage(next);
   };
 
@@ -338,8 +258,10 @@ export function DocumentImportForm() {
       setProfiles(prev => [...prev, newProfile]);
       setShowNovoColab(false);
       setNovoColabForm({ nome: "", cpf: "", cargo: "", unidadeId: "", senha: "", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", whatsapp: "", perfil_acesso: "colaborador", matricula: "" });
-      toast.success("Colaborador criado com sucesso! Clique em 'Vincular' para finalizar.");
-      setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, matchedProfile: newProfile, matchStatus: "automatico" } : r));
+      toast.success("Colaborador criado com sucesso! Agora vincule esta página a ele.");
+
+      // Vincula automaticamente a página atual ao colaborador recém-criado
+      setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, matchedProfile: newProfile, matchStatus: "automatico", resolvido: true } : r));
       setManualProfileId(newProfile.id);
     } catch (err) {
       toast.error("Erro ao criar colaborador", { description: (err as Error).message });
@@ -348,10 +270,65 @@ export function DocumentImportForm() {
     }
   };
 
+  // Só aqui de fato faz upload e grava no banco — depois que TODAS as páginas foram resolvidas.
+  const handleAprovarTudo = async () => {
+    setIsApproving(true);
+    try {
+      let salvos = 0;
+      let duplicados = 0;
+
+      for (const result of pageResults) {
+        if (result.ignorado || !result.matchedProfile || !result.mes || !result.ano) continue;
+
+        const { count } = await supabase.from("documentos")
+          .select("id", { count: "exact", head: true })
+          .eq("colaborador_id", result.matchedProfile.id)
+          .eq("tipo", documentType)
+          .eq("mes", result.mes)
+          .eq("ano", result.ano);
+
+        if (count && count > 0) {
+          duplicados++;
+          continue;
+        }
+
+        const storagePath = `documentos/${documentType}/${result.matchedProfile.id}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}.pdf`;
+        const { error: uploadError } = await supabase.storage.from("documentos")
+          .upload(storagePath, selectedFile!, { contentType: "application/pdf", upsert: false });
+        if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
+
+        const { error: insertError } = await supabase.from("documentos").insert({
+          colaborador_id: result.matchedProfile.id,
+          tipo: documentType,
+          mes: result.mes,
+          ano: result.ano,
+          storage_path: storagePath,
+          status: "disponivel",
+          nome_pdf: selectedFile!.name,
+        });
+        if (insertError) throw insertError;
+
+        salvos++;
+      }
+
+      setPageResults(prev => prev.map(r => ({ ...r, aprovado: true })));
+
+      let msg = `${salvos} documento(s) salvo(s) com sucesso!`;
+      if (duplicados > 0) msg += ` ${duplicados} ignorado(s) por já existirem.`;
+      toast.success(msg);
+    } catch (err) {
+      toast.error("Erro ao salvar documentos", { description: (err as Error).message });
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
   const result = pageResults[currentPage];
   const totalPages = pageResults.length;
-  const vinculados = pageResults.filter(r => r.vinculado).length;
+  const resolvidos = pageResults.filter(r => r.resolvido).length;
   const ignorados = pageResults.filter(r => r.ignorado).length;
+  const todasResolvidas = totalPages > 0 && resolvidos === totalPages;
+  const jaAprovado = pageResults.some(r => r.aprovado);
 
   if (pageResults.length === 0) {
     return (
@@ -395,11 +372,17 @@ export function DocumentImportForm() {
     <div className="space-y-4">
       <div className="flex items-center justify-between text-sm">
         <span className="font-semibold">{selectedFile?.name}</span>
-        <span className="text-muted-foreground">{vinculados} vinculados · {ignorados} ignorados · {totalPages - vinculados - ignorados} pendentes</span>
+        <span className="text-muted-foreground">{resolvidos - ignorados} vinculados · {ignorados} ignorados · {totalPages - resolvidos} pendentes</span>
       </div>
       <div className="w-full bg-muted rounded-full h-2">
-        <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${((vinculados + ignorados) / totalPages) * 100}%` }} />
+        <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${(resolvidos / totalPages) * 100}%` }} />
       </div>
+
+      {jaAprovado && (
+        <div className="rounded-xl border border-green-300 bg-green-50 p-3 text-sm text-green-800 flex items-center gap-2">
+          <CheckCircle2 className="size-4" /> Documentos já aprovados e salvos no histórico.
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(0, p - 1))} disabled={currentPage === 0}>
@@ -412,24 +395,42 @@ export function DocumentImportForm() {
       </div>
 
       {result && (
-        <div className={`rounded-2xl border-2 p-5 space-y-4 ${result.vinculado ? "border-green-300 bg-green-50" : result.ignorado ? "border-gray-200 bg-gray-50 opacity-60" : result.matchStatus === "automatico" ? "border-green-200 bg-green-50/50" : "border-red-200 bg-red-50/50"}`}>
+        <div className={`rounded-2xl border-2 p-5 space-y-4 ${result.ignorado ? "border-gray-200 bg-gray-50 opacity-60" : result.resolvido ? "border-green-300 bg-green-50" : result.matchStatus === "automatico" ? "border-green-200 bg-green-50/50" : "border-red-200 bg-red-50/50"}`}>
 
           <div className="flex items-center gap-2">
-            {result.vinculado ? <CheckCircle2 className="size-5 text-green-600" /> : result.ignorado ? <XCircle className="size-5 text-gray-400" /> : result.matchStatus === "automatico" ? <CheckCircle2 className="size-5 text-green-600" /> : <XCircle className="size-5 text-red-500" />}
+            {result.ignorado ? <XCircle className="size-5 text-gray-400" /> : result.resolvido ? <CheckCircle2 className="size-5 text-green-600" /> : result.matchStatus === "automatico" ? <CheckCircle2 className="size-5 text-green-600" /> : <XCircle className="size-5 text-red-500" />}
             <span className="font-semibold text-sm">
-              {result.vinculado ? "✅ Vinculado" : result.ignorado ? "⛔ Ignorado" : result.matchStatus === "automatico" ? "✅ Match automático (nome exato)" : "❌ Revisão manual necessária"}
+              {result.ignorado ? "⛔ Ignorado" : result.resolvido ? "✅ Vinculado (pendente de aprovação final)" : result.matchStatus === "automatico" ? "✅ Match automático — confira e confirme" : "❌ Revisão manual necessária"}
             </span>
           </div>
 
-          {loadingPageImage ? (
-            <div className="flex items-center justify-center rounded-xl border border-border bg-muted/30 p-8">
-              <Loader2 className="size-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : pageImageUrl ? (
-            <div className="rounded-xl border border-border overflow-hidden bg-white">
-              <img src={pageImageUrl} alt={`Página ${result.pageNumber}`} className="w-full h-auto max-h-[500px] object-contain" />
-            </div>
-          ) : null}
+          {/* Visualização da página com zoom */}
+          <div className="space-y-2">
+            {(loadingPageImage || pageImageUrl) && (
+              <div className="flex items-center justify-end gap-1">
+                <Button variant="outline" size="icon" className="size-7" onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.25))}>
+                  <ZoomOut className="size-3.5" />
+                </Button>
+                <span className="text-xs text-muted-foreground w-12 text-center">{Math.round(zoomLevel * 100)}%</span>
+                <Button variant="outline" size="icon" className="size-7" onClick={() => setZoomLevel(z => Math.min(3, z + 0.25))}>
+                  <ZoomIn className="size-3.5" />
+                </Button>
+              </div>
+            )}
+            {loadingPageImage ? (
+              <div className="flex items-center justify-center rounded-xl border border-border bg-muted/30 p-12">
+                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : pageImageUrl ? (
+              <div className="rounded-xl border border-border overflow-auto bg-white max-h-[80vh]">
+                <img
+                  src={pageImageUrl}
+                  alt={`Página ${result.pageNumber}`}
+                  style={{ width: `${zoomLevel * 100}%`, height: "auto", display: "block" }}
+                />
+              </div>
+            ) : null}
+          </div>
 
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div><span className="text-muted-foreground">Nome PDF:</span><div className="font-medium">{result.nome ?? "Não identificado"}</div></div>
@@ -445,12 +446,12 @@ export function DocumentImportForm() {
             </div>
           )}
 
-          {!result.vinculado && !result.ignorado && (
+          {!result.resolvido && !result.ignorado && (
             <div className="space-y-3">
-              {result.matchedProfile && (
+              {result.matchStatus === "automatico" && result.matchedProfile && (
                 <Button className="w-full" onClick={() => handleVincular(result.matchedProfile!.id)} disabled={isUploading}>
-                  {isUploading ? <Loader2 className="size-4 mr-2 animate-spin" /> : <CheckCircle2 className="size-4 mr-2" />}
-                  Vincular a {result.matchedProfile.nome}
+                  <CheckCircle2 className="size-4 mr-2" />
+                  Confirmar vínculo com {result.matchedProfile.nome}
                 </Button>
               )}
 
@@ -473,7 +474,7 @@ export function DocumentImportForm() {
                   <Button
                     variant="outline"
                     onClick={() => { setShowNovoColab(false); if (manualProfileId) handleVincular(manualProfileId); }}
-                    disabled={!manualProfileId || isUploading}
+                    disabled={!manualProfileId}
                   >
                     Vincular
                   </Button>
@@ -610,6 +611,16 @@ export function DocumentImportForm() {
               </Button>
             </div>
           )}
+
+          {result.resolvido && !result.ignorado && !jaAprovado && (
+            <Button
+              variant="outline"
+              className="w-full text-muted-foreground"
+              onClick={() => setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, resolvido: false } : r))}
+            >
+              Desfazer vínculo (revisar novamente)
+            </Button>
+          )}
         </div>
       )}
 
@@ -617,13 +628,19 @@ export function DocumentImportForm() {
         <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Todas as páginas</div>
         {pageResults.map((r, i) => (
           <button key={i} onClick={() => setCurrentPage(i)} className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors ${i === currentPage ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"}`}>
-            <span>Pág. {r.pageNumber} — {r.nome ?? "Nome não identificado"}</span>
-            <span>{r.vinculado ? "✅" : r.ignorado ? "⛔" : r.matchStatus === "automatico" ? "🟢" : "🔴"}</span>
+            <span>Pág. {r.pageNumber} — {r.matchedProfile?.nome ?? r.nome ?? "Nome não identificado"}</span>
+            <span>{r.ignorado ? "⛔" : r.resolvido ? "✅" : r.matchStatus === "automatico" ? "🟢" : "🔴"}</span>
           </button>
         ))}
       </div>
 
-      {vinculados + ignorados === totalPages && (
+      {todasResolvidas && !jaAprovado && (
+        <Button className="w-full bg-green-600 hover:bg-green-700 text-white" onClick={handleAprovarTudo} disabled={isApproving}>
+          {isApproving ? <><Loader2 className="size-4 mr-2 animate-spin" /> Salvando documentos...</> : <><CheckCircle2 className="size-4 mr-2" /> Aprovar e Salvar Documentos</>}
+        </Button>
+      )}
+
+      {jaAprovado && (
         <Button className="w-full" onClick={() => { setPageResults([]); setSelectedFile(null); setCurrentPage(0); }}>
           Processar Novo Documento
         </Button>
