@@ -81,7 +81,6 @@ export default function AdminCalendar() {
     mes: string;
   } | null>(null);
 
-  // 🔥 Detecta mobile
   const isMobile = useMediaQuery('(max-width: 768px)');
 
   const load = async () => {
@@ -325,104 +324,110 @@ export default function AdminCalendar() {
     return null;
   }, [dlg, manual, year, month0]);
 
-  // 🔥 Função para renderizar o calendário em lista (mobile)
+  // 🔥 Função para renderizar o calendário em lista (mobile) com dia da semana
   const renderMobileCalendar = () => {
-  const days = getMonthDays(year, month0);
-  const monthName = new Date(year, month0).toLocaleString('pt-BR', { month: 'long' });
-  const yearStr = year;
+    const days = getMonthDays(year, month0);
+    const monthName = new Date(year, month0).toLocaleString('pt-BR', { month: 'long' });
+    const yearStr = year;
+    const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
-  return (
-    <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
-      {/* Cabeçalho do mês */}
-      <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="size-8 rounded-full" onClick={goPrev}>
-            <ChevronLeft className="size-4" />
-          </Button>
-          <span className="font-bold text-sm capitalize">
-            {monthName} {yearStr}
+    return (
+      <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+        {/* Cabeçalho do mês */}
+        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="size-8 rounded-full" onClick={goPrev}>
+              <ChevronLeft className="size-4" />
+            </Button>
+            <span className="font-bold text-sm capitalize">
+              {monthName} {yearStr}
+            </span>
+            <Button variant="ghost" size="icon" className="size-8 rounded-full" onClick={goNext}>
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            {days.filter(d => dayType(d)).length} dias úteis
           </span>
-          <Button variant="ghost" size="icon" className="size-8 rounded-full" onClick={goNext}>
-            <ChevronRight className="size-4" />
-          </Button>
         </div>
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-          {days.filter(d => dayType(d)).length} dias úteis
-        </span>
-      </div>
 
-      {/* Lista de dias */}
-      <div className="divide-y divide-slate-100 max-h-[70vh] overflow-y-auto">
-        {days.map((d) => {
-          const iso = ymd(d);
-          const occupants = occupantsByDate.get(iso) || [];
-          const isWeekendDay = !!dayType(d);
-          const limit = dayLimits.get(iso) || 1;
-          const isBlocked = manualMap.get(iso)?.liberada === false || autoBlockedDatesForMonth(year, month0).some(b => b.date === iso);
+        {/* Lista de dias */}
+        <div className="divide-y divide-slate-100 max-h-[70vh] overflow-y-auto">
+          {days.map((d) => {
+            const iso = ymd(d);
+            const occupants = occupantsByDate.get(iso) || [];
+            const isWeekendDay = !!dayType(d);
+            const limit = dayLimits.get(iso) || 1;
+            const isBlocked = manualMap.get(iso)?.liberada === false || autoBlockedDatesForMonth(year, month0).some(b => b.date === iso);
+            const diaSemana = weekdays[d.getDay()];
 
-          return (
-            <div
-              key={iso}
-              className="px-4 py-3 hover:bg-slate-50/50 transition-colors cursor-pointer"
-              onClick={() => onSelect(iso)}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className={cn(
-                      "text-sm font-bold",
-                      isWeekendDay ? "text-slate-900" : "text-slate-400"
-                    )}>
-                      {d.getDate()}
-                    </span>
-                    {isBlocked && (
-                      <Badge variant="outline" className="text-[9px] bg-rose-50 text-rose-600 border-rose-200 px-1.5 py-0 h-5">
-                        Bloqueado
-                      </Badge>
-                    )}
-                    {occupants.length > 0 && (
-                      <Badge className="text-[9px] bg-primary/10 text-primary border-primary/20 px-1.5 py-0 h-5">
-                        {occupants.length}/{limit}
-                      </Badge>
-                    )}
-                    {isWeekendDay && !isBlocked && occupants.length === 0 && (
-                      <span className="text-[9px] text-slate-400">Vago</span>
+            return (
+              <div
+                key={iso}
+                className="px-4 py-3 hover:bg-slate-50/50 transition-colors cursor-pointer"
+                onClick={() => onSelect(iso)}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      {/* 🔥 Exibe o dia da semana abreviado antes do número */}
+                      <span className="text-[10px] font-medium text-slate-500 w-8 shrink-0">
+                        {diaSemana}
+                      </span>
+                      <span className={cn(
+                        "text-sm font-bold",
+                        isWeekendDay ? "text-slate-900" : "text-slate-400"
+                      )}>
+                        {d.getDate()}
+                      </span>
+                      {isBlocked && (
+                        <Badge variant="outline" className="text-[9px] bg-rose-50 text-rose-600 border-rose-200 px-1.5 py-0 h-5">
+                          Bloqueado
+                        </Badge>
+                      )}
+                      {occupants.length > 0 && (
+                        <Badge className="text-[9px] bg-primary/10 text-primary border-primary/20 px-1.5 py-0 h-5">
+                          {occupants.length}/{limit}
+                        </Badge>
+                      )}
+                      {isWeekendDay && !isBlocked && occupants.length === 0 && (
+                        <span className="text-[9px] text-slate-400">Vago</span>
+                      )}
+                    </div>
+                    {/* Exibe os nomes dos colaboradores (primeiro nome) */}
+                    {occupants.length > 0 ? (
+                      <div className="flex flex-wrap gap-1 mt-1 ml-10">
+                        {occupants.map((occ, idx) => {
+                          const primeiroNome = occ.userName.split(' ')[0];
+                          return (
+                            <span
+                              key={idx}
+                              className={cn(
+                                "text-[10px] px-1.5 py-0.5 rounded font-medium truncate max-w-[120px]",
+                                occ.type === 'fixed' ? "bg-blue-50 text-blue-600" :
+                                occ.type === 'monthly' ? "bg-amber-50 text-amber-600" :
+                                "bg-orange-50 text-orange-600"
+                              )}
+                              title={occ.userName}
+                            >
+                              {primeiroNome}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 ml-10">Nenhum colaborador</span>
                     )}
                   </div>
-                  {/* 🔥 Exibe apenas o primeiro nome */}
-                  {occupants.length > 0 ? (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {occupants.map((occ, idx) => {
-                        const primeiroNome = occ.userName.split(' ')[0];
-                        return (
-                          <span
-                            key={idx}
-                            className={cn(
-                              "text-[10px] px-1.5 py-0.5 rounded font-medium truncate max-w-[120px]",
-                              occ.type === 'fixed' ? "bg-blue-50 text-blue-600" :
-                              occ.type === 'monthly' ? "bg-amber-50 text-amber-600" :
-                              "bg-orange-50 text-orange-600"
-                            )}
-                            title={occ.userName}
-                          >
-                            {primeiroNome}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <span className="text-[10px] text-slate-400">Nenhum colaborador</span>
-                  )}
+                  <ChevronRight className="size-4 text-slate-300 shrink-0 mt-0.5" />
                 </div>
-                <ChevronRight className="size-4 text-slate-300 shrink-0 mt-0.5" />
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
