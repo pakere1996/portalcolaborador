@@ -23,12 +23,15 @@ type Profile = Tables<'profiles'> & { role?: string | null };
 type Unidade = Tables<'unidades'>;
 type Cargo = Tables<'cargos'>;
 
+// 🔥 Adicionados campos regime_trabalho e data_demissao
 const blankEditForm = {
   nome: "", cpf: "", matricula: "", email: "", whatsapp: "",
   cargo: "", unidadeId: "none", folgaFixa: "none",
   dataAdmissao: "", dataNascimento: "", perfil_acesso: "colaborador",
   ativo: true,
   senha: "",
+  regime_trabalho: "none",   // <-- NOVO
+  data_demissao: "",          // <-- NOVO
 };
 
 export default function Colaboradores() {
@@ -53,7 +56,8 @@ export default function Colaboradores() {
     setLoading(true);
     try {
       const [pRes, uRes, cRes] = await Promise.all([
-        supabase.from("profiles").select("*").order("nome"),
+        // 🔥 Adicionados regime_trabalho e data_demissao no SELECT
+        supabase.from("profiles").select("id, nome, cpf, cargo, matricula, unidade_id, folga_fixa_semana, regime_trabalho, perfil_acesso, data_admissao, data_nascimento, email_contato, whatsapp, ativo, data_demissao, created_at, updated_at").order("nome"),
         supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
         supabase.from("cargos").select("*").eq("ativo", true).order("nome"),
       ]);
@@ -115,11 +119,14 @@ export default function Colaboradores() {
 
       if (authErr) throw authErr;
 
+      // 🔥 Incluindo regime_trabalho e data_demissao no update
       const { error: profErr } = await supabase.from("profiles").update({
         matricula: newForm.matricula.trim() || null,
         whatsapp: newForm.whatsapp.trim() || null,
         unidade_id: newForm.unidadeId === "none" ? null : newForm.unidadeId,
         ativo: true,
+        regime_trabalho: newForm.regime_trabalho === "none" ? null : newForm.regime_trabalho,
+        data_demissao: newForm.data_demissao || null,
       }).eq("id", authUser.userId);
 
       if (profErr) throw profErr;
@@ -151,6 +158,8 @@ export default function Colaboradores() {
       perfil_acesso: p.role ?? "colaborador",
       ativo: p.ativo,
       senha: "",
+      regime_trabalho: p.regime_trabalho ?? "none",   // <-- NOVO
+      data_demissao: p.data_demissao ?? "",            // <-- NOVO
     });
   };
 
@@ -161,6 +170,7 @@ export default function Colaboradores() {
       const cleanCpf = onlyDigits(editForm.cpf);
       if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
 
+      // 🔥 Incluindo regime_trabalho e data_demissao no update
       const { error: profErr } = await supabase.from("profiles").update({
         nome: editForm.nome.trim(),
         cpf: cleanCpf,
@@ -174,6 +184,8 @@ export default function Colaboradores() {
         data_admissao: editForm.dataAdmissao || null,
         ativo: editForm.ativo,
         updated_at: new Date().toISOString(),
+        regime_trabalho: editForm.regime_trabalho === "none" ? null : editForm.regime_trabalho,
+        data_demissao: editForm.data_demissao || null,
       }).eq("id", editingProfile.id);
 
       if (profErr) throw profErr;
