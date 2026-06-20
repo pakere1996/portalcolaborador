@@ -20,6 +20,7 @@ import {
   Briefcase,
   Building2,
   ShieldAlert,
+  MessageSquare, // 🔥 NOVO ÍCONE
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -40,12 +41,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const path = location.pathname;
   const [open, setOpen] = useState(false);
   
-  // 🔥 Estados para controlar a abertura dos menus colapsáveis
   const [folgasOpen, setFolgasOpen] = useState(true);
   const [docsOpen, setDocsOpen] = useState(false);
   const [cadastroOpen, setCadastroOpen] = useState(false);
+  const [comunicacaoOpen, setComunicacaoOpen] = useState(false); // 🔥 NOVO
 
-  // 🔥 Determina se é admin (prioriza localStorage para consistência)
   const getIsAdmin = () => {
     const savedRole = localStorage.getItem('user_role');
     if (savedRole) return savedRole === 'admin';
@@ -59,12 +59,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setOpen(false);
   }, [path]);
 
-  // Abre automaticamente as seções se a rota atual pertencer a elas
   useEffect(() => {
     if (path.includes("/documentos")) setDocsOpen(true);
     if (path.startsWith("/admin/colaboradores") || path.startsWith("/admin/cargos") || path.startsWith("/admin/unidades")) {
       setCadastroOpen(true);
     }
+    if (path.startsWith("/admin/mensagens")) setComunicacaoOpen(true); // 🔥 NOVO
   }, [path]);
 
   const employeeFolgaNav: NavItem[] = [
@@ -101,10 +101,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/unidades", label: "Unidades", icon: Building2 },
   ];
 
+  // 🔥 NOVA SEÇÃO: Comunicação (admin)
+  const adminComunicacaoNav: NavItem[] = [
+    { to: "/admin/mensagens", label: "Comunicados", icon: MessageSquare },
+  ];
+
   const folgaNav = isAdmin ? adminFolgaNav : employeeFolgaNav;
   const docsNav = isAdmin ? adminDocsNav : employeeDocsNav;
 
-  // Classes utilitárias para NavLink
   const getLinkClass = (isActive: boolean, isHome = false) => cn(
     "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
     isActive 
@@ -140,7 +144,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-180px)]">
-          {/* 🔥 Link "Início" com homePath correto */}
           <NavLink to={homePath} className={({ isActive }) => getLinkClass(isActive, true)}>
             <Home className="size-4" />
             <span>Início</span>
@@ -187,7 +190,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onClick={() => setFolgasOpen(!folgasOpen)}
               className={cn(
                 "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                path.includes("/calendario") || path.includes("/trocas") || path.includes("/historico") || (path.startsWith("/admin") && !path.includes("/documentos") && !path.includes("/colaboradores"))
+                path.includes("/calendario") || path.includes("/trocas") || path.includes("/historico") || (path.startsWith("/admin") && !path.includes("/documentos") && !path.includes("/colaboradores") && !path.includes("/mensagens"))
                   ? "text-primary bg-primary/5" 
                   : "text-muted-foreground hover:bg-accent hover:text-foreground",
               )}
@@ -244,6 +247,38 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             )}
           </div>
+
+          {/* 🔥 NOVA SEÇÃO: Comunicação (apenas admin) */}
+          {isAdmin && (
+            <div className="space-y-1">
+              <button
+                onClick={() => setComunicacaoOpen(!comunicacaoOpen)}
+                className={cn(
+                  "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
+                  path.includes("/admin/mensagens")
+                    ? "text-primary bg-primary/5" 
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <MessageSquare className="size-4" />
+                  <span>Comunicação</span>
+                </div>
+                {comunicacaoOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+              </button>
+
+              {comunicacaoOpen && (
+                <div className="pl-4 space-y-1 mt-1 border-l border-border ml-5">
+                  {adminComunicacaoNav.map((item) => (
+                    <NavLink key={item.to} to={item.to} className={({ isActive }) => getLinkClass(isActive)}>
+                      <item.icon className="size-4" />
+                      {item.label}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </nav>
 
         <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-border bg-card/80 backdrop-blur">
