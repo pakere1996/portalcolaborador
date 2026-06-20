@@ -22,14 +22,12 @@ export default function AtestadosAdmin() {
       descricao="Gerencie todos os atestados médicos dos colaboradores."
       importTitle="Importar Atestado"
       campoData="data_atestado"
-      // Gerar storage path usando helpers
       gerarStoragePath={async (colaboradorId, data, id, file) => {
         const path = atestadoStoragePath(colaboradorId, data, id, file);
         const kind = getFileKind(file);
         if (!kind) throw new Error("Tipo de arquivo não suportado");
         return { path, kind };
       }}
-      // Formatar status (exibe "Pendente", "Aprovado", etc.)
       formatarStatus={formatAtestadoStatus}
       statusClass={statusClass}
       // Campos extras no formulário de importação
@@ -46,7 +44,7 @@ export default function AtestadosAdmin() {
               disabled={busy}
             />
           </div>
-          {form.data_documento && form.dias_afastamento && (
+          {form.data_documento && form.dias_afastamento && parseInt(form.dias_afastamento) > 0 && (
             <div className="rounded-xl bg-muted/30 p-3 text-sm">
               <span className="font-semibold">Data de retorno:</span>{" "}
               {new Date(
@@ -57,16 +55,20 @@ export default function AtestadosAdmin() {
           )}
         </>
       )}
-      // Colunas extras na tabela (dias, retorno, status)
+      // Colunas extras na tabela
       colunasExtras={(doc) => {
         const dias = (doc as any).dias_afastamento || 0;
-        const dataRetorno = new Date(
-          new Date(doc.data).getTime() + dias * 24 * 60 * 60 * 1000
-        );
         return (
           <div className="text-sm space-y-1">
             <div><span className="font-semibold">Dias:</span> {dias}</div>
-            <div><span className="font-semibold">Retorno:</span> {dataRetorno.toLocaleDateString("pt-BR")}</div>
+            {dias > 0 && (
+              <div>
+                <span className="font-semibold">Retorno:</span>{" "}
+                {new Date(
+                  new Date(doc.data).getTime() + dias * 24 * 60 * 60 * 1000
+                ).toLocaleDateString("pt-BR")}
+              </div>
+            )}
             {doc.status && (
               <Badge className={statusClass(doc.status)}>
                 {formatAtestadoStatus(doc.status)}
@@ -75,7 +77,6 @@ export default function AtestadosAdmin() {
           </div>
         );
       }}
-      // Campos extras na edição (status e observação admin)
       editCamposExtras={(editForm, setEditForm) => (
         <>
           <div className="space-y-1 mt-2">
@@ -110,14 +111,12 @@ export default function AtestadosAdmin() {
           </div>
         </>
       )}
-      // Validação customizada
       validarForm={(form) => {
         if (!form.dias_afastamento || parseInt(form.dias_afastamento) < 0) {
           return "Informe um número válido de dias de afastamento";
         }
         return null;
       }}
-      // Montagem dos dados para inserção
       beforeInsert={async (form, path, kind) => {
         const { data: userData } = await supabase.auth.getUser();
         return {
