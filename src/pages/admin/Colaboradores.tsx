@@ -56,7 +56,6 @@ export default function Colaboradores() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // 🔥 Garantir que possuimos todos os campos, incluindo possui_relogio_ponto das unidades
       const [pRes, uRes, cRes] = await Promise.all([
         supabase.from("profiles").select("*").order("nome"),
         supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
@@ -64,8 +63,6 @@ export default function Colaboradores() {
       ]);
 
       if (pRes.error) throw pRes.error;
-      if (uRes.error) throw uRes.error;
-      if (cRes.error) throw cRes.error;
 
       const profileIds = (pRes.data ?? []).map(p => p.id);
       let rolesMap = new Map<string, string[]>();
@@ -86,7 +83,6 @@ export default function Colaboradores() {
       setUnidades(uRes.data ?? []);
       setCargos(cRes.data ?? []);
     } catch (e) {
-      console.error("Erro ao carregar dados:", e);
       toast.error("Erro ao carregar dados", { description: (e as Error).message });
     } finally {
       setLoading(false);
