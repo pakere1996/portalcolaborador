@@ -7,6 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Upload, FileText, X, Loader2, CheckCircle2, AlertTriangle, XCircle, ChevronLeft, ChevronRight, UserPlus, ZoomIn, ZoomOut } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { extractTextFromPDF, renderPdfPageAsImage } from "@/lib/pdf-utils";
 import { adminApi } from "@/lib/admin-api";
 
@@ -76,6 +80,8 @@ export function DocumentImportForm() {
     whatsapp: "", perfil_acesso: "colaborador", matricula: "",
   });
   const [showNovoColab, setShowNovoColab] = useState(false);
+  const [confirmIgnorar, setConfirmIgnorar] = useState(false);
+  const [avisoPendentes, setAvisoPendentes] = useState(false);
   const { user } = useAuth();
 
   const documentType = window.location.pathname.includes("ponto") ? "ponto" : "contracheque";
@@ -182,7 +188,7 @@ export function DocumentImportForm() {
           unidadeId: unidade?.id ?? null,
           matchStatus: matchedProfile ? "automatico" : "revisao",
           matchedProfile,
-          resolvido: false,
+          resolvido: !!matchedProfile,
           ignorado: false,
           aprovado: false,
         } as PageResult;
@@ -222,7 +228,12 @@ export function DocumentImportForm() {
   };
 
   const handleIgnorar = () => {
+    setConfirmIgnorar(true);
+  };
+
+  const confirmarIgnorar = () => {
     setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, ignorado: true, resolvido: true } : r));
+    setConfirmIgnorar(false);
     const next = pageResults.findIndex((r, i) => i > currentPage && !r.resolvido && !r.ignorado);
     if (next !== -1) setCurrentPage(next);
   };
@@ -272,6 +283,12 @@ export function DocumentImportForm() {
 
   // Só aqui de fato faz upload e grava no banco — depois que TODAS as páginas foram resolvidas.
   const handleAprovarTudo = async () => {
+    const pendentes = pageResults.filter(r => !r.resolvido && !r.ignorado);
+    if (pendentes.length > 0) {
+      setAvisoPendentes(true);
+      return;
+    }
+
     setIsApproving(true);
     try {
       let salvos = 0;
@@ -400,7 +417,7 @@ export function DocumentImportForm() {
           <div className="flex items-center gap-2">
             {result.ignorado ? <XCircle className="size-5 text-gray-400" /> : result.resolvido ? <CheckCircle2 className="size-5 text-green-600" /> : result.matchStatus === "automatico" ? <CheckCircle2 className="size-5 text-green-600" /> : <XCircle className="size-5 text-red-500" />}
             <span className="font-semibold text-sm">
-              {result.ignorado ? "⛔ Ignorado" : result.resolvido ? "✅ Vinculado (pendente de aprovação final)" : result.matchStatus === "automatico" ? "✅ Match automático — confira e confirme" : "❌ Revisão manual necessária"}
+              {result.ignorado ? "⛔ Ignorado" : result.resolvido && result.matchStatus === "automatico" ? "✅ Vinculado automaticamente (nome exato)" : result.resolvido ? "✅ Vinculado (pendente de aprovação final)" : "❌ Revisão manual necessária"}
             </span>
           </div>
 
@@ -426,7 +443,7 @@ export function DocumentImportForm() {
                 <img
                   src={pageImageUrl}
                   alt={`Página ${result.pageNumber}`}
-                  style={{ width: `${zoomLevel * 100}%`, height: "auto", display: "block" }}
+                  style={{ width: `${zoomLevel * 100}%`, minWidth: `${zoomLevel * 100}%`, height: "auto", display: "block" }}
                 />
               </div>
             ) : null}
@@ -448,13 +465,6 @@ export function DocumentImportForm() {
 
           {!result.resolvido && !result.ignorado && (
             <div className="space-y-3">
-              {result.matchStatus === "automatico" && result.matchedProfile && (
-                <Button className="w-full" onClick={() => handleVincular(result.matchedProfile!.id)} disabled={isUploading}>
-                  <CheckCircle2 className="size-4 mr-2" />
-                  Confirmar vínculo com {result.matchedProfile.nome}
-                </Button>
-              )}
-
               <div className="space-y-2">
                 <Label className="text-xs">Vincular manualmente a outro colaborador:</Label>
                 <div className="flex gap-2">
@@ -634,7 +644,7 @@ export function DocumentImportForm() {
         ))}
       </div>
 
-      {todasResolvidas && !jaAprovado && (
+      {!jaAprovado && (
         <Button className="w-full bg-green-600 hover:bg-green-700 text-white" onClick={handleAprovarTudo} disabled={isApproving}>
           {isApproving ? <><Loader2 className="size-4 mr-2 animate-spin" /> Salvando documentos...</> : <><CheckCircle2 className="size-4 mr-2" /> Aprovar e Salvar Documentos</>}
         </Button>
@@ -645,6 +655,43 @@ export function DocumentImportForm() {
           Processar Novo Documento
         </Button>
       )}
+
+      <AlertDialog open={confirmIgnorar} onOpenChange={setConfirmIgnorar}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ignorar esta página?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A página {result?.pageNumber} não será vinculada a nenhum colaborador e não fará parte do documento salvo. Você pode reverter depois clicando em "Desfazer".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmarIgnorar} className="bg-destructive text-white hover:bg-destructive/90">
+              Ignorar Página
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={avisoPendentes} onOpenChange={setAvisoPendentes}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Existem páginas pendentes</AlertDialogTitle>
+            <AlertDialogDescription>
+              Ainda há {pageResults.filter(r => !r.resolvido && !r.ignorado).length} página(s) sem colaborador vinculado. Vincule manualmente, cadastre o colaborador ou ignore essas páginas antes de aprovar o documento.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => {
+              setAvisoPendentes(false);
+              const primeiraPendente = pageResults.findIndex(r => !r.resolvido && !r.ignorado);
+              if (primeiraPendente !== -1) setCurrentPage(primeiraPendente);
+            }}>
+              Ver Páginas Pendentes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
