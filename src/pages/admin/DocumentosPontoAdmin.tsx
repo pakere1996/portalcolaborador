@@ -20,6 +20,7 @@ interface Documento {
   status: string;
   nome_pdf: string | null;
   created_at: string;
+  aprovado_em: string | null;
 }
 
 interface Profile { id: string; nome: string; }
@@ -52,10 +53,13 @@ export default function DocumentosPonto() {
 
   useEffect(() => { load(); }, []);
 
-  const handleDownload = async (path: string) => {
-    const { data } = await supabase.storage.from("documentos").createSignedUrl(path, 60);
-    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
-    else toast.error("Erro ao gerar link de download");
+  const handleDownload = async (doc: Documento) => {
+    const { data } = await supabase.storage.from("documentos").createSignedUrl(doc.storage_path, 60);
+    if (data?.signedUrl) {
+      window.open(data.signedUrl, "_blank");
+    } else {
+      toast.error("Erro ao gerar link de download");
+    }
   };
 
   const handleEditSave = async (id: string) => {
@@ -194,12 +198,17 @@ export default function DocumentosPonto() {
                           {d.status}
                         </Badge>
                       </td>
+                      <td className="p-4 hidden md:table-cell text-xs text-muted-foreground">
+                        {d.aprovado_em 
+                          ? new Date(d.aprovado_em).toLocaleDateString('pt-BR') + ' às ' + new Date(d.aprovado_em).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})
+                          : '—'}
+                      </td>
                       <td className="p-4 text-right whitespace-nowrap">
                         <div className="flex justify-end gap-1">
                           <Button variant="ghost" size="icon" className="size-8" title="Editar competência" onClick={() => { setEditando(d.id); setEditMes(String(d.mes)); setEditAno(String(d.ano)); }}>
                             <Pencil className="size-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="size-8" title="Baixar" onClick={() => handleDownload(d.storage_path)}>
+                          <Button variant="ghost" size="icon" className="size-8" title="Baixar" onClick={() => handleDownload(d)}>
                             <Download className="size-4" />
                           </Button>
                         </div>
