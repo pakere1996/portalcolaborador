@@ -204,13 +204,13 @@ const loadData = async () => {
       if (authErr) throw authErr;
 
       const { error: profErr } = await supabase.from("profiles").update({
-        matricula: newForm.matricula.trim() || null,
-        whatsapp: newForm.whatsapp.trim() || null,
-        unidade_id: newForm.unidadeId === "" ? null : newForm.unidadeId,
-        ativo: true,
-        regime_trabalho: newForm.regime_trabalho === "none" ? null : newForm.regime_trabalho,
-        data_demissao: newForm.data_demissao || null,
-      }).eq("id", authUser.userId);
+  matricula: newForm.matricula.trim() || null,
+  whatsapp: newForm.whatsapp.trim() || null,
+  unidade_id: newForm.unidadeId === "" ? null : newForm.unidadeId,  // <-- nome correto
+  ativo: true,
+  regime_trabalho: newForm.regime_trabalho === "none" ? null : newForm.regime_trabalho,
+  data_demissao: newForm.data_demissao || null,
+}).eq("id", authUser.userId);
 
       if (profErr) throw profErr;
 
