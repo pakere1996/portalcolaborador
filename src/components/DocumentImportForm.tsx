@@ -242,22 +242,22 @@ export function DocumentImportForm() {
     if (!profile) return;
 
     setPageResults(prev => {
-  const updated = prev.map((r, i) =>
-    i === currentPage
-      ? { ...r, resolvido: true, matchedProfile: profile, matchStatus: "automatico" }
-      : r
-  );
-  // Auto-avança para próxima página pendente
-  const nextIndex = updated.findIndex((r, i) => i > currentPage && !r.resolvido && !r.ignorado);
-  if (nextIndex !== -1) {
-    setTimeout(() => setCurrentPage(nextIndex), 150);
-  }
-  return updated;
-});
+      const updated = prev.map((r, i) =>
+        i === currentPage
+          ? { ...r, resolvido: true, matchedProfile: profile, matchStatus: "automatico" }
+          : r
+      );
+      const nextIndex = updated.findIndex((r, i) => i > currentPage && !r.resolvido && !r.ignorado);
+      if (nextIndex !== -1) {
+        setTimeout(() => setCurrentPage(nextIndex), 150);
+      }
+      return updated;
+    });
 
-setShowNovoColab(false);
-setManualProfileId("");
-toast.success(`Página vinculada a ${profile.nome}. Próxima página pendente...`);
+    setShowNovoColab(false);
+    setManualProfileId("");
+    toast.success(`Página vinculada a ${profile.nome}. Próxima página pendente...`);
+  };
 
   const handleIgnorar = () => {
     setConfirmIgnorar(true);
