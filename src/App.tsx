@@ -79,8 +79,8 @@ function AuthenticatedRoutes() {
             <Route path="/admin/documentos" element={<DocumentosHub />} />
             <Route path="/admin/documentos/contracheque" element={<DocumentosContracheque />} />
             <Route path="/admin/documentos/ponto" element={<DocumentosPontoAdmin />} />
-            <Route path="/admin/documentos/atestados" element={<DocumentosAtestadosAdmin />} />
-            <Route path="/admin/documentos/disciplinar" element={<DocumentosDisciplinar />} />
+            <Route path="/admin/documentos/atestados" element={<AtestadosAdmin />} />
+            <Route path="/admin/documentos/disciplinar" element={<RegistrosDisciplinaresAdmin />} />
             
             {/* Setup */}
             <Route path="/admin/setup" element={<SetupAdmin />} />
