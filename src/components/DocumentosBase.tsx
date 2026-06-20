@@ -20,7 +20,7 @@ interface Documento {
   status: string;
   nome_pdf: string | null;
   created_at: string;
-  aprovado_em?: string | null; // presente apenas no tipo "ponto"
+  aprovado_em?: string | null;
 }
 
 interface Profile {
@@ -51,31 +51,66 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
   const [editAno, setEditAno] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // 🔥 Função load com ordenação correta
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: docs }, { data: profs }] = await Promise.all([
-      supabase
+    try {
+      // Busca documentos do tipo específico
+      const { data: docs, error: docsError } = await supabase
         .from("documentos")
         .select("*")
-        .eq("tipo", tipo)
-        .order("ano", { ascending: false })
-        .order("mes", { ascending: false }),
-      supabase.from("profiles").select("id, nome").eq("ativo", true).order("nome"),
-    ]);
-    setDocumentos(docs ?? []);
-    setProfiles(profs ?? []);
-    setLoading(false);
+        .eq("tipo", tipo);
+
+      if (docsError) throw docsError;
+
+      // Busca todos os perfis ativos
+      const { data: profs, error: profsError } = await supabase
+        .from("profiles")
+        .select("id, nome")
+        .eq("ativo", true)
+        .order("nome");
+
+      if (profsError) throw profsError;
+
+      // Cria um mapa para acesso rápido ao nome do colaborador
+      const profileMap = new Map(profs?.map(p => [p.id, p.nome]) ?? []);
+
+      // Ordena os documentos:
+      // 1. Ano decrescente (mais recente primeiro)
+      // 2. Mês decrescente (mais recente primeiro)
+      // 3. Nome do colaborador (ordem alfabética)
+      const sortedDocs = (docs ?? []).sort((a, b) => {
+        // Primeiro por ano/mês (mais recente primeiro)
+        if (a.ano !== b.ano) return b.ano - a.ano;
+        if (a.mes !== b.mes) return b.mes - a.mes;
+
+        // Depois por nome do colaborador (alfabético)
+        const nomeA = profileMap.get(a.colaborador_id) ?? "";
+        const nomeB = profileMap.get(b.colaborador_id) ?? "";
+        return nomeA.localeCompare(nomeB);
+      });
+
+      setDocumentos(sortedDocs);
+      setProfiles(profs ?? []);
+    } catch (error) {
+      console.error("Erro ao carregar documentos:", error);
+      toast.error("Erro ao carregar histórico");
+    } finally {
+      setLoading(false);
+    }
   }, [tipo]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  // Anos disponíveis para filtro (já ordenados)
   const anos = useMemo(
     () => [...new Set(documentos.map((d) => d.ano))].sort((a, b) => b - a),
     [documentos]
   );
 
+  // Aplicação dos filtros (a lista já está ordenada)
   const filtrados = useMemo(() => {
     return documentos.filter((d) => {
       if (filtroColab !== "todos" && d.colaborador_id !== filtroColab) return false;
@@ -109,7 +144,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
       } else {
         toast.success("Competência atualizada!");
         setEditando(null);
-        load();
+        load(); // recarrega para reordenar
       }
       setBusy(false);
     },
