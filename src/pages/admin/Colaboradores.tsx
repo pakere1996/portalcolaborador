@@ -56,6 +56,7 @@ export default function Colaboradores() {
   const loadData = async () => {
     setLoading(true);
     try {
+      // 🔥 Garantir que possuimos todos os campos, incluindo possui_relogio_ponto das unidades
       const [pRes, uRes, cRes] = await Promise.all([
         supabase.from("profiles").select("*").order("nome"),
         supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
@@ -63,6 +64,8 @@ export default function Colaboradores() {
       ]);
 
       if (pRes.error) throw pRes.error;
+      if (uRes.error) throw uRes.error;
+      if (cRes.error) throw cRes.error;
 
       const profileIds = (pRes.data ?? []).map(p => p.id);
       let rolesMap = new Map<string, string[]>();
@@ -83,6 +86,7 @@ export default function Colaboradores() {
       setUnidades(uRes.data ?? []);
       setCargos(cRes.data ?? []);
     } catch (e) {
+      console.error("Erro ao carregar dados:", e);
       toast.error("Erro ao carregar dados", { description: (e as Error).message });
     } finally {
       setLoading(false);
@@ -123,6 +127,10 @@ export default function Colaboradores() {
 
       if (authErr) throw authErr;
 
+      // Verifica se a unidade selecionada tem relógio para definir o default
+      const unidadeSelecionada = unidades.find(u => u.id === newForm.unidadeId);
+      const possuiFolhaPontoDefault = unidadeSelecionada?.possui_relogio_ponto || false;
+
       const { error: profErr } = await supabase.from("profiles").update({
         matricula: toUpperCaseTrim(newForm.matricula) || null,
         whatsapp: newForm.whatsapp.trim() || null,
@@ -131,7 +139,7 @@ export default function Colaboradores() {
         regime_trabalho: newForm.regime_trabalho === "none" ? null : newForm.regime_trabalho,
         data_demissao: newForm.data_demissao || null,
         tipo_vinculo: newForm.tipo_vinculo || "CLT",
-        possui_folha_ponto: newForm.possui_folha_ponto || false,
+        possui_folha_ponto: newForm.possui_folha_ponto !== undefined ? newForm.possui_folha_ponto : possuiFolhaPontoDefault,
       }).eq("id", authUser.userId);
 
       if (profErr) throw profErr;
@@ -193,7 +201,7 @@ export default function Colaboradores() {
         regime_trabalho: editForm.regime_trabalho === "none" ? null : editForm.regime_trabalho,
         data_demissao: editForm.data_demissao || null,
         tipo_vinculo: editForm.tipo_vinculo || "CLT",
-        possui_folha_ponto: editForm.possui_folha_ponto || false,
+        possui_folha_ponto: editForm.possui_folha_ponto ?? false,
       }).eq("id", editingProfile.id);
 
       if (profErr) throw profErr;
