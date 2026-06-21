@@ -9,6 +9,7 @@ import { formatBR } from "@/lib/folga-rules";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -29,6 +30,7 @@ export default function Documentos() {
   const [loading, setLoading] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selectedDoc, setSelectedDoc] = useState<Documento | null>(null);
 
   const load = async () => {
     if (!user) return;
@@ -66,6 +68,7 @@ export default function Documentos() {
   };
 
   const handlePreview = async (doc: Documento) => {
+    setSelectedDoc(doc);
     const { data } = await supabase.storage
       .from("documentos")
       .createSignedUrl(doc.storage_path, 60);
@@ -156,10 +159,16 @@ export default function Documentos() {
         </CardContent>
       </Card>
 
+      {/* Dialog de visualização com DialogDescription corrigido */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Visualização do Documento</DialogTitle>
+            <DialogDescription>
+              {selectedDoc
+                ? `${getTipoLabel(selectedDoc.tipo)} - ${String(selectedDoc.mes).padStart(2, "0")}/${selectedDoc.ano}`
+                : "Documento"}
+            </DialogDescription>
           </DialogHeader>
           <div className="flex-1 min-h-[500px] bg-muted/20 rounded-lg overflow-hidden">
             {previewUrl ? (
@@ -180,8 +189,7 @@ export default function Documentos() {
             </Button>
             <Button
               onClick={() => {
-                const doc = documentos.find(d => d.storage_path === previewUrl?.split('?')[0].split('/').pop());
-                if (doc) handleDownload(doc);
+                if (selectedDoc) handleDownload(selectedDoc);
               }}
             >
               <Download className="size-4 mr-1" /> Baixar
