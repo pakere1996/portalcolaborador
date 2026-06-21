@@ -132,8 +132,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
   ];
 
+  // 🔥 ADMIN: Documentos com Contracheque, Adiantamento, Folha de Ponto
   const adminDocsNav: NavItem[] = [
     { to: "/admin/documentos/contracheque", label: "Contracheques", icon: FileText, end: true },
+    { to: "/admin/documentos/adiantamento", label: "Adiantamentos", icon: FileText }, // 🔥 NOVO
     { to: "/admin/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
     { to: "/admin/documentos/atestados", label: "Atestados", icon: FileWarning },
     { to: "/admin/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
@@ -165,7 +167,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
-      {/* 🔥 HEADER MOBILE – sem NotificationBell (apenas menu) */}
       <header className="md:hidden flex items-center justify-between border-b border-border bg-card/50 backdrop-blur px-4 py-3 sticky top-0 z-50">
         <div className="flex items-center gap-2">
           <img src={logo} alt="Pakerê" className="size-7 rounded-md object-cover" />
@@ -354,7 +355,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {isAdmin ? "Administrador" : profile?.cargo ?? "Funcionário"}
             </div>
           </div>
-          <Button variant="ghost" size="sm" className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10" onClick={signOut}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={signOut}
+          >
             <LogOut className="size-4" /> Sair
           </Button>
         </div>
@@ -364,9 +370,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 md:hidden" onClick={() => setOpen(false)} />
       )}
 
-      {/* 🔥 MAIN – NotificationBell aparece UMA VEZ, sempre visível */}
       <main className="flex-1 min-w-0 p-4 md:p-8">
-        <div className="flex justify-end mb-6">
+        <div className="hidden md:flex justify-end mb-6">
           <NotificationBell />
         </div>
         {children}
