@@ -258,7 +258,10 @@ export default function QuadroAvisosAdmin() {
             </div>
             <div className="space-y-2">
               <Label>Destinatário</Label>
-              <Select value={form.para_todos ? "todos" : "individual"} onValueChange={(v) => setForm({ ...form, para_todos: v === "todos", colaborador_id: v === "todos" ? "" : form.colaborador_id })}>
+              <Select 
+                value={form.para_todos ? "todos" : "individual"} 
+                onValueChange={(v) => setForm({ ...form, para_todos: v === "todos", colaborador_id: v === "todos" ? "" : form.colaborador_id })}
+              >
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todos">Todos os colaboradores</SelectItem>
@@ -269,10 +272,15 @@ export default function QuadroAvisosAdmin() {
             {!form.para_todos && (
               <div className="space-y-2">
                 <Label>Colaborador</Label>
-                <Select value={form.colaborador_id} onValueChange={(v) => setForm({ ...form, colaborador_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <Select 
+                  value={form.colaborador_id || ""} 
+                  onValueChange={(v) => setForm({ ...form, colaborador_id: v })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Selecione o colaborador" /></SelectTrigger>
                   <SelectContent>
-                    {colaboradores.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                    {colaboradores.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
