@@ -211,6 +211,9 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
               c.status === "taken" ||
               c.status === "birthday";
 
+            // 🔥 Verifica se o usuário atual tem folga neste dia
+            const hasMyFolga = c.occupants.some(occ => occ.userId === myUserId);
+
             return (
               <div
                 key={i}
@@ -258,7 +261,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     {c.status === "available" && (
                       <LockOpen className="size-3.5 text-emerald-500 drop-shadow-[0_0_3px_rgba(16,185,129,0.3)]" />
                     )}
-                    {(c.status === "mine" || c.status === "swapped") && (
+                    {(c.status === "mine" || c.status === "swapped" || hasMyFolga) && (
                       <CheckCircle2 className="size-4 text-amber-600 drop-shadow-[0_0_3px_rgba(217,119,6,0.3)]" />
                     )}
                     {c.status === "pending" && (
@@ -293,29 +296,35 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                   </div>
                 )}
 
-                {/* Non-admin view: show only my status label */}
-                {!isAdmin && c.label && (
-                  <div
-                    className={cn(
-                      "mt-auto text-[10px] font-bold flex items-center gap-1 rounded-full px-2 py-0.5 w-fit",
-                      c.status === "mine"
-                        ? tagColors.monthly
-                        : c.status === "fixed"
-                        ? tagColors.fixed
-                        : c.status === "pending"
-                        ? tagColors.pending
-                        : "bg-slate-100 text-slate-500 border-slate-200"
+                {/* Non-admin view: show my folga even if past */}
+                {!isAdmin && (
+                  <div className="mt-auto flex flex-col gap-1">
+                    {hasMyFolga && (
+                      <div className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
+                        {c.label || "Minha Folga"}
+                      </div>
                     )}
-                  >
-                    {c.label}
-                  </div>
-                )}
-
-                {!isAdmin && c.status === "available" && !isBlocked && (
-                  <div className="mt-auto opacity-0 group-hover:opacity-100 transition-all transform translate-y-1 group-hover:translate-y-0">
-                    <span className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">
-                      Selecionar
-                    </span>
+                    {!hasMyFolga && c.label && c.status !== "past" && (
+                      <div
+                        className={cn(
+                          "text-[10px] font-bold rounded-full px-2 py-0.5 w-fit",
+                          c.status === "fixed"
+                            ? tagColors.fixed
+                            : c.status === "pending"
+                            ? tagColors.pending
+                            : "bg-slate-100 text-slate-500 border-slate-200"
+                        )}
+                      >
+                        {c.label}
+                      </div>
+                    )}
+                    {!hasMyFolga && c.status === "available" && !isBlocked && (
+                      <div className="opacity-0 group-hover:opacity-100 transition-all transform translate-y-1 group-hover:translate-y-0">
+                        <span className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">
+                          Selecionar
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
