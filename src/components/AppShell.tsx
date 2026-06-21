@@ -126,9 +126,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/bloqueios", label: "Datas Bloqueadas", icon: Ban },
   ];
 
-  // 🔥 COLABORADOR: apenas UM item "Meus Documentos"
+  // 🔥 COLABORADOR: Meus Documentos (unificado) + Atestados + Registros Disciplinares
   const employeeDocsNav: NavItem[] = [
     { to: "/documentos", label: "Meus Documentos", icon: FileText, end: true },
+    { to: "/documentos/atestados", label: "Atestados", icon: FileWarning },
+    { to: "/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
   ];
 
   // ADMIN: mantém os itens separados
