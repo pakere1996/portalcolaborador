@@ -21,7 +21,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 
 interface Documento {
   id: string;
@@ -31,7 +30,6 @@ interface Documento {
   storage_path: string;
   nome_pdf: string | null;
   created_at: string;
-  quinzena?: number | null;
 }
 
 const TIPOS_DOCUMENTO = [
@@ -40,15 +38,6 @@ const TIPOS_DOCUMENTO = [
   { value: "adiantamento", label: "Adiantamento" },
   { value: "ponto", label: "Folha de Ponto" },
 ];
-
-const getTipoLabel = (tipo: string) => {
-  const map: Record<string, string> = {
-    contracheque: "Contracheque",
-    adiantamento: "Adiantamento",
-    ponto: "Folha de Ponto",
-  };
-  return map[tipo] || tipo;
-};
 
 export default function Documentos() {
   const { user } = useAuth();
@@ -92,7 +81,6 @@ export default function Documentos() {
       if (error) throw error;
       setDocumentos(data ?? []);
 
-      // Extrai anos e meses disponíveis para filtros
       const anosSet = new Set(data?.map(d => d.ano) ?? []);
       const mesesSet = new Set(data?.map(d => d.mes) ?? []);
       setAnos(Array.from(anosSet).sort((a, b) => b - a));
@@ -130,6 +118,13 @@ export default function Documentos() {
     } else {
       toast.error("Erro ao gerar link de visualização");
     }
+  };
+
+  const getTipoLabel = (tipo: string) => {
+    if (tipo === "contracheque") return "Contracheque";
+    if (tipo === "adiantamento") return "Adiantamento";
+    if (tipo === "ponto") return "Folha de Ponto";
+    return tipo;
   };
 
   const limparFiltros = () => {
@@ -218,13 +213,8 @@ export default function Documentos() {
                       <FileText className="size-5" />
                     </div>
                     <div>
-                      <div className="font-medium flex items-center gap-2">
+                      <div className="font-medium">
                         {getTipoLabel(doc.tipo)}
-                        {doc.tipo === "adiantamento" && doc.quinzena && (
-                          <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
-                            {doc.quinzena}ª Quinzena
-                          </Badge>
-                        )}
                       </div>
                       <div className="text-sm text-muted-foreground">
                         {String(doc.mes).padStart(2, "0")}/{doc.ano}
