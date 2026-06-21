@@ -11,18 +11,19 @@ import { adminApi } from "@/lib/admin-api";
 
 interface Troca {
   id: string;
-  solicitante_id?: string; // Opcional pois a view não retorna
+  solicitante_id: string;
   destinatario_id: string | null;
   data_destinatario: string;
-  data_solicitante?: string | null;
   mensagem: string | null;
   status: string;
   created_at: string;
+  respondido_em: string | null;
 }
 
 export default function TrocasPage() {
   const { user } = useAuth();
   const [trocas, setTrocas] = useState<Troca[]>([]);
+  const [nomes, setNomes] = useState<Record<string, string>>({});
   const [myFolgas, setMyFolgas] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -30,38 +31,40 @@ export default function TrocasPage() {
   const load = async () => {
     if (!user) return;
     setLoading(true);
-    
+
     try {
-      // 1. Buscar minhas folgas para saber quais trocas posso aceitar
+      // Buscar minhas folgas
       const { data: f } = await supabase.from("folgas").select("data").eq("user_id", user.id);
       const folgaDates = (f ?? []).map(x => x.data);
       setMyFolgas(folgaDates);
 
-      // 2. Buscar trocas onde estou envolvido (RLS permite ver solicitante_id aqui)
-      const { data: personalSwaps } = await supabase
+      // Buscar todas as trocas onde estou envolvido (como solicitante ou destinatário)
+      const { data: trocasData, error } = await supabase
         .from("trocas_folga")
         .select("*")
         .or(`solicitante_id.eq.${user.id},destinatario_id.eq.${user.id}`)
         .order("created_at", { ascending: false });
 
-      // 3. Buscar trocas públicas através da VIEW SEGURA (solicitante_id é oculto)
-      const { data: publicSwaps } = await supabase
-        .from("v_trocas_disponiveis" as any)
-        .select("*")
-        .order("created_at", { ascending: false });
+      if (error) throw error;
 
-      // 4. Combinar e filtrar
-      const combined: Troca[] = [...(personalSwaps ?? [])];
-      
-      // Adicionar trocas públicas que eu posso aceitar e que ainda não estão na lista pessoal
-      const personalIds = new Set(combined.map(s => s.id));
-      (publicSwaps ?? []).forEach((ps: any) => {
-        if (!personalIds.has(ps.id) && folgaDates.includes(ps.data_destinatario)) {
-          combined.push(ps);
-        }
+      // Buscar nomes dos perfis envolvidos
+      const userIds = new Set<string>();
+      (trocasData ?? []).forEach((t: Troca) => {
+        if (t.solicitante_id) userIds.add(t.solicitante_id);
+        if (t.destinatario_id) userIds.add(t.destinatario_id);
       });
 
-      setTrocas(combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+      if (userIds.size > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, nome")
+          .in("id", Array.from(userIds));
+        const nomeMap: Record<string, string> = {};
+        (profiles ?? []).forEach(p => { nomeMap[p.id] = p.nome; });
+        setNomes(nomeMap);
+      }
+
+      setTrocas(trocasData ?? []);
     } catch (error) {
       console.error("Erro ao carregar trocas:", error);
       toast.error("Erro ao carregar dados das trocas");
@@ -72,7 +75,8 @@ export default function TrocasPage() {
 
   useEffect(() => {
     load();
-    const ch = supabase.channel(`trocas-realtime-${user?.id}`)
+    const ch = supabase
+      .channel(`trocas-realtime-${user?.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "trocas_folga" }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -80,16 +84,14 @@ export default function TrocasPage() {
 
   const processarTroca = async (t: Troca, aprovar: boolean) => {
     if (!user) return;
-    
+
     if (!aprovar) {
       toast.info("Solicitação ignorada");
-      // Opcional: marcar localmente como ignorada para esta sessão
       return;
     }
 
     setProcessingId(t.id);
     try {
-      // Usar a Edge Function para processar a aceitação de forma anônima e segura
       await adminApi.acceptSwap(t.id);
       toast.success("Troca realizada com sucesso!");
       load();
@@ -107,18 +109,26 @@ export default function TrocasPage() {
     load();
   };
 
+  const getNome = (id: string) => nomes[id] || "Colaborador";
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
           <ArrowLeftRight className="size-6 text-primary" /> Minhas Trocas
         </h1>
-        <p className="text-muted-foreground mt-1">Gerencie suas solicitações de permuta anônima.</p>
+        <p className="text-muted-foreground mt-1">
+          Solicite ou responda trocas de folga com outros colaboradores.
+        </p>
       </div>
 
+      {/* Mensagem atualizada – não mais anônima */}
       <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-start gap-3 text-sm text-blue-800">
         <Info className="size-5 shrink-0 mt-0.5" />
-        <p>As trocas são <b>100% anônimas</b>. Você não verá quem solicitou nem quem recebeu até que a troca seja concluída, garantindo a privacidade de todos.</p>
+        <p>
+          As trocas são feitas diretamente entre colaboradores. Você vê quem solicitou e para quem,
+          e pode aceitar ou recusar. <b>Lembre-se:</b> você só pode trocar com colaboradores da sua unidade.
+        </p>
       </div>
 
       <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xl">
@@ -128,24 +138,29 @@ export default function TrocasPage() {
             Carregando trocas...
           </div>
         ) : trocas.length === 0 ? (
-          <div className="p-12 text-center text-muted-foreground">Nenhuma troca registrada ou disponível para suas das de folga.</div>
+          <div className="p-12 text-center text-muted-foreground">
+            Nenhuma troca registrada ou disponível.
+          </div>
         ) : (
           <ul className="divide-y divide-border">
             {trocas.map((t) => {
-              const isSol = t.solicitante_id === user?.id;
-              const isPublic = t.destinatario_id === null;
+              const isSolicitante = t.solicitante_id === user?.id;
+              const isDestinatario = t.destinatario_id === user?.id;
+              const outroId = isSolicitante ? t.destinatario_id : t.solicitante_id;
+              const outroNome = outroId ? getNome(outroId) : "—";
               const isProcessing = processingId === t.id;
-              
+              const isPendente = t.status === "pendente";
+
               return (
                 <li key={t.id} className="p-6 flex flex-col gap-4 hover:bg-muted/10 transition-colors">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className={cn(
-                          isSol ? "bg-blue-50 text-blue-600" : "bg-orange-50 text-orange-600",
+                          isSolicitante ? "bg-blue-50 text-blue-600" : "bg-orange-50 text-orange-600",
                           "border-current/20"
                         )}>
-                          {isSol ? "Sua solicitação" : "Solicitação de troca"}
+                          {isSolicitante ? "Você solicitou" : "Solicitaram para você"}
                         </Badge>
                         <span className="text-xs text-muted-foreground flex items-center gap-1">
                           <Clock className="size-3" /> {new Date(t.created_at).toLocaleDateString('pt-BR')}
@@ -153,7 +168,11 @@ export default function TrocasPage() {
                       </div>
                       <div className="font-bold text-lg flex items-center gap-2">
                         <User className="size-4 text-muted-foreground" />
-                        {isSol ? (isPublic ? "Aguardando interessado..." : "Troca em andamento") : "Existe um interessado na sua folga"}
+                        {isSolicitante ? (
+                          <>Para: <span className="text-primary">{outroNome}</span></>
+                        ) : (
+                          <>De: <span className="text-primary">{outroNome}</span></>
+                        )}
                       </div>
                       <div className="text-sm text-muted-foreground">
                         Data da folga: <b className="text-foreground">{formatBR(parseYMD(t.data_destinatario))}</b>
@@ -170,13 +189,16 @@ export default function TrocasPage() {
                         {t.status}
                       </Badge>
 
-                      {t.status === 'pendente' && (
+                      {isPendente && (
                         <div className="flex gap-2">
-                          {isSol ? (
+                          {isSolicitante ? (
                             <Button variant="outline" size="sm" onClick={() => cancelar(t.id)}>Cancelar</Button>
                           ) : (
+                            // Destinatário: pode aceitar ou recusar
                             <>
-                              <Button variant="ghost" size="sm" onClick={() => processarTroca(t, false)} disabled={isProcessing}>Ignorar</Button>
+                              <Button variant="ghost" size="sm" onClick={() => processarTroca(t, false)} disabled={isProcessing}>
+                                Ignorar
+                              </Button>
                               <Button size="sm" onClick={() => processarTroca(t, true)} disabled={isProcessing}>
                                 {isProcessing ? <Loader2 className="size-4 animate-spin mr-1" /> : <Check className="size-4 mr-1" />}
                                 Aceitar Troca
