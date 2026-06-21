@@ -1,15 +1,10 @@
 // src/lib/parsers/contracheque-parser.ts
 import { PageResult, ProfileForMatching } from "@/components/DocumentImportForm";
 
-/**
- * Parser para contracheques - implementação mínima.
- * Se precisar de funcionalidade real, implemente a extração de dados.
- */
 export function parseContracheque(
   pages: { pageNumber: number; text: string }[],
   profiles: ProfileForMatching[]
 ): PageResult[] {
-  // Versão simplificada que retorna páginas não vinculadas
   return pages.map((p) => ({
     pageNumber: p.pageNumber,
     text: p.text,
@@ -25,6 +20,9 @@ export function parseContracheque(
     aprovado: false,
     duplicadoId: null,
     acaoSeDuplicado: null,
+    matricula: null,
+    cargo: null,
+    regime_trabalho: null,
   }));
 }
 
