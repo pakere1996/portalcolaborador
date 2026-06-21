@@ -152,12 +152,16 @@ export default function AdminHomeAdminPage() {
   const [pendentes, setPendentes] = useState<AtestadoPendente[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNotification, setShowNotification] = useState(false);
+  const [alreadyNotified, setAlreadyNotified] = useState(false);
 
   useEffect(() => {
     const carregarPendentes = async () => {
+      // Evita múltiplas chamadas
+      if (alreadyNotified) return;
+      
       setLoading(true);
       try {
-        // 🔥 1. Buscar atestados pendentes (sem join)
+        // 1. Busca atestados pendentes (sem join)
         const { data: atestados, error: atestadosError } = await supabase
           .from("atestados")
           .select("id, colaborador_id, data_atestado, dias_afastamento, created_at")
@@ -172,7 +176,7 @@ export default function AdminHomeAdminPage() {
           return;
         }
 
-        // 2. Buscar nomes dos colaboradores
+        // 2. Busca nomes dos colaboradores
         const colaboradorIds = atestados.map((a) => a.colaborador_id);
         const { data: profiles, error: profilesError } = await supabase
           .from("profiles")
@@ -194,7 +198,9 @@ export default function AdminHomeAdminPage() {
 
         setPendentes(pendentesFormatados);
 
-        if (pendentesFormatados.length > 0) {
+        // 3. Notifica apenas uma vez
+        if (pendentesFormatados.length > 0 && !alreadyNotified) {
+          setAlreadyNotified(true);
           setShowNotification(true);
           toast.info(`📋 ${pendentesFormatados.length} atestado(s) pendente(s) de aprovação`, {
             duration: 6000,
@@ -214,7 +220,7 @@ export default function AdminHomeAdminPage() {
     };
 
     carregarPendentes();
-  }, []); // 🔥 useEffect com dependência vazia – executa apenas uma vez
+  }, [alreadyNotified]);
 
   const groupedModules = adminModules.reduce((acc, module) => {
     if (!acc[module.category]) {
