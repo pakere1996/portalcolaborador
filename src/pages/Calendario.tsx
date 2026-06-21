@@ -9,18 +9,10 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import {
-  Dialog as ExcecaoDialog,
-  DialogContent as ExcecaoDialogContent,
-  DialogHeader as ExcecaoDialogHeader,
-  DialogTitle as ExcecaoDialogTitle,
-  DialogFooter as ExcecaoDialogFooter,
-  DialogDescription as ExcecaoDialogDescription,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -409,8 +401,6 @@ export default function CalendarioPage() {
 
     const canTrade = canTradeWeekday || canTradeWeekend;
 
-    const isDayTaken = selectedDay.status === 'taken' || selectedDay.status === 'blocked';
-
     return {
       occupants,
       isMine,
@@ -418,7 +408,6 @@ export default function CalendarioPage() {
       canTrade,
       isWeekend,
       date,
-      isDayTaken,
     };
   }, [selectedDay, occupantsByDate, user, profiles, folgas]);
 
@@ -468,7 +457,7 @@ export default function CalendarioPage() {
               {selectedDay && formatBR(parseYMD(selectedDay.iso))}
             </DialogTitle>
             <DialogDescription className="sr-only">
-              Detalhes da data selecionada
+              Detalhes do dia {selectedDay && formatBR(parseYMD(selectedDay.iso))}
             </DialogDescription>
           </DialogHeader>
 
@@ -582,13 +571,19 @@ export default function CalendarioPage() {
                   <div className="text-sm text-slate-500">Troca aprovada para esta data.</div>
                 )}
 
-                {/* Botão de solicitar exceção – aparece quando o dia está ocupado/lotado/bloqueado, mas NÃO é do próprio */}
+                {/* 
+                  Botão "Solicitar exceção" – agora aparece para qualquer dia que não seja:
+                  - passado (past)
+                  - do próprio (mine, fixed)
+                  - com solicitação pendente (pending)
+                  - com troca aprovada (swapped)
+                  Ou seja, aparece para available, weekday, taken, blocked, birthday.
+                */}
                 {selectedDay.status !== 'past' &&
                  selectedDay.status !== 'mine' &&
                  selectedDay.status !== 'fixed' &&
                  selectedDay.status !== 'pending' &&
-                 selectedDay.status !== 'swapped' &&
-                 dayInfo.isDayTaken && (
+                 selectedDay.status !== 'swapped' && (
                   <Button
                     variant="outline"
                     className="w-full border-amber-200 text-amber-700 hover:bg-amber-50"
@@ -611,17 +606,17 @@ export default function CalendarioPage() {
       </Dialog>
 
       {/* Dialog de solicitação de exceção */}
-      <ExcecaoDialog open={excecaoDialogOpen} onOpenChange={(o) => !o && setExcecaoDialogOpen(false)}>
-        <ExcecaoDialogContent className="max-w-md rounded-[2rem] border-none shadow-2xl p-8">
-          <ExcecaoDialogHeader>
-            <ExcecaoDialogTitle className="text-2xl font-black flex items-center gap-3">
+      <Dialog open={excecaoDialogOpen} onOpenChange={(o) => !o && setExcecaoDialogOpen(false)}>
+        <DialogContent className="max-w-md rounded-[2rem] border-none shadow-2xl p-8">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black flex items-center gap-3">
               <AlertCircle className="size-6 text-amber-500" />
               Solicitar exceção
-            </ExcecaoDialogTitle>
-            <ExcecaoDialogDescription className="sr-only">
-              Formulário para solicitar exceção de folga
-            </ExcecaoDialogDescription>
-          </ExcecaoDialogHeader>
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              Preencha a justificativa para solicitar uma exceção.
+            </DialogDescription>
+          </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
               <Label className="text-sm font-semibold text-slate-700">Data</Label>
@@ -643,16 +638,16 @@ export default function CalendarioPage() {
               />
             </div>
           </div>
-          <ExcecaoDialogFooter className="gap-3">
+          <DialogFooter className="gap-3">
             <Button variant="ghost" onClick={() => setExcecaoDialogOpen(false)}>
               Cancelar
             </Button>
             <Button onClick={enviarExcecao} disabled={enviandoExcecao}>
               {enviandoExcecao ? "Enviando..." : <><Send className="size-4 mr-2" /> Enviar solicitação</>}
             </Button>
-          </ExcecaoDialogFooter>
-        </ExcecaoDialogContent>
-      </ExcecaoDialog>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
