@@ -11,6 +11,9 @@ import Trocas from "./pages/Trocas";
 import Historico from "./pages/Historico";
 import Documentos from "./pages/Documentos";
 import DocumentosAtestados from "./pages/DocumentosAtestados";
+import DisciplinarPage from "./pages/Disciplinar";
+// ...
+<Route path="/documentos/disciplinar" element={<DisciplinarPage />} />
 
 // Admin Pages
 import HomeAdmin from "./pages/admin/HomeAdmin";
