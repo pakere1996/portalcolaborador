@@ -14,6 +14,7 @@ import {
   unlockDateForMonth,
   ymd,
   calculateDateStatus,
+  getMonthDays,
 } from "@/lib/folga-rules";
 import { Button } from "@/components/ui/button";
 import {
@@ -289,17 +290,6 @@ export default function CalendarioPage() {
     }
   };
 
-  // 🔥 Função auxiliar para pegar dias do mês (usado no occupantsByDate)
-  const getMonthDays = (year: number, month: number) => {
-    const days = [];
-    const date = new Date(year, month, 1);
-    while (date.getMonth() === month) {
-      days.push(new Date(date));
-      date.setDate(date.getDate() + 1);
-    }
-    return days;
-  };
-
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
@@ -323,7 +313,7 @@ export default function CalendarioPage() {
         locked={unlocked ? null : { unlockDateBR: formatBR(unlock) }}
       />
 
-      {/* Diálogo de Mudança de Folga */}
+      {/* Diálogos (os mesmos da versão anterior) */}
       <Dialog open={!!changeFolgaDialog} onOpenChange={(o) => !o && setChangeFolgaDialog(null)}>
         <DialogContent className="rounded-[2rem]">
           <DialogHeader>
@@ -351,7 +341,6 @@ export default function CalendarioPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Diálogo de Opções (Troca ou Exceção) */}
       <Dialog open={!!smartSwap} onOpenChange={(o) => !o && setSmartSwap(null)}>
         <DialogContent className="rounded-[2rem]">
           <DialogHeader>
@@ -377,7 +366,6 @@ export default function CalendarioPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Diálogo Unificado de Motivo */}
       <Dialog open={!!reqDialog} onOpenChange={(o) => !o && setReqDialog(null)}>
         <DialogContent className="rounded-[2rem]">
           <DialogHeader>
@@ -424,7 +412,6 @@ export default function CalendarioPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Visualização de Pendente */}
       <Dialog open={!!viewDialog} onOpenChange={(o) => !o && setViewDialog(null)}>
         <DialogContent className="rounded-[2rem]">
           <DialogHeader>
