@@ -21,6 +21,7 @@ interface ProfileForMatching {
   matricula: string | null;
   unidade_id: string | null;
   possui_folha_ponto?: boolean;
+  regime_trabalho?: string | null;
 }
 
 interface Cargo {
@@ -42,7 +43,7 @@ interface PageResult {
   mes: number | null;
   ano: number | null;
   unidadeId: string | null;
-  matchStatus: "automatico" | "revisao";
+  matchStatus: "automatico" | "revisao"; // 🔥 union type corrigido
   matchedProfile: ProfileForMatching | null;
   resolvido: boolean;
   ignorado: boolean;
@@ -95,7 +96,7 @@ export function DocumentImportForm() {
     const fetchProfiles = async () => {
       let query = supabase
         .from("profiles")
-        .select("id, nome, cpf, matricula, unidade_id, possui_folha_ponto")
+        .select("id, nome, cpf, matricula, unidade_id, possui_folha_ponto, regime_trabalho")
         .eq("ativo", true);
       
       if (documentType === "ponto") {
@@ -181,7 +182,7 @@ export function DocumentImportForm() {
     setIsProcessing(true);
     try {
       const pages = await extractTextFromPDF(selectedFile);
-      const resultsComMatch = pages.map((p) => {
+      const resultsComMatch: PageResult[] = pages.map((p) => {
         const text = p.text;
         const { profile: matchedProfile, nomeEncontrado: nome } = findExactMatchInText(text, profiles);
         const cnpjMatch = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
@@ -196,14 +197,14 @@ export function DocumentImportForm() {
           mes: periodo?.mes ?? null,
           ano: periodo?.ano ?? null,
           unidadeId: unidade?.id ?? null,
-          matchStatus: matchedProfile ? "automatico" : "revisao",
+          matchStatus: (matchedProfile ? "automatico" : "revisao") as "automatico" | "revisao",
           matchedProfile,
           resolvido: !!matchedProfile,
           ignorado: false,
           aprovado: false,
           duplicadoId: null,
           acaoSeDuplicado: null,
-        } as PageResult;
+        };
       });
 
       const results: PageResult[] = await Promise.all(
@@ -258,7 +259,7 @@ export function DocumentImportForm() {
     setPageResults(prev => {
       const updated = prev.map((r, i) =>
         i === currentPage
-          ? { ...r, resolvido: true, matchedProfile: profile, matchStatus: "automatico" }
+          ? { ...r, resolvido: true, matchedProfile: profile, matchStatus: "automatico" as "automatico" }
           : r
       );
       return updated;
@@ -296,8 +297,8 @@ export function DocumentImportForm() {
         email: `${cleanCpf}@pakere.com.br`,
         senha: novoColabForm.senha || cleanCpf.slice(-6),
         cargo: cargoSelecionado?.nome ?? novoColabForm.cargo,
-        dataAdmissao: novoColabForm.dataAdmissao || null, // ← enviar null se vazio
-        dataNascimento: novoColabForm.dataNascimento || null, // ← enviar null se vazio
+        dataAdmissao: novoColabForm.dataAdmissao || null,
+        dataNascimento: novoColabForm.dataNascimento || null,
         folgaFixaSemana: novoColabForm.folgaFixa === "none" ? null : Number(novoColabForm.folgaFixa),
         role: novoColabForm.perfil_acesso,
       });
@@ -323,7 +324,7 @@ export function DocumentImportForm() {
       setNovoColabForm({ nome: "", cpf: "", cargo: "", unidadeId: "", senha: "", folgaFixa: "none", dataAdmissao: "", dataNascimento: "", whatsapp: "", perfil_acesso: "colaborador", matricula: "" });
       toast.success("Colaborador criado com sucesso! Vinculando página...");
 
-      setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, matchedProfile: newProfile, matchStatus: "automatico", resolvido: true } : r));
+      setPageResults(prev => prev.map((r, i) => i === currentPage ? { ...r, matchedProfile: newProfile, matchStatus: "automatico" as "automatico", resolvido: true } : r));
       setManualProfileId(newProfile.id);
       avancarParaProximaPendente();
     } catch (err) {
@@ -423,7 +424,6 @@ export function DocumentImportForm() {
   const totalPages = pageResults.length;
   const resolvidos = pageResults.filter(r => r.resolvido).length;
   const ignorados = pageResults.filter(r => r.ignorado).length;
-  const todasResolvidas = totalPages > 0 && resolvidos === totalPages;
   const jaAprovado = pageResults.some(r => r.aprovado);
 
   const Navegacao = ({ posicao }: { posicao: "topo" | "baixo" }) => (
@@ -450,7 +450,6 @@ export function DocumentImportForm() {
     </div>
   );
 
-  // Renderização
   if (pageResults.length === 0) {
     return (
       <div className="space-y-4">
