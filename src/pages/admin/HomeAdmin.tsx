@@ -140,10 +140,9 @@ const adminModules = [
 ];
 
 export default function AdminHomeAdminPage() {
-  const { pendentes, loading, totalPendentes, showNotification, setShowNotification } = useAtestadosPendentes();
+  const { pendentes, totalPendentes, loading, showNotification, setShowNotification } = useAtestadosPendentes();
 
   useEffect(() => {
-    // Se houver pendentes e a notificação ainda não foi mostrada, exibe o toast
     if (totalPendentes > 0 && !showNotification) {
       toast.info(`📋 ${totalPendentes} atestado(s) pendente(s) de aprovação`, {
         duration: 6000,
@@ -174,7 +173,6 @@ export default function AdminHomeAdminPage() {
         <p className="text-muted-foreground mt-1">Acesso rápido aos módulos de gestão.</p>
       </div>
 
-      {/* 🔥 Card de Atestados Pendentes – usando dados do contexto */}
       {!loading && totalPendentes > 0 && (
         <Card className="border-amber-200 bg-amber-50/50 shadow-sm">
           <CardHeader className="pb-3">
@@ -236,7 +234,6 @@ export default function AdminHomeAdminPage() {
         </div>
       )}
 
-      {/* 🔥 Popout de notificação – usando estado do contexto */}
       <AlertDialog open={showNotification} onOpenChange={setShowNotification}>
         <AlertDialogContent className="max-w-md rounded-2xl">
           <AlertDialogHeader>
