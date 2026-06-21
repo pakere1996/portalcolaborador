@@ -81,6 +81,7 @@ export default function Colaboradores() {
         role: rolesMap.get(p.id)?.[0] ?? null,
       }));
 
+      // Ordenação: Unidade → Status (ativo primeiro) → Nome
       const sortedProfiles = profilesWithRoles.sort((a, b) => {
         const unidadeA = uRes.data?.find(u => u.id === a.unidade_id)?.nome || "";
         const unidadeB = uRes.data?.find(u => u.id === b.unidade_id)?.nome || "";
@@ -120,11 +121,12 @@ export default function Colaboradores() {
 
   const toUpperCaseTrim = (str: string) => str.trim().toUpperCase();
 
+  // 🔥 VALIDAÇÃO MELHORADA – verifica se o campo tem valor (não apenas string vazia)
   const validateForm = (form: any) => {
     const errors: string[] = [];
-    if (!form.nome.trim()) errors.push("Nome");
-    if (!form.cpf.trim() || !isValidCPFLength(onlyDigits(form.cpf))) errors.push("CPF");
-    if (!form.cargo.trim()) errors.push("Cargo");
+    if (!form.nome?.trim()) errors.push("Nome");
+    if (!form.cpf?.trim() || !isValidCPFLength(onlyDigits(form.cpf))) errors.push("CPF");
+    if (!form.cargo?.trim()) errors.push("Cargo");
     if (!form.unidadeId || form.unidadeId === "none") errors.push("Unidade");
     if (!form.dataAdmissao) errors.push("Data de Admissão");
     if (!form.dataNascimento) errors.push("Data de Nascimento");
@@ -211,7 +213,6 @@ export default function Colaboradores() {
   };
 
   const handleUpdate = async () => {
-    // Validação
     const errors = validateForm(editForm);
     if (errors.length > 0) {
       toast.error("Campos obrigatórios pendentes", {
@@ -227,7 +228,6 @@ export default function Colaboradores() {
       const cleanCpf = onlyDigits(editForm.cpf);
       if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
 
-      // 🔥 Converte datas vazias para null
       const dataAdmissao = editForm.dataAdmissao || null;
       const dataNascimento = editForm.dataNascimento || null;
       const dataDemissao = editForm.data_demissao || null;
@@ -309,8 +309,200 @@ export default function Colaboradores() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* ... cabeçalho, filtros, tabela ... */}
-      {/* (mesmo código da versão anterior, sem alterações aqui) */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+            <Users className="size-6 text-primary" /> Colaboradores
+          </h1>
+          <p className="text-muted-foreground mt-1">Gerencie a equipe, cargos e acessos ao sistema.</p>
+        </div>
+        <Dialog open={openNewDialog} onOpenChange={setOpenNewDialog}>
+          <DialogTrigger asChild>
+            <Button className="rounded-full px-6"><Plus className="size-4 mr-2" /> Novo Colaborador</Button>
+          </DialogTrigger>
+          <ColaboradorFormDialog
+            open={openNewDialog}
+            onOpenChange={setOpenNewDialog}
+            form={newForm}
+            setForm={setNewForm}
+            unidades={unidades}
+            cargos={cargos}
+            busy={busy}
+            isEdit={false}
+            onSave={handleCreate}
+          />
+        </Dialog>
+      </div>
+
+      <div className="bg-card border border-border rounded-2xl p-4 flex flex-wrap gap-4 items-end">
+        <div className="space-y-2 flex-1 min-w-[200px]">
+          <Label className="text-xs font-bold uppercase text-muted-foreground">Buscar</Label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              placeholder="Nome ou CPF..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs font-bold uppercase text-muted-foreground">Unidade</Label>
+          <select value={filtroUnidade} onChange={(e) => setFiltroUnidade(e.target.value)} className="bg-input border border-border rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary w-[200px]">
+            <option value="all">Todas</option>
+            {unidades.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs font-bold uppercase text-muted-foreground">Status</Label>
+          <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} className="bg-input border border-border rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary w-[160px]">
+            <option value="all">Todos</option>
+            <option value="ativo">Ativos</option>
+            <option value="inativo">Inativos</option>
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs font-bold uppercase text-muted-foreground">Cargo</Label>
+          <select value={filtroCargo} onChange={(e) => setFiltroCargo(e.target.value)} className="bg-input border border-border rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary w-[200px]">
+            <option value="all">Todos</option>
+            {uniqueCargos.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+        {loading ? (
+          <div className="p-12 text-center text-muted-foreground">
+            <Loader2 className="size-8 animate-spin mx-auto mb-2 text-primary" />
+            Carregando colaboradores...
+          </div>
+        ) : filteredProfiles.length === 0 ? (
+          <div className="p-12 text-center text-muted-foreground">Nenhum colaborador encontrado.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-muted-foreground border-b border-border">
+                <tr>
+                  <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Colaborador</th>
+                  <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">CPF</th>
+                  <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">Cargo</th>
+                  <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden xl:table-cell">Unidade</th>
+                  <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Vínculo</th>
+                  <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
+                  <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Perfil</th>
+                  <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Folha Ponto</th>
+                  <th className="text-right p-4 font-bold uppercase tracking-wider text-[10px]">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredProfiles.map((p) => (
+                  <tr key={p.id} className={p.ativo ? "" : "opacity-50"}>
+                    <td className="p-4 font-medium">{p.nome}</td>
+                    <td className="p-4 hidden md:table-cell font-mono text-xs">{formatCPF(p.cpf)}</td>
+                    <td className="p-4 hidden lg:table-cell text-muted-foreground">{p.cargo}</td>
+                    <td className="p-4 hidden xl:table-cell text-muted-foreground">
+                      {unidades.find(u => u.id === p.unidade_id)?.nome ?? "—"}
+                    </td>
+                    <td className="p-4 text-center">
+                      <Badge className={p.tipo_vinculo === "Socio" ? "bg-purple-100 text-purple-700 border-purple-200" : "bg-blue-100 text-blue-700 border-blue-200"}>
+                        {p.tipo_vinculo === "Socio" ? "Sócio" : "CLT"}
+                      </Badge>
+                    </td>
+                    <td className="p-4 text-center">
+                      <Switch checked={p.ativo} onCheckedChange={async (checked) => {
+                        await supabase.from("profiles").update({ ativo: checked, updated_at: new Date().toISOString() }).eq("id", p.id);
+                        loadData();
+                      }} disabled={busy} />
+                    </td>
+                    <td className="p-4 text-center">
+                      <Badge className={p.role === "admin" ? "bg-primary/10 text-primary border-primary/20" : "bg-muted text-muted-foreground border-border"}>
+                        {p.role === "admin" ? "Admin" : "Colaborador"}
+                      </Badge>
+                    </td>
+                    <td className="p-4 text-center">
+                      {p.possui_folha_ponto ? (
+                        <Badge className="bg-green-100 text-green-700 border-green-200">Sim</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">Não</Badge>
+                      )}
+                    </td>
+                    <td className="p-4 text-right whitespace-nowrap">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={() => openEdit(p)}>
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="size-8" title="Redefinir Senha" onClick={() => openResetPassword(p)}>
+                          <Key className="size-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="size-8 text-destructive hover:bg-destructive/10" title="Excluir" onClick={() => setConfirmDelete(p)}>
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <ColaboradorFormDialog
+        open={!!editingProfile}
+        onOpenChange={(open) => { if (!open) setEditingProfile(null); }}
+        form={editForm}
+        setForm={setEditForm}
+        unidades={unidades}
+        cargos={cargos}
+        busy={busy}
+        isEdit={true}
+        onSave={handleUpdate}
+      />
+
+      <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {confirmDelete?.nome}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação é irreversível. O usuário será removido do Auth e o perfil será excluído.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={doDelete} className="bg-red-600 text-white hover:bg-red-700" disabled={busy}>
+              {busy ? "Excluindo..." : "Excluir Permanentemente"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!resetPasswordDialog} onOpenChange={(o) => !o && setResetPasswordDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Redefinir senha de {resetPasswordDialog?.profile.nome}</AlertDialogTitle>
+            <AlertDialogDescription>
+              A nova senha será aplicada imediatamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="nova-senha">Nova Senha</Label>
+              <Input id="nova-senha" type="password" value={resetPasswordDialog?.senha} onChange={(e) => setResetPasswordDialog({ ...resetPasswordDialog!, senha: e.target.value })} placeholder="Mínimo 6 caracteres" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmar-senha">Confirmar Senha</Label>
+              <Input id="confirmar-senha" type="password" value={resetPasswordDialog?.confirmar} onChange={(e) => setResetPasswordDialog({ ...resetPasswordDialog!, confirmar: e.target.value })} placeholder="Repita a senha" />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={doResetPassword} className="bg-primary text-white hover:bg-primary/90" disabled={busy}>
+              {busy ? "Salvando..." : "Redefinir Senha"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
