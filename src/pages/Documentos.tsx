@@ -1,10 +1,18 @@
-"use client";
-
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { toast } from "sonner";
+import { FileText, Download, Eye, Filter, DownloadCloud } from "lucide-react";
+import { formatBR } from "@/lib/folga-rules";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -12,36 +20,87 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Calendar, Download, Filter, X } from "lucide-react";
-import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { Tables } from "@/integrations/supabase/types";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 
-type Contracheque = Tables<'contracheques'>;
+interface Documento {
+  id: string;
+  tipo: string;
+  subtipo?: string | null;
+  quinzena?: number | null;
+  mes: number;
+  ano: number;
+  storage_path: string;
+  nome_pdf: string | null;
+  created_at: string;
+}
 
-export default function DocumentosPage() {
+const MESES = [
+  { value: "todos", label: "Todos" },
+  { value: "1", label: "Janeiro" },
+  { value: "2", label: "Fevereiro" },
+  { value: "3", label: "Março" },
+  { value: "4", label: "Abril" },
+  { value: "5", label: "Maio" },
+  { value: "6", label: "Junho" },
+  { value: "7", label: "Julho" },
+  { value: "8", label: "Agosto" },
+  { value: "9", label: "Setembro" },
+  { value: "10", label: "Outubro" },
+  { value: "11", label: "Novembro" },
+  { value: "12", label: "Dezembro" },
+];
+
+export default function Documentos() {
   const { user } = useAuth();
+  const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [loading, setLoading] = useState(true);
-  const [documentos, setDocumentos] = useState<Contracheque[]>([]);
-  const [filtroTipo, setFiltroTipo] = useState<"todos" | "mensal" | "adiantamento">("todos");
-  const [filtroMes, setFiltroMes] = useState<string>("");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selectedDoc, setSelectedDoc] = useState<Documento | null>(null);
+  const [downloadingAll, setDownloadingAll] = useState(false);
+
+  // Filtros
+  const [filtroTipo, setFiltroTipo] = useState("todos");
+  const [filtroSubtipo, setFiltroSubtipo] = useState("todos");
+  const [filtroAno, setFiltroAno] = useState<string>("todos");
+  const [filtroMes, setFiltroMes] = useState<string>("todos");
+
+  const [anos, setAnos] = useState<number[]>([]);
 
   const load = async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("contracheques")
+      let query = supabase
+        .from("documentos")
         .select("*")
-        .eq("colaborador_id", user.id)
-        .order("mes_referencia", { ascending: false })
-        .order("created_at", { ascending: false });
+        .eq("colaborador_id", user.id);
+
+      if (filtroTipo !== "todos") {
+        query = query.eq("tipo", filtroTipo);
+      }
+      if (filtroSubtipo !== "todos" && filtroTipo === "contracheque") {
+        query = query.eq("subtipo", filtroSubtipo);
+      }
+      if (filtroAno !== "todos") {
+        query = query.eq("ano", parseInt(filtroAno));
+      }
+      if (filtroMes !== "todos") {
+        query = query.eq("mes", parseInt(filtroMes));
+      }
+
+      const { data, error } = await query
+        .order("ano", { ascending: false })
+        .order("mes", { ascending: false });
 
       if (error) throw error;
       setDocumentos(data ?? []);
+
+      const anosSet = new Set(data?.map(d => d.ano) ?? []);
+      setAnos(Array.from(anosSet).sort((a, b) => b - a));
     } catch (error) {
-      toast.error("Erro ao carregar documentos");
-      console.error(error);
+      toast.error("Erro ao carregar documentos", { description: (error as Error).message });
     } finally {
       setLoading(false);
     }
@@ -49,115 +108,257 @@ export default function DocumentosPage() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [user, filtroTipo, filtroSubtipo, filtroAno, filtroMes]);
 
-  // Gerar lista de meses únicos dos documentos
-  const mesesDisponiveis = Array.from(
-    new Set(documentos.map(d => d.mes_referencia))
-  ).sort().reverse();
-
-  const filtered = documentos.filter(d => {
-    if (filtroTipo !== "todos" && d.tipo !== filtroTipo) return false;
-    if (filtroMes && d.mes_referencia !== filtroMes) return false;
-    return true;
-  });
-
-  const getLabel = (doc: Contracheque) => {
-    if (doc.tipo === "mensal") return "Mensal";
-    return `Adiantamento ${doc.quinzena}ª Quinzena`;
+  const handleDownload = async (doc: Documento) => {
+    const { data } = await supabase.storage
+      .from("documentos")
+      .createSignedUrl(doc.storage_path, 60);
+    if (data?.signedUrl) {
+      window.open(data.signedUrl, "_blank");
+    } else {
+      toast.error("Erro ao gerar link de download");
+    }
   };
 
+  const handleDownloadAll = async () => {
+    if (documentos.length === 0) {
+      toast.warning("Nenhum documento para baixar");
+      return;
+    }
+
+    setDownloadingAll(true);
+    try {
+      for (const doc of documentos) {
+        const { data } = await supabase.storage
+          .from("documentos")
+          .createSignedUrl(doc.storage_path, 60);
+        if (data?.signedUrl) {
+          window.open(data.signedUrl, "_blank");
+        }
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+      toast.success(`${documentos.length} documento(s) baixado(s)!`);
+    } catch (error) {
+      toast.error("Erro ao baixar documentos", { description: (error as Error).message });
+    } finally {
+      setDownloadingAll(false);
+    }
+  };
+
+  const handlePreview = async (doc: Documento) => {
+    setSelectedDoc(doc);
+    const { data } = await supabase.storage
+      .from("documentos")
+      .createSignedUrl(doc.storage_path, 60);
+    if (data?.signedUrl) {
+      setPreviewUrl(data.signedUrl);
+      setPreviewOpen(true);
+    } else {
+      toast.error("Erro ao gerar link de visualização");
+    }
+  };
+
+  const getTipoLabel = (tipo: string) => {
+    if (tipo === "contracheque") return "Contracheque";
+    if (tipo === "ponto") return "Folha de Ponto";
+    return tipo;
+  };
+
+  const getSubtipoLabel = (doc: Documento) => {
+    if (doc.tipo !== "contracheque") return "";
+    if (doc.subtipo === "adiantamento") return `Adiantamento ${doc.quinzena}ª`;
+    return "Mensal";
+  };
+
+  const limparFiltros = () => {
+    setFiltroTipo("todos");
+    setFiltroSubtipo("todos");
+    setFiltroAno("todos");
+    setFiltroMes("todos");
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
           <FileText className="size-6 text-primary" /> Meus Documentos
         </h1>
-        <p className="text-muted-foreground mt-1">Visualize seus contracheques e adiantamentos.</p>
+        <p className="text-muted-foreground mt-1">
+          Acesse e baixe seus contracheques, folhas de ponto e adiantamentos.
+        </p>
       </div>
 
-      <div className="flex flex-wrap gap-4 items-center">
-        <div className="flex items-center gap-2">
-          <Filter className="size-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Filtrar:</span>
-        </div>
-
-        <Select value={filtroTipo} onValueChange={(v: "todos" | "mensal" | "adiantamento") => setFiltroTipo(v)}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Tipo" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="mensal">Mensal</SelectItem>
-            <SelectItem value="adiantamento">Adiantamento</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={filtroMes} onValueChange={setFiltroMes}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Mês" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">Todos</SelectItem>
-            {mesesDisponiveis.map(m => (
-              <SelectItem key={m} value={m}>{m}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {(filtroTipo !== "todos" || filtroMes) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setFiltroTipo("todos");
-              setFiltroMes("");
-            }}
-          >
-            <X className="size-4 mr-1" /> Limpar
-          </Button>
-        )}
-      </div>
-
-      {loading ? (
-        <div className="text-center py-12">Carregando...</div>
-      ) : filtered.length === 0 ? (
-        <div className="bg-card border border-border rounded-2xl p-12 text-center text-muted-foreground">
-          Nenhum documento encontrado.
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          {filtered.map((doc) => (
-            <div key={doc.id} className="bg-card border border-border rounded-2xl p-5 flex items-center justify-between gap-4 hover:shadow-md transition-shadow">
-              <div className="flex items-center gap-4">
-                <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <FileText className="size-6 text-primary" />
-                </div>
-                <div>
-                  <div className="font-semibold flex items-center gap-2">
-                    {getLabel(doc)}
-                    <Badge variant="outline" className={cn(
-                      doc.tipo === 'mensal' ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-amber-50 text-amber-700 border-amber-200"
-                    )}>
-                      {doc.tipo}
-                    </Badge>
-                  </div>
-                  <div className="text-sm text-muted-foreground flex items-center gap-2">
-                    <Calendar className="size-3.5" />
-                    {doc.mes_referencia}
-                    {doc.tipo === "adiantamento" && ` - ${doc.quinzena}ª Quinzena`}
-                  </div>
-                </div>
-              </div>
-              <Button asChild variant="outline" className="rounded-full">
-                <a href={doc.url_arquivo} target="_blank" rel="noopener noreferrer">
-                  <Download className="size-4 mr-2" /> Baixar PDF
-                </a>
-              </Button>
+      <Card className="border-border shadow-sm">
+        <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
+          <CardTitle className="text-lg">Filtros</CardTitle>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Tipo</Label>
+              <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+                <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="contracheque">Contracheque</SelectItem>
+                  <SelectItem value="ponto">Folha de Ponto</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          ))}
-        </div>
-      )}
+            {filtroTipo === "contracheque" && (
+              <div className="space-y-1">
+                <Label className="text-xs font-bold uppercase text-muted-foreground">Subtipo</Label>
+                <Select value={filtroSubtipo} onValueChange={setFiltroSubtipo}>
+                  <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    <SelectItem value="mensal">Mensal</SelectItem>
+                    <SelectItem value="adiantamento">Adiantamento</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-1">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Mês</Label>
+              <Select value={filtroMes} onValueChange={setFiltroMes}>
+                <SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectContent>
+                  {MESES.map(m => (
+                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Ano</Label>
+              <Select value={filtroAno} onValueChange={setFiltroAno}>
+                <SelectTrigger className="w-[100px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  {anos.map(a => (
+                    <SelectItem key={a} value={String(a)}>{a}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button variant="ghost" size="sm" onClick={limparFiltros} className="mt-6 h-9">
+              Limpar
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {documentos.length === 0 ? (
+            <div className="text-center p-8 text-muted-foreground">
+              Nenhum documento encontrado com os filtros selecionados.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadAll}
+                  disabled={downloadingAll}
+                  className="text-primary border-primary/30 hover:bg-primary/5"
+                >
+                  <DownloadCloud className="size-4 mr-1" />
+                  {downloadingAll ? "Baixando..." : `Baixar todos (${documentos.length})`}
+                </Button>
+              </div>
+
+              {documentos.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl border border-border bg-card hover:bg-muted/20 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                      <FileText className="size-5" />
+                    </div>
+                    <div>
+                      <div className="font-medium flex items-center gap-2">
+                        {getTipoLabel(doc.tipo)}
+                        {doc.subtipo && (
+                          <Badge variant="outline" className={doc.subtipo === "adiantamento" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-blue-50 text-blue-700 border-blue-200"}>
+                            {getSubtipoLabel(doc)}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {String(doc.mes).padStart(2, "0")}/{doc.ano}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      onClick={() => handlePreview(doc)}
+                    >
+                      <Eye className="size-4 mr-1" /> Visualizar
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-primary hover:text-primary/80 hover:bg-primary/5"
+                      onClick={() => handleDownload(doc)}
+                    >
+                      <Download className="size-4 mr-1" /> Baixar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Dialog de visualização */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Visualização do Documento</DialogTitle>
+            <DialogDescription>
+              {selectedDoc
+                ? `${getTipoLabel(selectedDoc.tipo)} - ${String(selectedDoc.mes).padStart(2, "0")}/${selectedDoc.ano}`
+                : "Documento"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 min-h-[500px] bg-muted/20 rounded-lg overflow-hidden">
+            {previewUrl ? (
+              <iframe
+                src={previewUrl}
+                className="w-full h-[600px] border-0"
+                title="Visualização do documento"
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                Carregando visualização...
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setPreviewOpen(false)}>
+              Fechar
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedDoc) handleDownload(selectedDoc);
+              }}
+            >
+              <Download className="size-4 mr-1" /> Baixar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
