@@ -331,12 +331,12 @@ export default function MensagensAdmin() {
               <div className="space-y-2">
                 <Label>Modelo (opcional)</Label>
                 <Select value={modeloSelecionado} onValueChange={setModeloSelecionado}>
-                  <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Nenhum</SelectItem>
-                    {modelos.map(m => <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+  <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
+  <SelectContent>
+    <SelectItem value="">Nenhum</SelectItem>  // ❌ PROBLEMA
+    {modelos.map(m => <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>)}
+  </SelectContent>
+</Select>
               </div>
             </div>
 
