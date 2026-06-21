@@ -11,7 +11,7 @@ import Trocas from "./pages/Trocas";
 import Historico from "./pages/Historico";
 import Documentos from "./pages/Documentos";
 import DocumentosAtestados from "./pages/DocumentosAtestados";
-import DocumentosDisciplinar from "./pages/DocumentosDisciplinar"; // 🔥 NOVO
+import DocumentosDisciplinar from "./pages/DocumentosDisciplinar";
 
 // Admin Pages
 import HomeAdmin from "./pages/admin/HomeAdmin";
@@ -25,6 +25,7 @@ import TrocasAdmin from "./pages/admin/Trocas";
 import Bloqueios from "./pages/admin/Bloqueios";
 import DocumentosHub from "./pages/admin/Documentos";
 import DocumentosContracheque from "./pages/admin/DocumentosContracheque";
+import DocumentosAdiantamento from "./pages/admin/DocumentosAdiantamento"; // 🔥 NOVO
 import DocumentosPontoAdmin from "./pages/admin/DocumentosPontoAdmin";
 import AtestadosAdmin from "./pages/admin/AtestadosAdmin";
 import RegistrosDisciplinaresAdmin from "./pages/admin/RegistrosDisciplinaresAdmin";
@@ -43,7 +44,6 @@ function AuthenticatedRoutes() {
   const { session, role, loading } = useAuth();
   const isAuthenticated = !!session;
 
-  // 🔥 Determina se é admin (prioriza role do contexto, fallback para localStorage)
   const isAdmin = isUserAdmin(role);
 
   console.log('🔍 AuthenticatedRoutes - role:', role, 'isAdmin:', isAdmin, 'loading:', loading);
@@ -72,9 +72,9 @@ function AuthenticatedRoutes() {
         <Route path="/documentos" element={<Documentos />} />
         <Route path="/documentos/atestados" element={<DocumentosAtestados />} />
         <Route path="/documentos/ponto" element={<Documentos />} />
-        <Route path="/documentos/disciplinar" element={<DocumentosDisciplinar />} /> {/* 🔥 NOVA ROTA */}
+        <Route path="/documentos/disciplinar" element={<DocumentosDisciplinar />} />
 
-        {/* 🔥 Rotas de Home com redirecionamento baseado em isAdmin */}
+        {/* Rotas de Home com redirecionamento baseado em isAdmin */}
         <Route path="/home" element={isAdmin ? <Navigate to="/admin/home" replace /> : <Home />} />
         <Route path="/" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
 
@@ -99,6 +99,7 @@ function AuthenticatedRoutes() {
             {/* Documentos Group */}
             <Route path="/admin/documentos" element={<DocumentosHub />} />
             <Route path="/admin/documentos/contracheque" element={<DocumentosContracheque />} />
+            <Route path="/admin/documentos/adiantamento" element={<DocumentosAdiantamento />} /> {/* 🔥 NOVA ROTA */}
             <Route path="/admin/documentos/ponto" element={<DocumentosPontoAdmin />} />
             <Route path="/admin/documentos/atestados" element={<AtestadosAdmin />} />
             <Route path="/admin/documentos/disciplinar" element={<RegistrosDisciplinaresAdmin />} />
@@ -112,7 +113,6 @@ function AuthenticatedRoutes() {
           </>
         ) : (
           <>
-            {/* Se não for admin, redireciona qualquer rota admin para home */}
             <Route path="/admin/*" element={<Navigate to="/home" replace />} />
             <Route path="/admin" element={<Navigate to="/home" replace />} />
           </>
