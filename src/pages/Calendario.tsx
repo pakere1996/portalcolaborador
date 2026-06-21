@@ -131,7 +131,6 @@ export default function CalendarioPage() {
   const unlock = unlockDateForMonth(year, month0);
   const mk = monthKey(new Date(year, month0, 1));
 
-  // 🔥 Construção de occupantsByDate (inclui todas as folgas, inclusive passadas)
   const occupantsByDate = useMemo(() => {
     const m = new Map<string, any[]>();
     const nm = new Map(allProfiles.map(p => [p.id, p.nome]));
