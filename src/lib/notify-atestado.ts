@@ -2,16 +2,17 @@ import { supabase } from "@/integrations/supabase/client";
 
 export async function notifyAtestadoPendente(atestadoId: string, colaboradorNome: string) {
   try {
+    // Verifica se a função existe antes de chamar (opcional)
     const { error } = await supabase.functions.invoke("notify-atestado", {
       body: { atestadoId, colaboradorNome },
     });
     if (error) {
-      // Silencia o erro 404 (função não implantada)
-      console.warn("Função de notificação não disponível:", error.message);
+      // Silencia completamente o erro 404
+      console.debug("Função de notificação não disponível (ignorado):", error.message);
       return;
     }
   } catch (error) {
-    // Silencia qualquer erro para não quebrar o fluxo
-    console.warn("Erro ao notificar administradores:", error);
+    // Silencia completamente
+    console.debug("Erro ao notificar (ignorado):", error);
   }
 }
