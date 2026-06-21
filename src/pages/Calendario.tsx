@@ -58,9 +58,6 @@ export default function CalendarioPage() {
   const [reqMotivo, setReqMotivo] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // 🔥 monthKey para passar ao calendário
-  const mk = monthKey(new Date(year, month0, 1));
-
   const load = async () => {
     if (!user || !profile?.unidade_id) return;
     
@@ -132,6 +129,7 @@ export default function CalendarioPage() {
 
   const unlocked = isMonthUnlocked(year, month0);
   const unlock = unlockDateForMonth(year, month0);
+  const mk = monthKey(new Date(year, month0, 1));
 
   const occupantsByDate = useMemo(() => {
     const m = new Map<string, any[]>();
@@ -197,18 +195,20 @@ export default function CalendarioPage() {
       locked: unlocked ? null : { unlockDateBR: formatBR(unlock) }
     });
 
-    if (statusInfo.status === "available") {
-      const myFolgaThisMonth = folgas.find((f) => 
-        f.user_id === user.id && 
-        monthKey(parseYMD(f.data)) === mk && 
-        (f.tipo === 'sabado' || f.tipo === 'domingo')
-      );
+    // 🔥 Verifica se o usuário já tem uma folga neste mês
+    const myFolgaThisMonth = folgas.find((f) => 
+      f.user_id === user.id && 
+      monthKey(parseYMD(f.data)) === mk && 
+      (f.tipo === 'sabado' || f.tipo === 'domingo')
+    );
 
-      if (myFolgaThisMonth) {
-        setChangeFolgaDialog({ newIso: iso, oldFolga: myFolgaThisMonth });
-        return;
-      }
-      
+    // 🔥 Se o dia for "available" mas o usuário já tem folga no mês, abre diálogo de troca
+    if (statusInfo.status === "available" && myFolgaThisMonth) {
+      setChangeFolgaDialog({ newIso: iso, oldFolga: myFolgaThisMonth });
+      return;
+    }
+
+    if (statusInfo.status === "available") {
       const d = parseYMD(iso);
       const type = dayType(d);
       if (!type) return;
@@ -220,16 +220,34 @@ export default function CalendarioPage() {
       if (error) return toast.error("Erro ao registrar folga", { description: error.message });
       toast.success(`Folga registrada para ${formatBR(d)}`);
       load();
-    } else if (statusInfo.status === "mine" || statusInfo.status === "swapped") {
+      return;
+    }
+
+    if (statusInfo.status === "mine" || statusInfo.status === "swapped") {
       if (!confirm("Deseja cancelar sua folga nesta data?")) return;
       const { error } = await supabase.from("folgas").delete().eq("user_id", user.id).eq("data", iso);
       if (error) return toast.error(error.message);
       toast.success("Folga cancelada");
       load();
-    } else if (statusInfo.status === "pending") {
+      return;
+    }
+
+    if (statusInfo.status === "pending") {
       const solic = pendingSolics.find(s => s.data === iso && s.user_id === user.id);
       if (solic) setViewDialog(solic);
-    } else if (statusInfo.status === "taken" || statusInfo.status === "birthday" || statusInfo.status === "blocked" || !dayType(parseYMD(iso))) {
+      return;
+    }
+
+    // 🔥 Para outros casos (taken, birthday, blocked, ou dias de semana), abre o smartSwap
+    // Isso permite que mesmo em dias "indisponíveis" o colaborador possa solicitar troca/exceção
+    if (statusInfo.status === "taken" || 
+        statusInfo.status === "birthday" || 
+        statusInfo.status === "blocked" || 
+        !dayType(parseYMD(iso)) ||
+        (statusInfo.status === "available" && myFolgaThisMonth)) {
+      setSmartSwap({ iso });
+    } else {
+      // Se chegou aqui e não entrou em nenhum caso, abre smartSwap como fallback
       setSmartSwap({ iso });
     }
   };
@@ -315,7 +333,7 @@ export default function CalendarioPage() {
         locked={unlocked ? null : { unlockDateBR: formatBR(unlock) }}
       />
 
-      {/* Diálogos */}
+      {/* Diálogos - mantidos iguais */}
       <Dialog open={!!changeFolgaDialog} onOpenChange={(o) => !o && setChangeFolgaDialog(null)}>
         <DialogContent className="rounded-[2rem]">
           <DialogHeader>
