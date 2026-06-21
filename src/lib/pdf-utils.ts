@@ -55,7 +55,7 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
     canvas.width = viewport.width;
     canvas.height = viewport.height;
 
-    // 🔥 CORREÇÃO: Usar 'as any' para compatibilidade entre versões
+    // 🔥 CORREÇÃO: usar ambos os campos para compatibilidade com diferentes versões do pdf.js
     await page.render({
       canvas: canvas,
       canvasContext: context,
@@ -86,10 +86,10 @@ export const extractSinglePageAsBlob = async (
 
     const newPdfBytes = await newPdf.save();
     console.log("✅ Página extraída com sucesso");
-
-    // 🔥 Garante que o Blob seja criado corretamente
-    const blob = new Blob([newPdfBytes.buffer.slice(newPdfBytes.byteOffset, newPdfBytes.byteOffset + newPdfBytes.byteLength)], { type: "application/pdf" });
-    return blob;
+    
+    // 🔥 CORREÇÃO: converter para Uint8Array antes de criar o Blob
+    const uint8Array = new Uint8Array(newPdfBytes);
+    return new Blob([uint8Array], { type: "application/pdf" });
   } catch (error) {
     console.error("❌ Erro ao extrair página individual do PDF:", error);
     throw new Error(`Falha ao extrair página do PDF: ${(error as Error).message}`);
