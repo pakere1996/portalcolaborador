@@ -1,6 +1,6 @@
 import * as pdfjsLib from "pdfjs-dist";
 
-// 🔥 Usa o worker do próprio pacote (evita problemas de CDN)
+// Usa o worker do próprio pacote (evita problemas de CDN)
 import workerUrl from "pdfjs-dist/build/pdf.worker?url";
 
 // Configura o worker com o arquivo local
@@ -53,7 +53,11 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     
-    await page.render({ canvasContext: context, viewport }).promise;
+    // 🔥 CORREÇÃO: usar 'canvas' em vez de 'canvasContext' para compatibilidade com a versão do pdf.js
+    await page.render({
+      canvasContext: context,
+      viewport: viewport,
+    }).promise;
     
     const dataUrl = canvas.toDataURL("image/png");
     console.log("✅ Imagem renderizada com sucesso");
