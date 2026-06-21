@@ -27,15 +27,9 @@ import DocumentosContracheque from "./pages/admin/DocumentosContracheque";
 import DocumentosPontoAdmin from "./pages/admin/DocumentosPontoAdmin";
 import AtestadosAdmin from "./pages/admin/AtestadosAdmin";
 import RegistrosDisciplinaresAdmin from "./pages/admin/RegistrosDisciplinaresAdmin";
-
-import QuadroAvisosAdmin from "./pages/admin/QuadroAvisos";
-
-// Dentro das rotas admin:
-<Route path="/admin/avisos" element={<QuadroAvisosAdmin />} />
-
 import SetupAdmin from "./pages/SetupAdmin";
-// 🔥 NOVA IMPORTAÇÃO PARA MENSAGENS
 import MensagensAdmin from "./pages/admin/Mensagens";
+import QuadroAvisosAdmin from "./pages/admin/QuadroAvisos";
 
 // 🔥 Função para verificar se o usuário é admin (usando localStorage como fallback)
 const isUserAdmin = (role?: string | null): boolean => {
@@ -107,8 +101,9 @@ function AuthenticatedRoutes() {
             <Route path="/admin/documentos/atestados" element={<AtestadosAdmin />} />
             <Route path="/admin/documentos/disciplinar" element={<RegistrosDisciplinaresAdmin />} />
             
-            {/* 🔥 NOVA ROTA PARA MENSAGENS/COMUNICADOS */}
+            {/* 🔥 Comunicação Group */}
             <Route path="/admin/mensagens" element={<MensagensAdmin />} />
+            <Route path="/admin/avisos" element={<QuadroAvisosAdmin />} />
             
             {/* Setup */}
             <Route path="/admin/setup" element={<SetupAdmin />} />
