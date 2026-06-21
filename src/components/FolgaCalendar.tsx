@@ -110,7 +110,11 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         locked,
       });
 
+      // 🔥 Obtém ocupantes do dia (inclui todos os usuários)
       const occupants = occupantsByDate?.get(iso) || [];
+
+      // 🔥 Verifica se o usuário atual tem folga neste dia (mesmo se passado)
+      const hasMyFolga = occupants.some(occ => occ.userId === myUserId);
 
       result.push({
         kind: "day",
@@ -213,12 +217,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
               c.status === "taken" ||
               c.status === "birthday";
 
-            // 🔥 Verifica se o usuário atual tem folga neste dia
+            // 🔥 Verifica se o usuário atual tem folga neste dia (mesmo passado)
             const hasMyFolga = c.occupants.some(occ => occ.userId === myUserId);
-            const isMyFolga = hasMyFolga;
-
-            // 🔥 Força exibição de "Minha Folga" mesmo se o dia for passado
-            const shouldShowMyFolgaLabel = isMyFolga;
 
             return (
               <div
@@ -242,7 +242,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                           : (isSunday || isSaturday) && c.status !== "past"
                           ? "text-slate-900"
                           : "text-slate-400",
-                        c.status === "past" && "text-slate-200",
+                        c.status === "past" && "text-slate-300",
                         c.status === "pending" && "text-violet-700",
                         c.status === "mine" && "text-amber-700",
                         c.status === "swapped" && "text-amber-700"
@@ -267,7 +267,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     {c.status === "available" && (
                       <LockOpen className="size-3.5 text-emerald-500 drop-shadow-[0_0_3px_rgba(16,185,129,0.3)]" />
                     )}
-                    {(c.status === "mine" || c.status === "swapped" || isMyFolga) && (
+                    {(c.status === "mine" || c.status === "swapped" || hasMyFolga) && (
                       <CheckCircle2 className="size-4 text-amber-600 drop-shadow-[0_0_3px_rgba(217,119,6,0.3)]" />
                     )}
                     {c.status === "pending" && (
@@ -302,35 +302,35 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                   </div>
                 )}
 
-                {/* Non-admin view: show my folga even if past */}
-                {!isAdmin && shouldShowMyFolgaLabel && (
-                  <div className="mt-auto">
-                    <div className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 inline-block">
-                      {c.label || "Minha Folga"}
-                    </div>
-                  </div>
-                )}
-
-                {!isAdmin && !isMyFolga && c.label && c.status !== "past" && (
-                  <div
-                    className={cn(
-                      "mt-auto text-[10px] font-bold rounded-full px-2 py-0.5 w-fit",
-                      c.status === "fixed"
-                        ? tagColors.fixed
-                        : c.status === "pending"
-                        ? tagColors.pending
-                        : "bg-slate-100 text-slate-500 border-slate-200"
+                {/* 🔥 Non-admin view: mostra minhas folgas mesmo se passado */}
+                {!isAdmin && (
+                  <div className="mt-auto flex flex-col gap-1">
+                    {hasMyFolga && (
+                      <div className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
+                        {c.label || "Minha Folga"}
+                      </div>
                     )}
-                  >
-                    {c.label}
-                  </div>
-                )}
-
-                {!isAdmin && !isMyFolga && c.status === "available" && !isBlocked && (
-                  <div className="mt-auto opacity-0 group-hover:opacity-100 transition-all transform translate-y-1 group-hover:translate-y-0">
-                    <span className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">
-                      Selecionar
-                    </span>
+                    {!hasMyFolga && c.label && c.status !== "past" && (
+                      <div
+                        className={cn(
+                          "text-[10px] font-bold rounded-full px-2 py-0.5 w-fit",
+                          c.status === "fixed"
+                            ? tagColors.fixed
+                            : c.status === "pending"
+                            ? tagColors.pending
+                            : "bg-slate-100 text-slate-500 border-slate-200"
+                        )}
+                      >
+                        {c.label}
+                      </div>
+                    )}
+                    {!hasMyFolga && c.status === "available" && !isBlocked && (
+                      <div className="opacity-0 group-hover:opacity-100 transition-all transform translate-y-1 group-hover:translate-y-0">
+                        <span className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">
+                          Selecionar
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
