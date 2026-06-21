@@ -55,6 +55,7 @@ export default function CalendarioPage() {
 
   const [selectedDay, setSelectedDay] = useState<{ iso: string; status: string } | null>(null);
 
+  // --- LOAD ---
   const load = async () => {
     if (!user) return;
     setLoading(true);
@@ -71,6 +72,8 @@ export default function CalendarioPage() {
         supabase.from("solicitacoes_especiais").select("*").eq("status", "pendente").gte("data", start).lte("data", end),
         supabase.from("prioridade_aniversario").select("*").eq("status", "ativa").gte("data", start).lte("data", end),
       ]);
+
+      console.log("Folgas carregadas:", fRes.data); // <-- Verifique no console
 
       setFolgas(fRes.data ?? []);
       setManualBlocked(bRes.data ?? []);
@@ -97,6 +100,7 @@ export default function CalendarioPage() {
     return () => { supabase.removeChannel(ch); };
   }, [year, month0]);
 
+  // --- Mapeamentos ---
   const manualMap = useMemo(() => {
     const m = new Map<string, { reason: string; liberada: boolean }>();
     for (const b of manualBlocked) m.set(b.data, { reason: b.motivo, liberada: b.liberada });
@@ -115,7 +119,7 @@ export default function CalendarioPage() {
     return m;
   }, [prios]);
 
-  // Ocupantes
+  // --- Ocupantes ---
   const occupantsByDate = useMemo(() => {
     const m = new Map<string, DayOccupant[]>();
     const nm = new Map(profiles.map(p => [p.id, p.nome]));
@@ -160,6 +164,7 @@ export default function CalendarioPage() {
     return m;
   }, [profiles, folgas, pendentes, year, month0]);
 
+  // --- Navegação ---
   const goPrev = () => { const d = new Date(year, month0 - 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); };
   const goNext = () => { const d = new Date(year, month0 + 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); };
 
@@ -167,7 +172,7 @@ export default function CalendarioPage() {
     setSelectedDay({ iso, status: info?.status || "" });
   };
 
-  // Ações
+  // --- Ações ---
   const marcarFolga = async (iso: string) => {
     if (!user) return;
     const d = parseYMD(iso);
@@ -237,6 +242,7 @@ export default function CalendarioPage() {
       return;
     }
 
+    // Verifica se já existe solicitação pendente
     const { data: existing, error: checkError } = await supabase
       .from('trocas_folga')
       .select('id')
@@ -291,7 +297,7 @@ export default function CalendarioPage() {
 
   const currentMonthKey = monthKey(new Date(year, month0, 1));
 
-  // Informações do dia
+  // --- Informações do dia ---
   const dayInfo = useMemo(() => {
     if (!selectedDay) return null;
     const iso = selectedDay.iso;
@@ -315,13 +321,13 @@ export default function CalendarioPage() {
     hoje.setHours(0, 0, 0, 0);
     const fixedFolgaFutura = fixedDateInWeek ? fixedDateInWeek >= hoje : false;
 
-    // Pode trocar em dia de semana se tem folga fixa e ainda não passou
+    // Regra para trocar em dia de semana:
     const canTradeWeekday = !isWeekend &&
       fixedDay !== null &&
       fixedDateInWeek !== null &&
       fixedFolgaFutura;
 
-    // Pode trocar em fim de semana se não tem folga mensal
+    // Regra para trocar em fim de semana:
     const hasMonthlyFolga = folgas.some(f =>
       f.user_id === user?.id &&
       monthKey(parseYMD(f.data)) === monthKey(date) &&
@@ -342,6 +348,7 @@ export default function CalendarioPage() {
     };
   }, [selectedDay, occupantsByDate, user, profiles, folgas]);
 
+  // --- Renderização ---
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -417,18 +424,20 @@ export default function CalendarioPage() {
                 </div>
               </div>
 
-              {/* Ocupantes com botão de troca */}
+              {/* Ocupantes – mostra apenas se NÃO for o próprio dia */}
               {dayInfo.isOccupied && !dayInfo.isMine && (
                 <div className="space-y-3">
                   <h4 className="text-sm font-bold text-slate-600">Colaboradores neste dia:</h4>
                   {dayInfo.occupants.map((occ, idx) => {
                     const isMe = occ.userId === user?.id;
+                    // Mostra o botão "Trocar" mesmo se o dia estiver "taken" (ocupado),
+                    // desde que canTrade seja true e não seja bloqueado/passado
                     const showTrade = !isMe &&
-                     dayInfo.canTrade &&
-                     selectedDay.status !== 'blocked' &&
-                     selectedDay.status !== 'past' &&
-                     selectedDay.status !== 'mine' &&
-                     selectedDay.status !== 'fixed';
+                      dayInfo.canTrade &&
+                      selectedDay.status !== 'blocked' &&
+                      selectedDay.status !== 'past' &&
+                      selectedDay.status !== 'mine' &&
+                      selectedDay.status !== 'fixed';
 
                     return (
                       <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200">
@@ -468,7 +477,7 @@ export default function CalendarioPage() {
                 )}
                 {selectedDay.status === 'fixed' && (
                   <div className="text-sm text-slate-500">
-                    Sua folga fixa semanal.
+                    Sua folga fixa semanal. 
                     {dayInfo.canTrade 
                       ? " Para trocar, selecione o dia desejado e use o botão 'Trocar' ao lado do colaborador." 
                       : " A data para troca já passou ou você não possui folga fixa nesta semana."}
