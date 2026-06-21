@@ -25,8 +25,39 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Filter, User, Trash2, Plus, Settings2, Save, Lock, Info, Unlock, AlertTriangle, ChevronRight, Building, Loader2, CheckCircle, Users, ChevronLeft } from "lucide-react";
-import { dayType, formatBR, monthKey, parseYMD, ymd, autoBlockedDatesForMonth, calculateDateStatus, getMonthDays } from "@/lib/folga-rules";
+import {
+  Calendar as CalIcon,
+  Filter,
+  User,
+  Trash2,
+  Plus,
+  Settings2,
+  Save,
+  Lock,
+  Info,
+  Unlock,
+  AlertTriangle,
+  ChevronRight,
+  Building,
+  Loader2,
+  CheckCircle,
+  Users,
+  ChevronLeft,
+} from "lucide-react";
+import {
+  dayType,
+  formatBR,
+  monthKey,
+  parseYMD,
+  ymd,
+  autoBlockedDatesForMonth,
+  calculateDateStatus,
+  getMonthDays,
+  isSameWeek,
+  getWeekNumber,
+  type FolgaRecord,
+  type ProfileRecord,
+} from "@/lib/folga-rules";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Tables } from "@/integrations/supabase/types";
@@ -53,7 +84,7 @@ export default function AdminCalendar() {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month0, setMonth0] = useState(today.getMonth());
-  
+
   const [folgas, setFolgas] = useState<any[]>([]);
   const [manual, setManual] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -61,8 +92,8 @@ export default function AdminCalendar() {
   const [limites, setLimites] = useState<any[]>([]);
   const [pendentes, setPendentes] = useState<any[]>([]);
   const [prios, setPrios] = useState<any[]>([]);
-  
-  const [filterUnidade, setFilterUnidade] = useState("all"); 
+
+  const [filterUnidade, setFilterUnidade] = useState("all");
   const [filterUser, setFilterUser] = useState("all");
   const [filterType, setFilterType] = useState("all");
 
@@ -72,12 +103,14 @@ export default function AdminCalendar() {
   const [savingLimit, setSavingLimit] = useState(false);
   const [busyAssign, setBusyAssign] = useState(false);
 
+  // Estado do diálogo de confirmação de conflito (agora com lista de conflitos)
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     colaboradorId: string;
     data: string;
     tipo: string;
     mes: string;
+    conflitos: { id: string; data: string; tipo: string }[];
   } | null>(null);
 
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -136,8 +169,8 @@ export default function AdminCalendar() {
   }, [limites]);
 
   const birthdayByDate = useMemo(() => {
-    const m = new Map<string, { userId: string }>();
-    for (const p of prios) m.set(p.data, { userId: p.user_id });
+    const m = new Map<string, { userId: string; status: string }>();
+    for (const p of prios) m.set(p.data, { userId: p.user_id, status: p.status });
     return m;
   }, [prios]);
 
@@ -161,32 +194,33 @@ export default function AdminCalendar() {
     }
 
     folgas.forEach(f => {
-      if (!validUserIds.has(f.user_id)) return; 
+      if (!validUserIds.has(f.user_id)) return;
       if (filterUser !== "all" && f.user_id !== filterUser) return;
       if (filterType !== "all" && filterType !== "monthly") return;
       const iso = f.data;
       const arr = m.get(iso) ?? [];
-      arr.push({ 
-        userId: f.user_id, 
-        userName: nm.get(f.user_id) || "Desconhecido", 
-        type: "monthly", 
-        origin: f.criado_por ? "Atribuição Manual" : "Sorteio Automático" 
+      const origin = f.extra ? "Extra (Admin)" : (f.criado_por ? "Atribuição Manual" : "Sorteio Automático");
+      arr.push({
+        userId: f.user_id,
+        userName: nm.get(f.user_id) || "Desconhecido",
+        type: "monthly",
+        origin,
       });
       m.set(iso, arr);
     });
 
     pendentes.forEach(p => {
-      if (!validUserIds.has(p.user_id)) return; 
+      if (!validUserIds.has(p.user_id)) return;
       if (filterUser !== "all" && p.user_id !== filterUser) return;
       if (filterType !== "all" && filterType !== "pending") return;
       const iso = p.data;
       const arr = m.get(iso) ?? [];
-      arr.push({ 
-        userId: p.user_id, 
-        userName: nm.get(p.user_id) || "Desconhecido", 
-        type: "pending", 
+      arr.push({
+        userId: p.user_id,
+        userName: nm.get(p.user_id) || "Desconhecido",
+        type: "pending",
         origin: "Solicitação Pendente",
-        requestId: p.id
+        requestId: p.id,
       });
       m.set(iso, arr);
     });
@@ -210,9 +244,8 @@ export default function AdminCalendar() {
         manualBlocked: manualMap,
         dayLimits,
         birthdayByDate: birthdayByDate as any,
-        isAdmin: true
+        isAdmin: true,
       });
-      
       if (dayType(d)) {
         totalFolgas += status.occupancy || 0;
         totalVagas += status.limit || 1;
@@ -229,7 +262,12 @@ export default function AdminCalendar() {
     setEditLimit(dayLimits.get(iso) ?? 1);
   };
 
-  const handleAssignFolga = async (iso: string, force = false) => {
+  // --- Função principal de atribuição (agora com modo) ---
+  const handleAssignFolga = async (
+    iso: string,
+    modo: 'force' | 'extra' | 'substituir',
+    conflitoIds?: string[]
+  ) => {
     if (!assignUser) return toast.error("Escolha um funcionário");
     const d = parseYMD(iso);
     const tipo = dayType(d) || "outro";
@@ -237,34 +275,87 @@ export default function AdminCalendar() {
 
     setBusyAssign(true);
     try {
-      const result = await adminApi.assignFolga({
-        colaborador_id: assignUser,
-        data: iso,
-        mes_referencia: mes,
-        tipo: tipo,
-        criado_por: user?.id,
-        force: force
-      });
-
-      if (result.needs_confirmation) {
-        setConfirmDialog({
-          open: true,
-          colaboradorId: assignUser,
-          data: iso,
-          tipo: tipo,
-          mes: mes
-        });
-        return;
+      // 1. Se for substituir, remove os conflitos
+      if (modo === 'substituir' && conflitoIds && conflitoIds.length > 0) {
+        const { error: delError } = await supabase
+          .from('folgas')
+          .delete()
+          .in('id', conflitoIds);
+        if (delError) throw delError;
       }
 
-      toast.success("Folga atribuída com sucesso!");
+      // 2. Insere a nova folga
+      const extra = modo === 'extra';
+      const { error: insertError } = await supabase
+        .from('folgas')
+        .insert({
+          user_id: assignUser,
+          data: iso,
+          mes: mes,
+          tipo: tipo,
+          criado_por: user?.id,
+          extra: extra,
+        });
+
+      if (insertError) throw insertError;
+
+      toast.success(modo === 'extra' ? "Folga extra atribuída!" : "Folga atribuída com sucesso!");
       setDlg(null);
+      setConfirmDialog(null);
       load();
     } catch (e) {
       toast.error("Erro ao atribuir folga", { description: (e as Error).message });
     } finally {
       setBusyAssign(false);
     }
+  };
+
+  // --- Função que detecta conflitos e dispara o diálogo ---
+  const prepararAtribuicao = async (iso: string) => {
+    if (!assignUser) return toast.error("Escolha um funcionário");
+
+    const d = parseYMD(iso);
+    const mes = monthKey(d);
+    const isWknd = !!dayType(d);
+
+    // Busca todas as folgas do colaborador
+    const { data: existingFolgas, error } = await supabase
+      .from('folgas')
+      .select('id, data, tipo')
+      .eq('user_id', assignUser);
+
+    if (error) {
+      toast.error("Erro ao verificar conflitos");
+      return;
+    }
+
+    // Filtra os conflitos:
+    // - mesma data
+    // - se for FDS: mesmo mês (1 folga mensal)
+    // - se for dia de semana: mesma semana (1 folga por semana)
+    const conflitos = (existingFolgas || []).filter(f => {
+      const fData = parseYMD(f.data);
+      if (f.data === iso) return true;
+      if (isWknd && monthKey(fData) === mes) return true;
+      if (!isWknd && isSameWeek(d, fData)) return true;
+      return false;
+    });
+
+    if (conflitos.length === 0) {
+      // Sem conflitos, atribui diretamente
+      await handleAssignFolga(iso, 'force');
+      return;
+    }
+
+    // Mostra diálogo de confirmação com os conflitos encontrados
+    setConfirmDialog({
+      open: true,
+      colaboradorId: assignUser,
+      data: iso,
+      tipo: dayType(d) || "outro",
+      mes: mes,
+      conflitos: conflitos.map(f => ({ id: f.id, data: f.data, tipo: f.tipo || 'fixa' })),
+    });
   };
 
   const saveDayLimit = async () => {
@@ -275,7 +366,7 @@ export default function AdminCalendar() {
       limite_colaboradores: editLimit,
       updated_at: new Date().toISOString(),
     }, { onConflict: "data" });
-    
+
     setSavingLimit(false);
     if (error) return toast.error(error.message);
     toast.success("Limite atualizado");
@@ -288,7 +379,8 @@ export default function AdminCalendar() {
     const { error } = await supabase.from("folgas").delete().eq("id", f.id);
     if (error) return toast.error(error.message);
     toast.success("Folga removida");
-    setDlg(null); load();
+    setDlg(null);
+    load();
   };
 
   const unlockDay = async (iso: string) => {
@@ -298,7 +390,7 @@ export default function AdminCalendar() {
         data: iso,
         motivo: "Liberado manualmente",
         liberada: true,
-        auto: false
+        auto: false,
       }, { onConflict: 'data' });
       if (error) return toast.error(error.message);
     } else {
@@ -306,14 +398,15 @@ export default function AdminCalendar() {
       if (error) return toast.error(error.message);
     }
     toast.success("Data liberada com sucesso");
-    setDlg(null); load();
+    setDlg(null);
+    load();
   };
 
   const goPrev = () => { const d = new Date(year, month0 - 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); };
   const goNext = () => { const d = new Date(year, month0 + 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); };
 
   const isWeekend = dlg ? !!dayType(parseYMD(dlg.iso)) : false;
-  
+
   const currentBlock = useMemo(() => {
     if (!dlg) return null;
     const m = manual.find(x => x.data === dlg.iso && !x.liberada);
@@ -323,6 +416,7 @@ export default function AdminCalendar() {
     return null;
   }, [dlg, manual, year, month0]);
 
+  // Renderização mobile (igual ao original, mas mantida)
   const renderMobileCalendar = () => {
     const days = getMonthDays(year, month0);
     const monthName = new Date(year, month0).toLocaleString('pt-BR', { month: 'long' });
@@ -420,6 +514,7 @@ export default function AdminCalendar() {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
+      {/* Cabeçalho */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-4xl font-black text-slate-900 flex items-center gap-4 tracking-tight">
@@ -432,6 +527,7 @@ export default function AdminCalendar() {
         </div>
       </div>
 
+      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
           <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Folgas Marcadas</div>
@@ -459,6 +555,7 @@ export default function AdminCalendar() {
         </div>
       </div>
 
+      {/* Filtros */}
       <div className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-wrap gap-8 items-end shadow-sm">
         <div className="space-y-2.5">
           <Label className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400 flex items-center gap-2">
@@ -509,6 +606,7 @@ export default function AdminCalendar() {
         </Button>
       </div>
 
+      {/* Calendário */}
       {isMobile ? renderMobileCalendar() : (
         <FolgaCalendar
           year={year} month0={month0}
@@ -517,7 +615,7 @@ export default function AdminCalendar() {
           birthdayByDate={birthdayByDate as any}
           myUserId={user?.id ?? null}
           allFolgas={folgas}
-          allProfiles={filteredProfiles} 
+          allProfiles={filteredProfiles}
           pendingRequests={pendentes}
           isAdmin={true}
           onPrev={goPrev} onNext={goNext}
@@ -525,6 +623,7 @@ export default function AdminCalendar() {
         />
       )}
 
+      {/* Dialog de Detalhes do Dia */}
       <Dialog open={!!dlg} onOpenChange={(o) => !o && setDlg(null)}>
         <DialogContent className="max-w-lg rounded-[2.5rem] border-none shadow-2xl p-8">
           <DialogHeader>
@@ -554,8 +653,8 @@ export default function AdminCalendar() {
                       {currentBlock.motivo}
                     </div>
                   </div>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="w-full h-12 rounded-xl border-rose-200 text-rose-600 hover:bg-rose-100 hover:text-rose-700 font-bold"
                     onClick={() => unlockDay(dlg.iso)}
                   >
@@ -574,17 +673,17 @@ export default function AdminCalendar() {
                   <div className="flex gap-3">
                     <div className="flex-1">
                       <Label className="text-[10px] font-bold text-slate-500 mb-1.5 block">Limite de Colaboradores</Label>
-                      <Input 
-                        type="number" 
-                        min={1} 
-                        max={10} 
-                        value={editLimit} 
+                      <Input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={editLimit}
                         onChange={(e) => setEditLimit(Number(e.target.value))}
                         className="bg-white border-slate-200 rounded-xl h-12 font-bold"
                       />
                     </div>
-                    <Button 
-                      onClick={saveDayLimit} 
+                    <Button
+                      onClick={saveDayLimit}
                       disabled={savingLimit}
                       className="h-12 px-6 rounded-xl mt-auto"
                     >
@@ -612,9 +711,9 @@ export default function AdminCalendar() {
                         </div>
                       </div>
                       {occ.type === 'monthly' && (
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="size-10 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-2xl opacity-0 group-hover:opacity-100 transition-all"
                           onClick={() => removeFolga(dlg.iso, occ.userId)}
                         >
@@ -642,9 +741,9 @@ export default function AdminCalendar() {
                       {filteredProfiles.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <Button 
-                    className="h-14 px-8 rounded-2xl shadow-xl shadow-primary/20 font-black uppercase tracking-widest text-xs" 
-                    onClick={() => handleAssignFolga(dlg.iso)}
+                  <Button
+                    className="h-14 px-8 rounded-2xl shadow-xl shadow-primary/20 font-black uppercase tracking-widest text-xs"
+                    onClick={() => prepararAtribuicao(dlg.iso)}
                     disabled={busyAssign}
                   >
                     {busyAssign ? <Loader2 className="size-5 animate-spin" /> : <><Plus className="size-5 mr-2" /> Atribuir</>}
@@ -660,25 +759,48 @@ export default function AdminCalendar() {
         </DialogContent>
       </Dialog>
 
+      {/* AlertDialog de Conflito (com opções Extra vs Substituir) */}
       <AlertDialog open={!!confirmDialog} onOpenChange={(open) => !open && setConfirmDialog(null)}>
         <AlertDialogContent className="rounded-[2rem]">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
-              <AlertTriangle className="size-6" /> Atenção: Folga Duplicada
+              <AlertTriangle className="size-6" /> Conflito de Folga
             </AlertDialogTitle>
             <AlertDialogDescription className="text-base">
-              Este colaborador já possui uma folga de final de semana marcada para este mês. 
-              <br /><br />
-              Deseja realmente confirmar esta <b>segunda folga</b> de final de semana?
+              Este colaborador já possui folga(s) que conflitam com esta nova atribuição:
+              <ul className="list-disc list-inside mt-2 text-sm text-slate-700">
+                {confirmDialog?.conflitos?.map(f => (
+                  <li key={f.id}>{formatBR(parseYMD(f.data))} - {f.tipo || 'Fixa'}</li>
+                ))}
+              </ul>
+              <br />
+              <span className="font-semibold">Como deseja proceder?</span>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
             <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
-            <AlertDialogAction 
-              className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl"
-              onClick={() => confirmDialog && handleAssignFolga(confirmDialog.data, true)}
+
+            <AlertDialogAction
+              className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
+              onClick={() => {
+                if (confirmDialog) {
+                  const ids = confirmDialog.conflitos.map(f => f.id);
+                  handleAssignFolga(confirmDialog.data, 'substituir', ids);
+                }
+              }}
             >
-              Sim, confirmar folga
+              Substituir (remove as antigas)
+            </AlertDialogAction>
+
+            <AlertDialogAction
+              className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl"
+              onClick={() => {
+                if (confirmDialog) {
+                  handleAssignFolga(confirmDialog.data, 'extra');
+                }
+              }}
+            >
+              Manter como Extra
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
