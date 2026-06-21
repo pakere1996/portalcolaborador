@@ -52,16 +52,14 @@ export default function MensagensAdmin() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  // Estado para envio
-  const [destinatario, setDestinatario] = useState("todos"); // 'todos', 'unidade', 'individual'
+  const [destinatario, setDestinatario] = useState("todos");
   const [unidadeId, setUnidadeId] = useState("");
   const [colaboradorId, setColaboradorId] = useState("");
-  const [modeloSelecionado, setModeloSelecionado] = useState("");
+  const [modeloSelecionado, setModeloSelecionado] = useState("nenhum"); // 🔥 CORRIGIDO: valor sentinela
   const [assunto, setAssunto] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [unidades, setUnidades] = useState<any[]>([]);
 
-  // Estado para edição/criação de modelo
   const [modeloDialogOpen, setModeloDialogOpen] = useState(false);
   const [editandoModelo, setEditandoModelo] = useState<ModeloMensagem | null>(null);
   const [modeloForm, setModeloForm] = useState({
@@ -71,7 +69,6 @@ export default function MensagensAdmin() {
     tipo: "outro",
   });
 
-  // Estado para confirmação de exclusão
   const [confirmDelete, setConfirmDelete] = useState<ModeloMensagem | null>(null);
 
   const load = async () => {
@@ -97,8 +94,13 @@ export default function MensagensAdmin() {
     load();
   }, []);
 
-  // Quando selecionar um modelo, preenche os campos
+  // 🔥 Quando selecionar um modelo, preenche os campos (exceto se for "nenhum")
   useEffect(() => {
+    if (modeloSelecionado === "nenhum") {
+      setAssunto("");
+      setMensagem("");
+      return;
+    }
     const modelo = modelos.find(m => m.id === modeloSelecionado);
     if (modelo) {
       setAssunto(modelo.assunto);
@@ -114,8 +116,6 @@ export default function MensagensAdmin() {
 
     setBusy(true);
     try {
-      // Aqui você pode integrar com a API de WhatsApp
-      // Por enquanto, apenas simulamos o envio
       const destinatarios = [];
       if (destinatario === "todos") {
         destinatarios.push(...colaboradores.map(c => ({ id: c.id, nome: c.nome, whatsapp: c.whatsapp })));
@@ -126,8 +126,6 @@ export default function MensagensAdmin() {
         if (colab) destinatarios.push({ id: colab.id, nome: colab.nome, whatsapp: colab.whatsapp });
       }
 
-      // Envia para cada destinatário (simulação)
-      // Na implementação real, use um serviço como Twilio, WATI, etc.
       const comWhatsApp = destinatarios.filter(d => d.whatsapp);
       const semWhatsApp = destinatarios.filter(d => !d.whatsapp);
 
@@ -137,10 +135,9 @@ export default function MensagensAdmin() {
 
       toast.success(msg);
 
-      // Limpa campos após envio
       setAssunto("");
       setMensagem("");
-      setModeloSelecionado("");
+      setModeloSelecionado("nenhum");
     } catch (error) {
       toast.error("Erro ao enviar mensagem");
     } finally {
@@ -148,7 +145,6 @@ export default function MensagensAdmin() {
     }
   };
 
-  // CRUD de modelos
   const salvarModelo = async () => {
     if (!modeloForm.nome.trim() || !modeloForm.assunto.trim() || !modeloForm.corpo.trim()) {
       toast.error("Preencha todos os campos");
@@ -235,7 +231,6 @@ export default function MensagensAdmin() {
         </div>
       </div>
 
-      {/* Cards de Modelos Rápidos */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Modelos Rápidos</h2>
@@ -282,7 +277,6 @@ export default function MensagensAdmin() {
         )}
       </div>
 
-      {/* Formulário de Envio */}
       <Card className="border-border shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -330,13 +324,14 @@ export default function MensagensAdmin() {
 
               <div className="space-y-2">
                 <Label>Modelo (opcional)</Label>
-                <Select value={modeloSelecionado || "nenhum"} onValueChange={(v) => setModeloSelecionado(v === "nenhum" ? "" : v)}>
-  <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
-  <SelectContent>
-    <SelectItem value="nenhum">Nenhum</SelectItem>
-    {modelos.map(m => <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>)}
-  </SelectContent>
-</Select>
+                {/* 🔥 CORRIGIDO: usa "nenhum" como valor sentinela */}
+                <Select value={modeloSelecionado} onValueChange={setModeloSelecionado}>
+                  <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nenhum">Nenhum</SelectItem>
+                    {modelos.map(m => <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -358,7 +353,6 @@ export default function MensagensAdmin() {
         </CardContent>
       </Card>
 
-      {/* Dialog para criar/editar modelo */}
       <Dialog open={modeloDialogOpen} onOpenChange={setModeloDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -394,7 +388,6 @@ export default function MensagensAdmin() {
         </DialogContent>
       </Dialog>
 
-      {/* Confirmação de exclusão */}
       <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
