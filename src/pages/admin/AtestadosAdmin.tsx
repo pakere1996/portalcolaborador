@@ -16,9 +16,38 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 export default function AtestadosAdmin() {
-  // 🔥 Função para aprovar/rejeitar diretamente sem abrir edição
-  const handleStatusAction = async (id: string, newStatus: "aprovado" | "rejeitado", obs?: string) => {
+  // 🔥 Função para preencher unidade automaticamente ao selecionar colaborador
+  const handleColaboradorChange = async (colaboradorId: string, setForm: any, unidades: any[]) => {
+    if (!colaboradorId) return;
     try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("unidade_id")
+        .eq("id", colaboradorId)
+        .single();
+      if (error) throw error;
+      if (data?.unidade_id) {
+        // Verifica se a unidade existe na lista de unidades
+        const unidadeExiste = unidades.some(u => u.id === data.unidade_id);
+        if (unidadeExiste) {
+          setForm((prev: any) => ({ ...prev, unidade_id: data.unidade_id }));
+        } else {
+          setForm((prev: any) => ({ ...prev, unidade_id: "" }));
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao buscar unidade do colaborador:", error);
+    }
+  };
+
+  // 🔥 Função para aprovar/rejeitar diretamente sem abrir edição
+  const handleStatusAction = async (id: string, newStatus: "aprovado" | "rejeitado") => {
+    try {
+      let obs = "";
+      if (newStatus === "rejeitado") {
+        obs = prompt("Motivo da rejeição (opcional):") || "";
+      }
+
       const updates: any = {
         status: newStatus,
         respondido_em: new Date().toISOString(),
@@ -33,8 +62,8 @@ export default function AtestadosAdmin() {
 
       if (error) throw error;
       toast.success(`Atestado ${newStatus === "aprovado" ? "aprovado" : "rejeitado"} com sucesso!`);
-      // Recarrega a lista (a base tem função load, mas precisamos forçar)
-      window.location.reload(); // Simplificado, mas idealmente a base teria uma prop para refresh
+      // Recarrega a página para atualizar a lista
+      window.location.reload();
     } catch (error) {
       toast.error("Erro ao atualizar status", { description: (error as Error).message });
     }
@@ -48,18 +77,7 @@ export default function AtestadosAdmin() {
       descricao="Gerencie todos os atestados médicos dos colaboradores."
       importTitle="Importar Atestado"
       campoData="data_atestado"
-      // 🔥 CORREÇÃO: ao selecionar colaborador, preencher unidade automaticamente
-      onColaboradorChange={async (colaboradorId, setForm) => {
-        if (!colaboradorId) return;
-        const { data } = await supabase
-          .from("profiles")
-          .select("unidade_id")
-          .eq("id", colaboradorId)
-          .single();
-        if (data?.unidade_id) {
-          setForm((prev: any) => ({ ...prev, unidade_id: data.unidade_id }));
-        }
-      }}
+      onColaboradorChange={handleColaboradorChange}
       gerarStoragePath={async (colaboradorId, data, id, file) => {
         const path = atestadoStoragePath(colaboradorId, data, id, file);
         const kind = getFileKind(file);
@@ -103,10 +121,9 @@ export default function AtestadosAdmin() {
           </div>
         );
       }}
-      // 🔥 Botões de ação extras na tabela (aprovado/rejeitado direto)
       acoesExtras={(doc) => (
         doc.status === "pendente" && (
-          <div className="flex gap-1">
+          <div className="flex gap-1 ml-1">
             <Button
               size="sm"
               variant="outline"
@@ -119,10 +136,7 @@ export default function AtestadosAdmin() {
               size="sm"
               variant="outline"
               className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100 h-7 px-2 text-[10px]"
-              onClick={() => {
-                const obs = prompt("Motivo da rejeição (opcional):");
-                handleStatusAction(doc.id, "rejeitado", obs || undefined);
-              }}
+              onClick={() => handleStatusAction(doc.id, "rejeitado")}
             >
               Rejeitar
             </Button>
