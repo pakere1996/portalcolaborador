@@ -265,11 +265,6 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
             const isPast = c.status === "past";
             const isUserFolgaPassada = isWeekend && hasMyFolga && isPast;
 
-            // Para admin: exibe todos os nomes
-            // Para colaborador comum: exibe nomes APENAS se for folga fixa (type === "fixed")
-            // e se não for o próprio (já que o próprio tem "Minha Folga")
-            const showOccupantNames = isAdmin || (c.occupants.some(o => o.type === "fixed" && o.userId !== myUserId));
-
             return (
               <div
                 key={c.iso}
@@ -305,7 +300,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                       >
                         {c.date.getDate()}
                       </span>
-                      {/* Tags */}
+                      {/* Tags para usuário comum */}
                       {!isAdmin && (
                         <>
                           {c.status === "blocked" && (
@@ -342,6 +337,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                           )}
                         </>
                       )}
+                      {/* Tags para admin */}
                       {isAdmin && (
                         <>
                           {c.status === "blocked" && (
@@ -360,33 +356,34 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                         </>
                       )}
                     </div>
-                    {/* Ocupantes: admin vê todos os nomes; colaborador vê apenas os de folga fixa (excluindo o próprio) */}
-                    {c.occupants.length > 0 && showOccupantNames && (
+
+                    {/* Renderização de ocupantes: admin vê nomes, usuário comum NÃO */}
+                    {isAdmin && c.occupants.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1 ml-8">
-                        {c.occupants
-                          .filter(o => isAdmin || (o.type === "fixed" && o.userId !== myUserId))
-                          .map((occ, idx) => {
-                            const nome = occ.userName?.split(" ")[0] || "Colaborador";
-                            return (
-                              <span
-                                key={idx}
-                                className={cn(
-                                  "text-[10px] px-1.5 py-0.5 rounded font-medium truncate max-w-[120px]",
-                                  occ.type === "fixed"
-                                    ? "bg-blue-50 text-blue-600"
-                                    : occ.type === "monthly"
-                                    ? "bg-amber-50 text-amber-600"
-                                    : "bg-orange-50 text-orange-600"
-                                )}
-                                title={occ.userName}
-                              >
-                                {nome}
-                              </span>
-                            );
-                          })}
+                        {c.occupants.map((occ, idx) => {
+                          const nome = occ.userName?.split(" ")[0] || "Colaborador";
+                          return (
+                            <span
+                              key={idx}
+                              className={cn(
+                                "text-[10px] px-1.5 py-0.5 rounded font-medium truncate max-w-[120px]",
+                                occ.type === "fixed"
+                                  ? "bg-blue-50 text-blue-600"
+                                  : occ.type === "monthly"
+                                  ? "bg-amber-50 text-amber-600"
+                                  : "bg-orange-50 text-orange-600"
+                              )}
+                              title={occ.userName}
+                            >
+                              {nome}
+                            </span>
+                          );
+                        })}
                       </div>
                     )}
-                    {hasMyFolga && isAdmin && (
+
+                    {/* Para usuário comum: não exibe nomes, apenas a tag "Minha Folga" já aparece acima */}
+                    {!isAdmin && hasMyFolga && (
                       <div className="mt-1 text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 inline-block ml-8">
                         {c.label || "Minha Folga"}
                         {isPast && isWeekend && " (Utilizada)"}
@@ -461,11 +458,6 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
             const isPast = c.status === "past";
             const isUserFolgaPassada = isWeekend && hasMyFolga && isPast;
 
-            // Para admin: exibe todos os nomes
-            // Para colaborador comum: exibe nomes APENAS se for folga fixa (type === "fixed")
-            // e se não for o próprio (já que o próprio tem "Minha Folga")
-            const showOccupantNames = isAdmin || (c.occupants.some(o => o.type === "fixed" && o.userId !== myUserId));
-
             return (
               <div
                 key={i}
@@ -506,7 +498,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     >
                       {c.date.getDate()}
                     </span>
-                    {/* Tags para colaborador comum */}
+                    {/* Tags para usuário comum */}
                     {!isAdmin && (
                       <>
                         {c.status === "blocked" && (
@@ -531,7 +523,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                         )}
                       </>
                     )}
-                    {/* Para admin: contagem */}
+                    {/* Para admin: contagem e ocupantes */}
                     {isAdmin && isWeekend && (
                       <span
                         className={cn(
@@ -568,32 +560,29 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                   </div>
                 </div>
 
-                {/* Ocupantes: admin vê todos os nomes; colaborador vê apenas os de folga fixa (excluindo o próprio) */}
-                {c.occupants.length > 0 && showOccupantNames && (
+                {/* Ocupantes: apenas admin vê nomes */}
+                {isAdmin && c.occupants.length > 0 && (
                   <div className="flex flex-col gap-1.5 overflow-hidden">
-                    {c.occupants
-                      .filter(o => isAdmin || (o.type === "fixed" && o.userId !== myUserId))
-                      .slice(0, 4)
-                      .map((occ, idx) => (
-                        <div
-                          key={idx}
-                          className={cn(
-                            "text-[10px] px-2.5 py-1 rounded-full border truncate w-fit max-w-full font-semibold shadow-sm",
-                            tagColors[occ.type]
-                          )}
-                        >
-                          {occ.userName?.split(" ")[0]}
-                        </div>
-                      ))}
-                    {c.occupants
-                      .filter(o => isAdmin || (o.type === "fixed" && o.userId !== myUserId))
-                      .length > 4 && (
+                    {c.occupants.slice(0, 4).map((occ, idx) => (
+                      <div
+                        key={idx}
+                        className={cn(
+                          "text-[10px] px-2.5 py-1 rounded-full border truncate w-fit max-w-full font-semibold shadow-sm",
+                          tagColors[occ.type]
+                        )}
+                      >
+                        {occ.userName?.split(" ")[0]}
+                      </div>
+                    ))}
+                    {c.occupants.length > 4 && (
                       <div className="text-[10px] text-slate-400 font-bold pl-1 flex items-center gap-1 mt-1">
-                        <Users className="size-3" /> +{c.occupants.filter(o => isAdmin || (o.type === "fixed" && o.userId !== myUserId)).length - 4}
+                        <Users className="size-3" /> +{c.occupants.length - 4}
                       </div>
                     )}
                   </div>
                 )}
+
+                {/* Para usuário comum: não exibe nada de ocupantes (apenas "Minha Folga" já está acima) */}
               </div>
             );
           })}
