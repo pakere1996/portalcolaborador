@@ -28,7 +28,7 @@ import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner"; // 🔥 ADICIONADO
+import { toast } from "sonner";
 
 export interface DayOccupant {
   userId: string;
@@ -110,6 +110,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
   const hoje = new Date();
   const hojeStr = ymd(hoje);
 
+  // Verifica se o usuário já tem uma folga de final de semana neste mês (ativa ou já usada)
   const hasMonthlyFolga = useMemo(() => {
     if (!myUserId || !currentMonthKey) return false;
     return allFolgas.some(f => 
@@ -119,6 +120,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     );
   }, [allFolgas, myUserId, currentMonthKey]);
 
+  // Busca a folga do usuário no mês atual (para verificar se já passou)
   const userFolgaData = useMemo(() => {
     if (!myUserId || !currentMonthKey) return null;
     const folga = allFolgas.find(f => 
@@ -129,6 +131,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     return folga?.data || null;
   }, [allFolgas, myUserId, currentMonthKey]);
 
+  // Verifica se a folga do usuário já passou (data anterior a hoje)
   const userFolgaPassou = useMemo(() => {
     if (!userFolgaData) return false;
     return userFolgaData < hojeStr;
@@ -242,13 +245,20 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
             const isWeekend = c.date.getDay() === 0 || c.date.getDay() === 6;
             const diaSemana = DIAS_SEMANA_ABR[c.date.getDay()];
             const isPast = c.status === "past";
+
+            // 🔥 Se for final de semana e o usuário já tem uma folga no mês, NÃO exibe "Nenhum colaborador"
             const shouldHideEmptyMessage = hasMonthlyFolga && !hasMyFolga && isWeekend;
+
+            // Se a folga do usuário já passou, não permite trocar
             const isUserFolgaPassada = hasMyFolga && isPast;
 
             return (
               <div
                 key={c.iso}
-                className="px-4 py-3 hover:bg-slate-50/50 transition-colors cursor-pointer"
+                className={cn(
+                  "px-4 py-3 hover:bg-slate-50/50 transition-colors cursor-pointer",
+                  isUserFolgaPassada && "opacity-60 cursor-not-allowed"
+                )}
                 onClick={() => {
                   if (isUserFolgaPassada) {
                     toast.warning("Esta folga já foi utilizada e não pode ser alterada.");
@@ -300,6 +310,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                         })}
                       </div>
                     ) : (
+                      // 🔥 Só exibe "Nenhum colaborador" se NÃO tiver que esconder
                       !shouldHideEmptyMessage && (
                         <span className="text-[10px] text-slate-400 ml-8">Nenhum colaborador</span>
                       )
@@ -308,6 +319,11 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                       <div className="mt-1 text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 inline-block ml-8">
                         {c.label || "Minha Folga"}
                         {isPast && " (Utilizada)"}
+                      </div>
+                    )}
+                    {!hasMyFolga && isWeekend && hasMonthlyFolga && (
+                      <div className="mt-1 text-[10px] text-slate-400 font-medium ml-8">
+                        {/* 🔥 Não exibe nada em vez de "Indisponível" */}
                       </div>
                     )}
                   </div>
@@ -321,6 +337,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     );
   };
 
+  // Versão Desktop (grid)
   if (isMobile) {
     return renderMobileCalendar();
   }
