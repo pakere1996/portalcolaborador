@@ -133,6 +133,18 @@ export default function DocumentosAtestadosPage() {
     setFile(selected);
   };
 
+  // 🔥 Função para notificar admin de forma silenciosa (ignora erro 404)
+  const notificarAdmin = async (atestadoId: string, nomeColaborador: string) => {
+    try {
+      // Importação dinâmica para evitar erro se o módulo não existir
+      const { notifyAtestadoPendente } = await import("@/lib/notify-atestado");
+      await notifyAtestadoPendente(atestadoId, nomeColaborador);
+    } catch (error) {
+      // Silencia completamente o erro (404 ou qualquer outro)
+      console.debug("Notificação não disponível:", error);
+    }
+  };
+
   const uploadAtestado = async (payload: { data: string; dias: string; observacao: string; file: File }) => {
     if (!user || !profile) return;
 
@@ -155,7 +167,7 @@ export default function DocumentosAtestadosPage() {
 
     setBusy(true);
     try {
-      // 🔥 Busca a unidade do colaborador
+      // Busca a unidade do colaborador
       const { data: profileData } = await supabase
         .from("profiles")
         .select("unidade_id")
@@ -177,7 +189,7 @@ export default function DocumentosAtestadosPage() {
         });
       if (uploadError) throw uploadError;
 
-      // 🔥 Inclui unidade_id no insert
+      // Inclui unidade_id no insert
       const { data: inserted, error: insertError } = await supabase
         .from("atestados")
         .insert({
@@ -197,13 +209,8 @@ export default function DocumentosAtestadosPage() {
 
       if (insertError) throw insertError;
 
-      // Notifica admin (silencia erro 404)
-      try {
-        const { notifyAtestadoPendente } = await import("@/lib/notify-atestado");
-        await notifyAtestadoPendente(inserted.id, profile.nome);
-      } catch (notifyError) {
-        console.warn("Notificação não disponível:", notifyError);
-      }
+      // 🔥 Notifica admin (silenciosamente, sem quebrar o fluxo)
+      await notificarAdmin(inserted.id, profile.nome);
 
       toast.success("Atestado enviado para aprovação");
       setFile(null);
