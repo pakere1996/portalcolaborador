@@ -58,6 +58,9 @@ export default function CalendarioPage() {
   const [reqMotivo, setReqMotivo] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // 🔥 monthKey para passar ao calendário
+  const mk = monthKey(new Date(year, month0, 1));
+
   const load = async () => {
     if (!user || !profile?.unidade_id) return;
     
@@ -129,7 +132,6 @@ export default function CalendarioPage() {
 
   const unlocked = isMonthUnlocked(year, month0);
   const unlock = unlockDateForMonth(year, month0);
-  const mk = monthKey(new Date(year, month0, 1));
 
   const occupantsByDate = useMemo(() => {
     const m = new Map<string, any[]>();
@@ -306,13 +308,14 @@ export default function CalendarioPage() {
         allFolgas={folgas} allProfiles={allProfiles}
         pendingRequests={pendingSolics}
         occupantsByDate={occupantsByDate}
+        currentMonthKey={mk}
         onPrev={() => { const d = new Date(year, month0 - 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); }}
         onNext={() => { const d = new Date(year, month0 + 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); }}
         onSelectDay={onSelectDay}
         locked={unlocked ? null : { unlockDateBR: formatBR(unlock) }}
       />
 
-      {/* Diálogos (os mesmos da versão anterior) */}
+      {/* Diálogos */}
       <Dialog open={!!changeFolgaDialog} onOpenChange={(o) => !o && setChangeFolgaDialog(null)}>
         <DialogContent className="rounded-[2rem]">
           <DialogHeader>
