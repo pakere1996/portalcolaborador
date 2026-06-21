@@ -130,7 +130,10 @@ export function DocumentImportForm() {
         setLoadingPageImage(true);
         renderPdfPageAsImage(selectedFile, pageNum)
           .then(setPageImageUrl)
-          .catch(() => setPageImageUrl(null))
+          .catch((err) => {
+            console.error("Erro ao renderizar página:", err);
+            setPageImageUrl(null);
+          })
           .finally(() => setLoadingPageImage(false));
       }
     }
@@ -182,10 +185,33 @@ export function DocumentImportForm() {
   };
 
   const handleProcessar = async () => {
-    if (!selectedFile) return;
+    if (!selectedFile) {
+      toast.error("Selecione um arquivo PDF primeiro");
+      return;
+    }
+
     setIsProcessing(true);
+    toast.info("Processando PDF...", { duration: 5000 });
+
     try {
+      console.log("🔍 Iniciando extração de texto do PDF:", selectedFile.name);
       const pages = await extractTextFromPDF(selectedFile);
+      console.log(`📄 ${pages.length} páginas extraídas`);
+
+      if (pages.length === 0) {
+        toast.error("Nenhuma página extraída. Verifique se o PDF tem texto.");
+        return;
+      }
+
+      // Log para verificar se o texto está vazio
+      const pagesWithText = pages.filter(p => p.text.trim().length > 0);
+      console.log(`📝 ${pagesWithText.length} páginas com texto (${pages.length - pagesWithText.length} vazias)`);
+
+      if (pagesWithText.length === 0) {
+        toast.error("O PDF parece não ter texto extraível. Tente um PDF com texto.");
+        return;
+      }
+
       const resultsComMatch: PageResult[] = pages.map((p) => {
         const text = p.text;
         const { profile: matchedProfile, nomeEncontrado: nome } = findExactMatchInText(text, profiles);
@@ -238,7 +264,11 @@ export function DocumentImportForm() {
       if (qtdDuplicados > 0) msg += `. ${qtdDuplicados} já existem no histórico — revise antes de aprovar.`;
       toast.success(msg);
     } catch (err) {
-      toast.error("Erro ao processar PDF", { description: (err as Error).message });
+      console.error("❌ Erro ao processar PDF:", err);
+      toast.error("Falha ao extrair texto do PDF. Verifique o arquivo.", {
+        description: (err as Error).message,
+        duration: 6000,
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -361,15 +391,19 @@ export function DocumentImportForm() {
 
   // 🔥 Função para extrair página do PDF – CORRIGIDA DEFINITIVAMENTE
   const extractPageFromPdf = async (file: File, pageNumber: number): Promise<Blob> => {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdfDoc = await PDFDocument.load(arrayBuffer);
-    const newPdf = await PDFDocument.create();
-    const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageNumber - 1]);
-    newPdf.addPage(copiedPage);
-    const pdfBytes = await newPdf.save();
-    // 🔥 CORREÇÃO FINAL: converter para Uint8Array antes de passar para o Blob
-    const uint8Array = new Uint8Array(pdfBytes);
-    return new Blob([uint8Array], { type: "application/pdf" });
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdfDoc = await PDFDocument.load(arrayBuffer);
+      const newPdf = await PDFDocument.create();
+      const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageNumber - 1]);
+      newPdf.addPage(copiedPage);
+      const pdfBytes = await newPdf.save();
+      const uint8Array = new Uint8Array(pdfBytes);
+      return new Blob([uint8Array], { type: "application/pdf" });
+    } catch (error) {
+      console.error("❌ Erro ao extrair página:", error);
+      throw new Error(`Falha ao extrair página ${pageNumber}: ${(error as Error).message}`);
+    }
   };
 
   const handleAprovarTudo = async () => {
@@ -398,10 +432,18 @@ export function DocumentImportForm() {
         const storagePath = `documentos/${documentType}/${result.matchedProfile.id}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}_${Date.now()}.pdf`;
         
         // 🔥 EXTRAI APENAS A PÁGINA DO COLABORADOR
-        const pagePdfBlob = await extractPageFromPdf(selectedFile!, result.pageNumber);
-        const { error: uploadError } = await supabase.storage.from("documentos")
-          .upload(storagePath, pagePdfBlob, { contentType: "application/pdf", upsert: true });
-        if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
+        try {
+          const pagePdfBlob = await extractPageFromPdf(selectedFile!, result.pageNumber);
+          const { error: uploadError } = await supabase.storage.from("documentos")
+            .upload(storagePath, pagePdfBlob, { contentType: "application/pdf", upsert: true });
+          if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
+        } catch (extractError) {
+          console.error(`❌ Erro ao extrair/upload página ${result.pageNumber}:`, extractError);
+          toast.error(`Erro ao processar página ${result.pageNumber}`, {
+            description: (extractError as Error).message,
+          });
+          continue;
+        }
 
         const { error: insertError } = await supabase.from("documentos").insert({
           colaborador_id: result.matchedProfile.id,
@@ -434,6 +476,7 @@ export function DocumentImportForm() {
         setCurrentPage(0);
       }, 2000);
     } catch (err) {
+      console.error("❌ Erro ao salvar documentos:", err);
       toast.error("Erro ao salvar documentos", { description: (err as Error).message });
     } finally {
       setIsApproving(false);
