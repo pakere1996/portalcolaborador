@@ -2,23 +2,26 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Users, Shield, UserCheck, Mail, Phone, Calendar, CalendarDays, CalendarX, CalendarCheck, Filter, Calendar as CalendarIcon, ClipboardList, FileText, FileWarning, ArrowLeftRight, Ban, Building2, Briefcase, ShieldAlert } from "lucide-react";
-import { formatCPF, onlyDigits, isValidCPFLength } from "@/lib/cpf";
-import { formatPhone, cleanCNPJ, formatCNPJ } from "@/lib/utils";
-import { ColaboradorForm } from "@/components/ColaboradorForm";
-import { ColaboradorFormDialog } from "@/components/ColaboradorFormDialog";
-import { Tables } from "@/integrations/supabase/types";
-import { adminApi } from "@/lib/admin-api";
+import {
+  Users,
+  Shield,
+  UserCheck,
+  Calendar,
+  ClipboardList,
+  FileText,
+  FileWarning,
+  ArrowLeftRight,
+  Ban,
+  Building2,
+  Briefcase,
+  ShieldAlert,
+  MessageSquare,
+  Bell,
+  AlertCircle,
+} from "lucide-react";
 
 const adminModules = [
   {
@@ -29,7 +32,7 @@ const adminModules = [
     category: "Geral",
   },
   {
-     title: "Dashboard Folgas",
+    title: "Dashboard Folgas",
     description: "Visão geral e estatísticas do sistema de folgas.",
     icon: Shield,
     to: "/admin/folgas",
@@ -74,7 +77,7 @@ const adminModules = [
     title: "Contracheques",
     description: "Faça upload e gerencie contracheques.",
     icon: FileText,
-    to: "/admin/documentos",
+    to: "/admin/documentos/contracheque",
     category: "Documentos",
   },
   {
@@ -98,236 +101,98 @@ const adminModules = [
     to: "/admin/documentos/disciplinar",
     category: "Documentos",
   },
+  {
+    title: "Mensagens",
+    description: "Envie comunicados e mensagens para a equipe.",
+    icon: MessageSquare,
+    to: "/admin/mensagens",
+    category: "Comunicação",
+  },
+  {
+    title: "Quadro de Avisos",
+    description: "Crie avisos que aparecem no login dos colaboradores.",
+    icon: Bell,
+    to: "/admin/avisos",
+    category: "Comunicação",
+  },
 ];
 
-const blankEditForm = {
-  nome: "", cpf: "", matricula: "", email: "", whatsapp: "",
-  cargo: "", unidadeId: "", folgaFixa: "none",
-  dataNascimento: "", dataAdmissao: "", perfil_acesso: "colaborador",
-  ativo: true,
-  senha: "",
-  regime_trabalho: "none",
-  data_demissao: "",
-  tipo_vinculo: "CLT",
-  possui_folha_ponto: false,
-};
+interface AtestadoPendente {
+  id: string;
+  colaborador_id: string;
+  colaborador_nome: string;
+  data_atestado: string;
+  dias_afastamento: number;
+  created_at: string;
+}
 
-export default function AdminHomeAdminPage() {
-  const [profiles, setProfiles] = useState<any[]>([]);
-  const [unidades, setUnidades] = useState<any[]>([]);
-  const [cargos, setCargos] = useState<any[]>([]);
+export default function HomeAdmin() {
+  const [atestadosPendentes, setAtestadosPendentes] = useState<AtestadoPendente[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [search, setSearch] = useState("");
-  const [filtroUnidade, setFiltroUnidade] = useState("all");
-  const [filtroStatus, setFiltroStatus] = useState("all");
-  const [filtroCargo, setFiltroCargo] = useState("all");
+  const [totalPendentes, setTotalPendentes] = useState(0);
 
-  const [openNewDialog, setOpenNewDialog] = useState(false);
-  const [newForm, setNewForm] = useState(blankEditForm);
-  const [editingProfile, setEditingProfile] = useState<any | null>(null);
-  const [editForm, setEditForm] = useState(blankEditForm);
-  const [confirmDelete, setConfirmDelete] = useState<any | null>(null);
-  const [resetPasswordDialog, setResetPasswordDialog] = useState<{ profile: any; senha: string; confirmar: string } | null>(null);
-
-  const loadData = async () => {
+  const loadAtestadosPendentes = async () => {
     setLoading(true);
     try {
-      const [pRes, uRes, cRes] = await Promise.all([
-        supabase.from("profiles").select("*").order("nome"),
-        supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
-        supabase.from("cargos").select("*").eq("ativo", true).order("nome"),
-      ]);
+      // Busca atestados pendentes com nome do colaborador
+      const { data, error } = await supabase
+        .from("atestados")
+        .select(`
+          id,
+          colaborador_id,
+          data_atestado,
+          dias_afastamento,
+          created_at,
+          profiles!colaborador_id (nome, unidade_id)
+        `)
+        .eq("status", "pendente")
+        .order("created_at", { ascending: false })
+        .limit(5);
 
-      if (pRes.error) throw pRes.error;
+      if (error) throw error;
 
-      const profileIds = (pRes.data ?? []).map(p => p.id);
-      let rolesMap = new Map<string, string[]>();
-      if (profileIds.length > 0) {
-        const { data: rolesData } = await supabase.from("user_roles").select("user_id, role").in("user_id", profileIds);
-        rolesData?.forEach(r => {
-          if (!rolesMap.has(r.user_id)) rolesMap.set(r.user_id, []);
-          rolesMap.get(r.user_id)!.push(r.role);
-        });
-      }
-
-      const profilesWithRoles = (pRes.data ?? []).map(p => ({
-        ...p,
-        role: rolesMap.get(p.id)?.[0] ?? null,
+      const pendentes = (data || []).map((item: any) => ({
+        id: item.id,
+        colaborador_id: item.colaborador_id,
+        colaborador_nome: item.profiles?.nome || "Colaborador",
+        data_atestado: item.data_atestado,
+        dias_afastamento: item.dias_afastamento,
+        created_at: item.created_at,
       }));
 
-      setProfiles(profilesWithRoles);
-      setUnidades(uRes.data ?? []);
-      setCargos(cRes.data ?? []);
-    } catch (e) {
-      toast.error("Erro ao carregar dados", { description: (e as Error).message });
+      setAtestadosPendentes(pendentes);
+      setTotalPendentes(pendentes.length);
+    } catch (error) {
+      console.error("Erro ao carregar atestados pendentes:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadAtestadosPendentes();
 
-  const filteredProfiles = profiles.filter(p => {
-    const matchesSearch = p.nome.toLowerCase().includes(search.toLowerCase()) || p.cpf.includes(search.replace(/\D/g, ""));
-    const matchesUnidade = filtroUnidade === "all" || p.unidade_id === filtroUnidade;
-    const matchesStatus = filtroStatus === "all" || (filtroStatus === "ativo" ? p.ativo : !p.ativo);
-    const matchesCargo = filtroCargo === "all" || p.cargo === filtroCargo;
-    return matchesSearch && matchesUnidade && matchesStatus && matchesCargo;
-  });
-
-  const uniqueCargos = [...new Set(profiles.map(p => p.cargo).filter(Boolean))];
-
-  const toUpperCaseTrim = (str: string) => str.trim().toUpperCase();
-
-  const handleCreate = async () => {
-    setBusy(true);
-    try {
-      const cleanCpf = onlyDigits(newForm.cpf);
-      if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
-
-      const { data: authUser, error: authErr } = await adminApi.createUser({
-        nome: toUpperCaseTrim(newForm.nome),
-        cpf: cleanCpf,
-        email: newForm.email.trim().toLowerCase() || `${cleanCpf}@pakere.com.br`,
-        senha: newForm.senha || cleanCpf.slice(-6),
-        cargo: toUpperCaseTrim(newForm.cargo),
-        dataAdmissao: newForm.dataAdmissao,
-        dataNascimento: newForm.dataNascimento,
-        folgaFixaSemana: newForm.folgaFixa === "" || newForm.folgaFixa === "none" ? null : Number(newForm.folgaFixa),
-        role: newForm.perfil_acesso,
-      });
-
-      if (authErr) throw authErr;
-
-      const { error: profErr } = await supabase.from("profiles").update({
-        matricula: toUpperCaseTrim(newForm.matricula) || null,
-        whatsapp: newForm.whatsapp.trim() || null,
-        unidade_id: newForm.unidadeId === "" ? null : newForm.unidadeId,
-        ativo: true,
-        regime_trabalho: newForm.regime_trabalho === "none" ? null : newForm.regime_trabalho,
-        data_demissao: newForm.data_demissao || null,
-        tipo_vinculo: newForm.tipo_vinculo || "CLT",
-        possui_folha_ponto: newForm.possui_folha_ponto || false,
-      }).eq("id", authUser.userId);
-
-      if (profErr) throw profErr;
-
-      toast.success("Colaborador criado com sucesso!");
-      setOpenNewDialog(false);
-      setNewForm(blankEditForm);
-      loadData();
-    } catch (e) {
-      toast.error("Erro ao criar colaborador", { description: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const openEdit = (p: any) => {
-    setEditingProfile(p);
-    setEditForm({
-      nome: p.nome,
-      cpf: formatCPF(p.cpf),
-      matricula: p.matricula ?? "",
-      email: p.email_contato ?? "",
-      whatsapp: p.whatsapp ?? "",
-      cargo: p.cargo,
-      unidadeId: p.unidade_id ?? "",
-      folgaFixa: p.folga_fixa_semana?.toString() ?? "none",
-      dataNascimento: p.data_nascimento ?? "",
-      dataAdmissao: p.data_admissao ?? "",
-      perfil_acesso: p.role ?? "colaborador",
-      ativo: p.ativo,
-      senha: "",
-      regime_trabalho: p.regime_trabalho ?? "none",
-      data_demissao: p.data_demissao ?? "",
-      tipo_vinculo: p.tipo_vinculo ?? "CLT",
-      possui_folha_ponto: p.possui_folha_ponto ?? false,
-    });
-  };
-
-  const handleUpdate = async () => {
-    if (!editingProfile) return;
-    setBusy(true);
-    try {
-      const cleanCpf = onlyDigits(editForm.cpf);
-      if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
-
-      const { error: profErr } = await supabase.from("profiles").update({
-        nome: toUpperCaseTrim(editForm.nome),
-        cpf: cleanCpf,
-        matricula: toUpperCaseTrim(editForm.matricula) || null,
-        email_contato: editForm.email.trim().toLowerCase() || null,
-        whatsapp: editForm.whatsapp.trim() || null,
-        cargo: toUpperCaseTrim(editForm.cargo),
-        unidade_id: editForm.unidadeId === "" ? null : editForm.unidadeId,
-        folga_fixa_semana: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa),
-        data_nascimento: editForm.dataNascimento || null,
-        data_admissao: editForm.dataAdmissao || null,
-        ativo: editForm.ativo,
-        updated_at: new Date().toISOString(),
-        regime_trabalho: editForm.regime_trabalho === "none" ? null : editForm.regime_trabalho,
-        data_demissao: editForm.data_demissao || null,
-        tipo_vinculo: editForm.tipo_vinculo || "CLT",
-        possui_folha_ponto: editForm.possui_folha_ponto || false,
-      }).eq("id", editingProfile.id);
-
-      if (profErr) throw profErr;
-
-      const currentRole = editingProfile.role;
-      const newRole = editForm.perfil_acesso;
-      if (currentRole !== newRole) {
-        if (currentRole) {
-          await supabase.from("user_roles").delete().eq("user_id", editingProfile.id).eq("role", currentRole);
+    // Inscreve para mudanças em tempo real
+    const channel = supabase
+      .channel("atestados-pendentes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "atestados",
+          filter: "status=eq.pendente",
+        },
+        () => {
+          loadAtestadosPendentes();
         }
-        await supabase.from("user_roles").upsert({ user_id: editingProfile.id, role: newRole }, { onConflict: "user_id,role" });
-      }
+      )
+      .subscribe();
 
-      toast.success("Colaborador atualizado!");
-      setEditingProfile(null);
-      loadData();
-    } catch (e) {
-      toast.error("Erro ao atualizar", { description: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const doDelete = async () => {
-    if (!confirmDelete) return;
-    setBusy(true);
-    try {
-      await adminApi.deleteUser(confirmDelete.id);
-      toast.success("Colaborador excluído.");
-      setConfirmDelete(null);
-      loadData();
-    } catch (e) {
-      toast.error("Erro ao excluir", { description: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const openResetPassword = (p: any) => {
-    setResetPasswordDialog({ profile: p, senha: "", confirmar: "" });
-  };
-
-  const doResetPassword = async () => {
-    if (!resetPasswordDialog) return;
-    if (resetPasswordDialog.senha !== resetPasswordDialog.confirmar) return toast.error("As senhas não conferem");
-    if (resetPasswordDialog.senha.length < 6) return toast.error("Senha deve ter pelo menos 6 caracteres");
-    setBusy(true);
-    try {
-      await adminApi.resetPassword(resetPasswordDialog.profile.id, resetPasswordDialog.senha);
-      toast.success("Senha redefinida com sucesso!");
-      setResetPasswordDialog(null);
-    } catch (e) {
-      toast.error("Erro ao redefinir senha", { description: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  };
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const groupedModules = adminModules.reduce((acc, module) => {
     if (!acc[module.category]) {
@@ -343,20 +208,91 @@ export default function AdminHomeAdminPage() {
         <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
           <Shield className="size-6 text-primary" /> Painel Administrativo
         </h1>
-        <p className="text-muted-foreground mt-1">Acesso rápido aos módulos de gestão.</p>
+        <p className="text-muted-foreground mt-1">Visão geral e acesso rápido aos módulos de gestão.</p>
       </div>
+
+      {/* 🔥 Card de Atestados Pendentes */}
+      <Card className="border-amber-200 bg-amber-50/30 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-amber-800">
+            <FileWarning className="size-5 text-amber-600" />
+            Atestados Pendentes de Aprovação
+            {totalPendentes > 0 && (
+              <Badge className="bg-amber-600 text-white hover:bg-amber-700 ml-2">
+                {totalPendentes}
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center py-6 text-muted-foreground">
+              <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-amber-600 mr-2"></div>
+              Carregando...
+            </div>
+          ) : atestadosPendentes.length === 0 ? (
+            <div className="text-center py-6 text-green-600 flex items-center justify-center gap-2">
+              <span className="text-2xl">✅</span>
+              Nenhum atestado pendente de aprovação.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {atestadosPendentes.map((atestado) => (
+                <div
+                  key={atestado.id}
+                  className="flex items-center justify-between p-3 bg-white rounded-xl border border-amber-200 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="size-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+                      <FileWarning className="size-5" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-slate-900">
+                        {atestado.colaborador_nome}
+                      </div>
+                      <div className="text-sm text-muted-foreground flex items-center gap-3">
+                        <span>
+                          {new Date(atestado.data_atestado + "T00:00:00").toLocaleDateString("pt-BR")}
+                        </span>
+                        <span>•</span>
+                        <span>{atestado.dias_afastamento} dia(s)</span>
+                        <span>•</span>
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                          Pendente
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <Link to={`/admin/documentos/atestados`}>
+                    <Button variant="outline" size="sm" className="border-amber-300 text-amber-700 hover:bg-amber-50">
+                      Aprovar
+                    </Button>
+                  </Link>
+                </div>
+              ))}
+              {totalPendentes > 5 && (
+                <div className="text-center">
+                  <Link to="/admin/documentos/atestados">
+                    <Button variant="ghost" size="sm" className="text-amber-600">
+                      Ver todos os {totalPendentes} pendentes →
+                    </Button>
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {Object.entries(groupedModules).map(([category, modules]) => (
         <div key={category} className="space-y-4">
-          <h2 className="text-xl font-semibold border-b border-yellow-500 pb-1 text-red-600">{category}</h2>
+          <h2 className="text-xl font-semibold border-b border-yellow-500 pb-1 text-red-600">
+            {category}
+          </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {modules.map((module) => (
-                <Link
-                key={module.to}
-                to={module.to}
-                className="block h-full"
-              >
-                <div className="bg-card border border-border rounded-2xl p-5 shadow-sm hover:shadow-lg hover:border-primary/50 border-2 transition-all duration-200">
+              <Link key={module.to} to={module.to} className="block h-full">
+                <div className="bg-card border border-border rounded-2xl p-5 shadow-sm hover:shadow-lg hover:border-primary/50 border-2 transition-all duration-200 h-full">
                   <div className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <div className="text-lg font-semibold text-primary">{module.title}</div>
                     <module.icon className="size-6 text-yellow-500" />
@@ -368,83 +304,6 @@ export default function AdminHomeAdminPage() {
           </div>
         </div>
       ))}
-
-      <Dialog open={openNewDialog} onOpenChange={setOpenNewDialog}>
-        <DialogTrigger asChild>
-          <Button variant="outline" className="justify-start gap-2" onClick={() => { setNewForm(blankEditForm); setOpenNewDialog(true); }}>
-            <Plus className="size-4" /> Novo Colaborador
-          </Button>
-        </DialogTrigger>
-        <ColaboradorFormDialog
-          open={openNewDialog}
-          onOpenChange={setOpenNewDialog}
-          form={newForm}
-          setForm={setNewForm}
-          unidades={unidades}
-          cargos={cargos}
-          busy={busy}
-          onSave={handleCreate}
-          title="Novo Colaborador"
-          isEdit={false}
-        />
-      </Dialog>
-
-      <ColaboradorFormDialog
-        open={!!editingProfile}
-        onOpenChange={(open) => { if (!open) setEditingProfile(null); }}
-        form={editForm}
-        setForm={setEditForm}
-        unidades={unidades}
-        cargos={cargos}
-        busy={busy}
-        onSave={handleUpdate}
-        title="Editar Colaborador"
-        isEdit={true}
-      />
-
-      <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir {confirmDelete?.nome}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação é irreversível. O usuário será removido do Auth e o perfil será excluído.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={doDelete} className="bg-red-600 text-white hover:bg-red-700" disabled={busy}>
-              {busy ? "Excluindo..." : "Excluir Permanentemente"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={!!resetPasswordDialog} onOpenChange={(o) => !o && setResetPasswordDialog(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Redefinir senha de {resetPasswordDialog?.profile.nome}</AlertDialogTitle>
-            <AlertDialogDescription>
-              A nova senha será aplicada imediatamente.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="nova-senha">Nova Senha</Label>
-              <Input id="nova-senha" type="password" value={resetPasswordDialog?.senha} onChange={(e) => setResetPasswordDialog({ ...resetPasswordDialog!, senha: e.target.value })} placeholder="Mínimo 6 caracteres" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirmar-senha">Confirmar Senha</Label>
-              <Input id="confirmar-senha" type="password" value={resetPasswordDialog?.confirmar} onChange={(e) => setResetPasswordDialog({ ...resetPasswordDialog!, confirmar: e.target.value })} placeholder="Repita a senha" />
-            </div>
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={doResetPassword} className="bg-primary text-white hover:bg-primary/90" disabled={busy}>
-              {busy ? "Salvando..." : "Redefinir Senha"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
