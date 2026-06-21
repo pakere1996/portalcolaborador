@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +29,7 @@ import {
   Loader2,
   X,
 } from "lucide-react";
+import { useAtestadosPendentes } from "@/lib/atestados-pendentes-context";
 
 const adminModules = [
   {
@@ -139,82 +139,23 @@ const adminModules = [
   },
 ];
 
-interface AtestadoPendente {
-  id: string;
-  colaborador_id: string;
-  colaborador_nome: string;
-  data_atestado: string;
-  dias_afastamento: number;
-  created_at: string;
-}
-
 export default function AdminHomeAdminPage() {
-  const [pendentes, setPendentes] = useState<AtestadoPendente[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showNotification, setShowNotification] = useState(false);
-
-  const carregarPendentes = async () => {
-    setLoading(true);
-    try {
-      // 1. Buscar atestados pendentes
-      const { data: atestados, error: atestadosError } = await supabase
-        .from("atestados")
-        .select("id, colaborador_id, data_atestado, dias_afastamento, created_at")
-        .eq("status", "pendente")
-        .order("created_at", { ascending: false });
-
-      if (atestadosError) throw atestadosError;
-
-      if (!atestados || atestados.length === 0) {
-        setPendentes([]);
-        setLoading(false);
-        return;
-      }
-
-      // 2. Buscar nomes dos colaboradores
-      const colaboradorIds = atestados.map((a) => a.colaborador_id);
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, nome")
-        .in("id", colaboradorIds);
-
-      if (profilesError) throw profilesError;
-
-      const profileMap = new Map(profiles?.map((p) => [p.id, p.nome]) || []);
-
-      const pendentesFormatados: AtestadoPendente[] = atestados.map((item) => ({
-        id: item.id,
-        colaborador_id: item.colaborador_id,
-        colaborador_nome: profileMap.get(item.colaborador_id) || "Colaborador",
-        data_atestado: item.data_atestado,
-        dias_afastamento: item.dias_afastamento,
-        created_at: item.created_at,
-      }));
-
-      setPendentes(pendentesFormatados);
-
-      if (pendentesFormatados.length > 0) {
-        setShowNotification(true);
-        toast.info(`📋 ${pendentesFormatados.length} atestado(s) pendente(s) de aprovação`, {
-          duration: 6000,
-          action: {
-            label: "Ver agora",
-            onClick: () => {
-              window.location.href = "/admin/documentos/atestados";
-            },
-          },
-        });
-      }
-    } catch (error) {
-      console.error("Erro ao carregar atestados pendentes:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { pendentes, loading, totalPendentes, showNotification, setShowNotification } = useAtestadosPendentes();
 
   useEffect(() => {
-    carregarPendentes();
-  }, []);
+    // Se houver pendentes e a notificação ainda não foi mostrada, exibe o toast
+    if (totalPendentes > 0 && !showNotification) {
+      toast.info(`📋 ${totalPendentes} atestado(s) pendente(s) de aprovação`, {
+        duration: 6000,
+        action: {
+          label: "Ver agora",
+          onClick: () => {
+            window.location.href = "/admin/documentos/atestados";
+          },
+        },
+      });
+    }
+  }, [totalPendentes]);
 
   const groupedModules = adminModules.reduce((acc, module) => {
     if (!acc[module.category]) {
@@ -233,13 +174,14 @@ export default function AdminHomeAdminPage() {
         <p className="text-muted-foreground mt-1">Acesso rápido aos módulos de gestão.</p>
       </div>
 
-      {!loading && pendentes.length > 0 && (
+      {/* 🔥 Card de Atestados Pendentes – usando dados do contexto */}
+      {!loading && totalPendentes > 0 && (
         <Card className="border-amber-200 bg-amber-50/50 shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-amber-800">
               <Bell className="size-5" />
               Atestados Pendentes de Aprovação
-              <Badge className="ml-2 bg-amber-600 text-white">{pendentes.length}</Badge>
+              <Badge className="ml-2 bg-amber-600 text-white">{totalPendentes}</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -294,7 +236,7 @@ export default function AdminHomeAdminPage() {
         </div>
       )}
 
-      {/* 🔥 Popout de notificação – com asChild para evitar erro de HTML inválido */}
+      {/* 🔥 Popout de notificação – usando estado do contexto */}
       <AlertDialog open={showNotification} onOpenChange={setShowNotification}>
         <AlertDialogContent className="max-w-md rounded-2xl">
           <AlertDialogHeader>
@@ -309,10 +251,9 @@ export default function AdminHomeAdminPage() {
             </div>
           </AlertDialogHeader>
 
-          {/* 🔥 Correção: AlertDialogDescription com asChild para usar <div> em vez de <p> */}
           <AlertDialogDescription asChild>
             <div className="text-base text-muted-foreground">
-              Existem <strong>{pendentes.length}</strong> atestado(s) aguardando sua aprovação.
+              Existem <strong>{totalPendentes}</strong> atestado(s) aguardando sua aprovação.
               <br />
               <br />
               {pendentes.map((p) => (
