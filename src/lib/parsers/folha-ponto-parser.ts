@@ -1,108 +1,123 @@
-import type { DocumentParser, PageResult, ProfileForMatching } from "./document-parsers";
-import type { PageText } from "../pdf-utils";
-import { extractCPF, findBestProfileMatch } from "../documentos-matching";
-import { extractPeriodo } from "../documentos";
+import { PageResult } from "@/components/DocumentImportForm";
 
-export class FolhaPontoParser implements DocumentParser {
-  parse(pages: PageText[], profiles: ProfileForMatching[]): PageResult[] {
-    return pages.map((p) => {
-      const text = p.text;
+interface PageData {
+  pageNumber: number;
+  text: string;
+}
 
-      const nameMatch = text.match(
-        /\d{2}\/\d{2}\/\d{4}\s+([A-ZÀ-ÚÇÁÉÍÓÚÃÕÂÊÔ\s]+?)\s+\d+\s+[A-Z]/
-      );
-      const nome = nameMatch ? nameMatch[1].trim().replace(/\s+/g, " ") : null;
+interface ProfileMatch {
+  id: string;
+  nome: string;
+  cpf: string;
+  matricula: string | null;
+  unidade_id: string | null;
+  possui_folha_ponto?: boolean;
+  regime_trabalho?: string | null;
+}
 
-      const cpf = extractCPF(text);
-      const periodo = this.extractPeriodoPonto(text);
-      const cnpjMatch = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
-      const cnpj = cnpjMatch ? cnpjMatch[0] : null;
-      const cargoTexto = this.extractCargo(text);
-      const dataAdmissao = this.extractDataAdmissao(text, periodo);
-      const match = findBestProfileMatch(nome, cpf, profiles as any);
-      const perfilVinculado = match.profile;
+/**
+ * Analisa as páginas de uma folha de ponto e tenta extrair informações relevantes
+ * para vincular a um colaborador.
+ */
+export const parseFolhaPonto = (
+  pages: PageData[],
+  profiles: ProfileMatch[]
+): PageResult[] => {
+  return pages.map((p) => {
+    const text = p.text;
+    const lines = text.split('\n').filter(line => line.trim().length > 0);
+    
+    let nome: string | null = null;
+    let cpf: string | null = null;
+    let matricula: string | null = null;
+    let cnpj: string | null = null;
+    let mes: number | null = null;
+    let ano: number | null = null;
+    let unidadeId: string | null = null;
+    let matchedProfile: ProfileMatch | null = null;
 
-      return {
-        pageNumber: p.pageNumber,
-        text,
-        nome,
-        cpf,
-        cnpj,
-        mes: periodo?.mes ?? null,
-        ano: periodo?.ano ?? null,
-        unidadeId: null,
-        cargo: null,
-        regimeTrabalho: null,
-        isNewCargo: false,
-        suggestedCargoName: cargoTexto,
-        dataAdmissao,
-        matchStatus: match.status as "automatico" | "sugerido" | "revisao",
-        matchedProfile: perfilVinculado as any,
-        confidence: match.confidence,
-        vinculado: false,
-        ignorado: false,
-      };
-    });
-  }
+    for (const line of lines) {
+      // Procura por nome
+      if (!nome && line.length > 5 && line.length < 60) {
+        const nomeCandidato = line.trim();
+        if (!/^\d/.test(nomeCandidato) && !/^(?:total|frequência|dia|entrada|saída)/i.test(nomeCandidato)) {
+          nome = nomeCandidato;
+        }
+      }
 
-  private extractPeriodoPonto(text: string): { mes: number; ano: number } | null {
-    const regex = /Periodo de referencia:\s*de\s*(\d{2})\/(\d{2})\/(\d{4})/i;
-    const match = text.match(regex);
-    if (match) {
-      return { mes: parseInt(match[1]), ano: parseInt(match[3]) };
+      // Procura por CPF
+      if (!cpf) {
+        const cpfMatch = line.match(/\d{3}\.\d{3}\.\d{3}-\d{2}/);
+        if (cpfMatch) {
+          cpf = cpfMatch[0];
+        }
+      }
+
+      // Procura por CNPJ
+      if (!cnpj) {
+        const cnpjMatch = line.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
+        if (cnpjMatch) {
+          cnpj = cnpjMatch[0];
+        }
+      }
+
+      // Procura por matrícula
+      if (!matricula) {
+        const matriculaMatch = line.match(/matr[ií]cula\s*[:.]?\s*(\d+)/i);
+        if (matriculaMatch) {
+          matricula = matriculaMatch[1];
+        }
+      }
+
+      // Procura por período (mês/ano)
+      if (!mes || !ano) {
+        const periodoMatch = line.match(/(\d{2})\/(\d{4})/);
+        if (periodoMatch) {
+          mes = parseInt(periodoMatch[1]);
+          ano = parseInt(periodoMatch[2]);
+        }
+      }
     }
-    return extractPeriodo(text, "folha_ponto");
-  }
 
-  private extractCargo(text: string): string | null {
-    const cargoMatch = text.match(
-      /(?:cargo|fun[çc][ãa]o|cargo\/fun[çc][ãa]o)[:\s-]*([A-Za-zÀ-ÿÇç\u00a0\s\./-]+)/i
-    );
-    let cargoTexto = cargoMatch ? cargoMatch[1].replace(/\u00a0/g, " ").trim() : null;
-
-    if (cargoTexto) {
-      cargoTexto = cargoTexto.split(
-        /(?:setor|dep|unidade|c\.|registro|s[eé]rie|hor[aá]rio|escala|cbo|pis|ctps|data|\s{2,})/i
-      )[0].trim();
-    }
-    return cargoTexto;
-  }
-
-  private extractDataAdmissao(
-    text: string,
-    periodo: { mes: number; ano: number } | null
-  ): string | null {
-    const admissaoDireto = text.match(
-      /(?:admiss[ãa]o|admissao|adm)[:\s]*[^0-9/]{0,20}(\d{2})\/(\d{2})\/(\d{4})/i
-    );
-
-    if (admissaoDireto) {
-      return `${admissaoDireto[3]}-${admissaoDireto[2]}-${admissaoDireto[1]}`;
-    }
-
-    const todasAsDatas = text.match(/\d{2}\/\d{2}\/\d{4}/g) || [];
-    if (todasAsDatas.length > 0 && periodo) {
-      const anoPeriodo = periodo.ano;
-      let dataCandidata = todasAsDatas.find((d) => {
-        const anoData = parseInt(d.split("/")[2]);
-        return anoData < anoPeriodo;
+    // Tenta encontrar match com algum perfil
+    if (nome) {
+      const nomeNormalizado = nome
+        .toUpperCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      const matched = profiles.find((profile) => {
+        const profileNome = profile.nome
+          .toUpperCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        return nomeNormalizado.includes(profileNome) || profileNome.includes(nomeNormalizado);
       });
 
-      if (!dataCandidata) {
-        const ordenadas = [...todasAsDatas].sort((a, b) => {
-          const [dA, mA, aA] = a.split("/").map(Number);
-          const [dB, mB, aB] = b.split("/").map(Number);
-          return new Date(aA, mA - 1, dA).getTime() - new Date(aB, mB - 1, dB).getTime();
-        });
-        dataCandidata = ordenadas[0];
-      }
-
-      if (dataCandidata) {
-        const [dia, mes, ano] = dataCandidata.split("/");
-        return `${ano}-${mes}-${dia}`;
+      if (matched) {
+        matchedProfile = matched;
       }
     }
 
-    return null;
-  }
-}
+    return {
+      pageNumber: p.pageNumber,
+      text: p.text,
+      nome,
+      cnpj,
+      mes,
+      ano,
+      unidadeId: unidadeId || (matchedProfile?.unidade_id ?? null),
+      matchStatus: matchedProfile ? "automatico" : "revisao",
+      matchedProfile: matchedProfile || null,
+      resolvido: !!matchedProfile,
+      ignorado: false,
+      aprovado: false,
+      duplicadoId: null,
+      acaoSeDuplicado: null,
+    };
+  });
+};
