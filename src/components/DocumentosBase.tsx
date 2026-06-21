@@ -24,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2, Eye } from "lucide-react";
+import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { formatBR } from "@/lib/folga-rules";
 
@@ -39,8 +39,8 @@ interface Documento {
   nome_pdf: string | null;
   created_at: string;
   aprovado_em?: string | null;
-  subtipo?: string | null; // 🔥 NOVO: 'mensal' | 'quinzenal'
-  quinzena?: number | null; // 🔥 NOVO: 1 ou 2
+  subtipo?: string | null;    // "mensal" | "quinzenal"
+  quinzena?: number | null;    // 1 ou 2
 }
 
 interface Profile {
@@ -63,6 +63,10 @@ interface DocumentosBaseProps {
   icone: React.ReactNode;
   descricao: string;
   importTitle: string;
+  // 🔥 Prop para adicionar colunas extras na tabela (ex: subtipo)
+  colunasExtras?: (doc: Documento) => React.ReactNode;
+  // 🔥 Prop para adicionar filtros extras
+  filtrosExtras?: React.ReactNode;
 }
 
 // Hook para detectar mobile
@@ -78,20 +82,29 @@ const useMediaQuery = (query: string) => {
   return matches;
 };
 
-export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: DocumentosBaseProps) {
+export function DocumentosBase({ 
+  tipo, 
+  titulo, 
+  icone, 
+  descricao, 
+  importTitle, 
+  colunasExtras,
+  filtrosExtras 
+}: DocumentosBaseProps) {
   const [aba, setAba] = useState<"importar" | "historico">("importar");
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [loading, setLoading] = useState(false);
-
+  
   // Filtros
   const [filtroColab, setFiltroColab] = useState("todos");
   const [filtroMes, setFiltroMes] = useState("todos");
   const [filtroAno, setFiltroAno] = useState("todos");
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [filtroUnidade, setFiltroUnidade] = useState("todos");
-  const [filtroSubtipo, setFiltroSubtipo] = useState("todos"); // 🔥 NOVO
+  // 🔥 Filtro extra para subtipo
+  const [filtroSubtipo, setFiltroSubtipo] = useState("todos");
 
   // Estados de edição
   const [editando, setEditando] = useState<string | null>(null);
@@ -99,7 +112,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
   const [editAno, setEditAno] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Estado para popout de detalhes (mobile)
+  // Popout de detalhes (mobile)
   const [selectedDoc, setSelectedDoc] = useState<Documento | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
@@ -107,10 +120,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
   const [excluirDialogOpen, setExcluirDialogOpen] = useState(false);
   const [documentoParaExcluir, setDocumentoParaExcluir] = useState<Documento | null>(null);
   const [excluindo, setExcluindo] = useState(false);
-
-  // Visualização do PDF
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const isMobile = useMediaQuery('(max-width: 768px)');
 
@@ -142,7 +151,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
       const profileMap = new Map(profs?.map(p => [p.id, p]) ?? []);
       const unitMap = new Map(units?.map(u => [u.id, u.nome]) ?? []);
 
-      // 🔥 Ordenação: ano/mês desc, depois unidade, depois nome
       const sortedDocs = (docs ?? []).sort((a, b) => {
         if (a.ano !== b.ano) return b.ano - a.ano;
         if (a.mes !== b.mes) return b.mes - a.mes;
@@ -181,19 +189,24 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
       if (filtroColab !== "todos" && d.colaborador_id !== filtroColab) return false;
       if (filtroMes !== "todos" && d.mes !== parseInt(filtroMes)) return false;
       if (filtroAno !== "todos" && d.ano !== parseInt(filtroAno)) return false;
-      if (filtroSubtipo !== "todos") {
-        const subtipo = d.subtipo || "mensal";
-        if (filtroSubtipo === "quinzenal" && subtipo !== "quinzenal") return false;
-        if (filtroSubtipo === "mensal" && subtipo !== "mensal" && subtipo !== null) return false;
-      }
+      
       const profile = profiles.find(p => p.id === d.colaborador_id);
       if (!profile) return false;
+      
       if (filtroStatus === "ativo" && !profile.ativo) return false;
       if (filtroStatus === "inativo" && profile.ativo) return false;
       if (filtroUnidade !== "todos" && profile.unidade_id !== filtroUnidade) return false;
+
+      // 🔥 Filtro por subtipo (se disponível)
+      if (filtroSubtipo !== "todos") {
+        const docSubtipo = d.subtipo || "mensal";
+        if (filtroSubtipo === "quinzenal" && docSubtipo !== "quinzenal") return false;
+        if (filtroSubtipo === "mensal" && docSubtipo !== "mensal") return false;
+      }
+
       return true;
     });
-  }, [documentos, profiles, filtroColab, filtroMes, filtroAno, filtroSubtipo, filtroStatus, filtroUnidade]);
+  }, [documentos, profiles, filtroColab, filtroMes, filtroAno, filtroStatus, filtroUnidade, filtroSubtipo]);
 
   const handleDownload = useCallback(async (doc: Documento) => {
     const { data } = await supabase.storage
@@ -203,18 +216,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
       window.open(data.signedUrl, "_blank");
     } else {
       toast.error("Erro ao gerar link de download");
-    }
-  }, []);
-
-  const handlePreview = useCallback(async (doc: Documento) => {
-    const { data } = await supabase.storage
-      .from("documentos")
-      .createSignedUrl(doc.storage_path, 60);
-    if (data?.signedUrl) {
-      setPreviewUrl(data.signedUrl);
-      setPreviewOpen(true);
-    } else {
-      toast.error("Erro ao gerar link de visualização");
     }
   }, []);
 
@@ -289,6 +290,15 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
     }
   }, [documentoParaExcluir, load]);
 
+  // 🔥 Função para exibir a label do subtipo
+  const getSubtipoLabel = (doc: Documento) => {
+    if (doc.subtipo === "quinzenal") {
+      const quinzenaLabel = doc.quinzena === 1 ? "1ª" : doc.quinzena === 2 ? "2ª" : "";
+      return `Adiantamento${quinzenaLabel ? ` (${quinzenaLabel} Quinzena)` : ""}`;
+    }
+    return "Mensal";
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div>
@@ -337,7 +347,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
       {aba === "historico" && (
         <div className="space-y-4">
           {/* Filtros */}
-          <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             <div className="space-y-1 col-span-2 md:col-span-1">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Colaborador</Label>
               <Select value={filtroColab} onValueChange={setFiltroColab}>
@@ -397,18 +407,21 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                 </SelectContent>
               </Select>
             </div>
-            {/* 🔥 NOVO FILTRO: Subtipo */}
-            <div className="space-y-1">
-              <Label className="text-xs uppercase text-muted-foreground font-bold">Tipo</Label>
-              <Select value={filtroSubtipo} onValueChange={setFiltroSubtipo}>
-                <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  <SelectItem value="mensal">Mensal</SelectItem>
-                  <SelectItem value="quinzenal">Adiantamento</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {/* 🔥 Filtro extra para subtipo (apenas contracheque) */}
+            {tipo === "contracheque" && (
+              <div className="space-y-1 col-span-2 md:col-span-1">
+                <Label className="text-xs uppercase text-muted-foreground font-bold">Tipo</Label>
+                <Select value={filtroSubtipo} onValueChange={setFiltroSubtipo}>
+                  <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    <SelectItem value="mensal">Mensal</SelectItem>
+                    <SelectItem value="quinzenal">Adiantamento</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {filtrosExtras}
           </div>
 
           {loading ? (
@@ -426,32 +439,45 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                 const profile = profiles.find((p) => p.id === doc.colaborador_id);
                 const unidade = profile?.unidade_id ? unidades.find(u => u.id === profile.unidade_id) : null;
                 const isEditing = editando === doc.id;
-                const isAdiantamento = doc.subtipo === 'quinzenal';
-                const subtipoLabel = isAdiantamento ? 'Adiantamento' : 'Mensal';
+                const subtipoLabel = getSubtipoLabel(doc);
 
                 return (
                   <div
                     key={doc.id}
-                    className="bg-card border border-border rounded-2xl p-4 space-y-2 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                    onClick={() => openDetail(doc)}
+                    className="bg-card border border-border rounded-2xl p-4 space-y-2 shadow-sm hover:shadow-md transition-shadow"
                   >
-                    <div className="flex items-start justify-between gap-2">
+                    <div 
+                      className="flex items-start justify-between gap-2 cursor-pointer"
+                      onClick={() => openDetail(doc)}
+                    >
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-sm truncate">{profile?.nome ?? "—"}</div>
-                        <div className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+                        <div className="text-xs text-muted-foreground">
                           {unidade?.nome && <span>{unidade.nome} • </span>}
-                          <span>{String(doc.mes).padStart(2, "0")}/{doc.ano}</span>
-                          {isAdiantamento && (
-                            <Badge className="text-[9px] bg-blue-100 text-blue-700 border-blue-200 px-1.5 py-0 h-5">
-                              Adiantamento
+                          {String(doc.mes).padStart(2, "0")}/{doc.ano}
+                          {/* 🔥 Badge de subtipo (contracheque) */}
+                          {tipo === "contracheque" && doc.subtipo === "quinzenal" && (
+                            <span className="ml-1 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full border border-blue-200">
+                              {subtipoLabel}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1 mt-1">
+                          <Badge
+                            className={
+                              doc.status === "disponivel" || doc.status === "vinculado"
+                                ? "bg-green-100 text-green-700 border-green-200"
+                                : "bg-muted text-muted-foreground"
+                            }
+                          >
+                            {doc.status}
+                          </Badge>
+                          {!profile?.ativo && (
+                            <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200">
+                              Inativo
                             </Badge>
                           )}
                         </div>
-                        {!profile?.ativo && (
-                          <Badge variant="outline" className="mt-1 text-[10px] bg-red-50 text-red-600 border-red-200">
-                            Inativo
-                          </Badge>
-                        )}
                       </div>
                       <div className="flex gap-1 shrink-0">
                         <Button
@@ -470,13 +496,13 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                           variant="ghost"
                           size="icon"
                           className="size-8"
-                          title="Visualizar"
+                          title="Detalhes"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handlePreview(doc);
+                            openDetail(doc);
                           }}
                         >
-                          <Eye className="size-4" />
+                          <ChevronRight className="size-4" />
                         </Button>
                       </div>
                     </div>
@@ -515,9 +541,11 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                   <tr>
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground">Colaborador</th>
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground">Competência</th>
+                    {tipo === "contracheque" && (
+                      <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden md:table-cell">Subtipo</th>
+                    )}
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden md:table-cell">Arquivo</th>
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden lg:table-cell">Unidade</th>
-                    <th className="text-center p-4 font-bold uppercase text-[10px] text-muted-foreground">Tipo</th>
                     <th className="text-center p-4 font-bold uppercase text-[10px] text-muted-foreground">Status</th>
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden md:table-cell">Aprovado em</th>
                     <th className="text-right p-4 font-bold uppercase text-[10px] text-muted-foreground">Ações</th>
@@ -527,7 +555,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                   {filtrados.map((doc) => {
                     const profile = profiles.find((p) => p.id === doc.colaborador_id);
                     const unidade = profile?.unidade_id ? unidades.find(u => u.id === profile.unidade_id) : null;
-                    const isAdiantamento = doc.subtipo === 'quinzenal';
+                    const subtipoLabel = getSubtipoLabel(doc);
 
                     return (
                       <tr key={doc.id} className="hover:bg-muted/30 transition-colors">
@@ -557,26 +585,33 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                               </Button>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-1">
+                            <div>
                               <span className="font-mono">{String(doc.mes).padStart(2, "0")}/{doc.ano}</span>
-                              {isAdiantamento && (
-                                <Badge className="text-[9px] bg-blue-100 text-blue-700 border-blue-200 px-1.5 py-0 h-5">
-                                  Adiantamento
-                                </Badge>
+                              {/* 🔥 Badge de subtipo (contracheque) */}
+                              {tipo === "contracheque" && doc.subtipo === "quinzenal" && (
+                                <span className="ml-1 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full border border-blue-200 whitespace-nowrap">
+                                  {subtipoLabel}
+                                </span>
                               )}
                             </div>
                           )}
                         </td>
+                        {tipo === "contracheque" && (
+                          <td className="p-4 hidden md:table-cell">
+                            <span className={`text-xs px-2 py-1 rounded-full ${
+                              doc.subtipo === "quinzenal" 
+                                ? "bg-blue-100 text-blue-700 border border-blue-200" 
+                                : "bg-gray-100 text-gray-700 border border-gray-200"
+                            }`}>
+                              {subtipoLabel}
+                            </span>
+                          </td>
+                        )}
                         <td className="p-4 hidden md:table-cell text-muted-foreground text-xs truncate max-w-[200px]">
                           {doc.nome_pdf ?? "—"}
                         </td>
                         <td className="p-4 hidden lg:table-cell text-muted-foreground">
                           {unidade?.nome ?? "—"}
-                        </td>
-                        <td className="p-4 text-center">
-                          <Badge className={isAdiantamento ? "bg-blue-100 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-700 border-gray-200"}>
-                            {isAdiantamento ? "Adiantamento" : "Mensal"}
-                          </Badge>
                         </td>
                         <td className="p-4 text-center">
                           <Badge
@@ -614,15 +649,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                               variant="ghost"
                               size="icon"
                               className="size-8"
-                              title="Visualizar"
-                              onClick={() => handlePreview(doc)}
-                            >
-                              <Eye className="size-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8"
                               title="Baixar"
                               onClick={() => handleDownload(doc)}
                             >
@@ -632,7 +658,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                               variant="ghost"
                               size="icon"
                               className="size-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                              title="Excluir"
+                              title="Excluir documento"
                               onClick={() => handleExcluir(doc)}
                             >
                               <Trash2 className="size-4" />
@@ -649,26 +675,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
         </div>
       )}
 
-      {/* Dialog de visualização do PDF */}
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
-          <DialogHeader>
-            <DialogTitle>Visualização do Documento</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 min-h-[500px] bg-muted/20 rounded-lg overflow-hidden">
-            {previewUrl ? (
-              <iframe src={previewUrl} className="w-full h-[600px] border-0" title="Visualização do documento" />
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">Carregando...</div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPreviewOpen(false)}>Fechar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog de detalhes (mobile) */}
+      {/* POPOUT DE DETALHES (mobile) */}
       <Dialog open={isDetailOpen} onOpenChange={(o) => !o && setIsDetailOpen(false)}>
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
@@ -683,12 +690,8 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                 <div className="text-muted-foreground">Competência</div>
                 <div className="font-medium">{String(selectedDoc.mes).padStart(2, "0")}/{selectedDoc.ano}</div>
                 
-                <div className="text-muted-foreground">Tipo</div>
-                <div>
-                  <Badge className={selectedDoc.subtipo === 'quinzenal' ? "bg-blue-100 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-700 border-gray-200"}>
-                    {selectedDoc.subtipo === 'quinzenal' ? "Adiantamento" : "Mensal"}
-                  </Badge>
-                </div>
+                <div className="text-muted-foreground">Subtipo</div>
+                <div className="font-medium">{getSubtipoLabel(selectedDoc)}</div>
                 
                 <div className="text-muted-foreground">Unidade</div>
                 <div className="font-medium">
@@ -724,17 +727,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
               </div>
 
               <div className="flex flex-wrap gap-2 pt-2 border-t">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => {
-                    handlePreview(selectedDoc);
-                    setIsDetailOpen(false);
-                  }}
-                >
-                  <Eye className="size-4 mr-1" /> Visualizar
-                </Button>
                 <Button
                   variant="outline"
                   size="sm"
