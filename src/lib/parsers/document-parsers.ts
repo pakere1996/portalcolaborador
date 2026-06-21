@@ -1,35 +1,51 @@
-// src/lib/parsers/contracheque-parser.ts
-import { PageResult, ProfileForMatching } from "@/components/DocumentImportForm";
+import { PageText } from "../pdf-utils";
 
 /**
- * Parser para contracheques - implementação mínima.
- * Se precisar de funcionalidade real, implemente a extração de dados.
+ * Resultado padronizado que cada parser deve retornar por página.
+ * Campos não aplicáveis ao tipo de documento devem vir como null.
  */
-export function parseContracheque(
-  pages: { pageNumber: number; text: string }[],
-  profiles: ProfileForMatching[]
-): PageResult[] {
-  // Versão simplificada que retorna páginas não vinculadas
-  return pages.map((p) => ({
-    pageNumber: p.pageNumber,
-    text: p.text,
-    nome: null,
-    cnpj: null,
-    mes: null,
-    ano: null,
-    unidadeId: null,
-    matchStatus: "revisao" as const,
-    matchedProfile: null,
-    resolvido: false,
-    ignorado: false,
-    aprovado: false,
-    duplicadoId: null,
-    acaoSeDuplicado: null,
-  }));
+export interface PageResult {
+  pageNumber: number;
+  text: string;
+  nome: string | null;
+  cpf: string | null;
+  matricula: string | null; // Adicionado para prioridade de vínculo
+  cnpj: string | null;
+  mes: number | null;
+  ano: number | null;
+  unidadeId: string | null;
+  cargo: string | null;
+  regimeTrabalho: "Horista" | "Mensalista" | null;
+  isNewCargo: boolean;
+  suggestedCargoName: string | null;
+  dataAdmissao: string | null;
+  matchStatus: "automatico" | "sugerido" | "revisao";
+  matchedProfile: ProfileForMatching | null;
+  confidence: number;
+  vinculado: boolean;
+  ignorado: boolean;
 }
 
-export class ContrachequeParser {
-  static parse(pages: { pageNumber: number; text: string }[], profiles: ProfileForMatching[]): PageResult[] {
-    return parseContracheque(pages, profiles);
-  }
+/**
+ * Perfil mínimo necessário para matching (vem da tabela profiles).
+ */
+export interface ProfileForMatching {
+  id: string;
+  nome: string;
+  cpf: string;
+  matricula: string | null;
+  cargo: string | null;
+  unidade_id: string | null;
+  regime_trabalho: string | null;
+}
+
+/**
+ * Interface que todo parser de documento deve implementar.
+ */
+export interface DocumentParser {
+  /**
+   * Recebe o array de páginas já extraído pelo pdf-utils
+   * e devolve um array de PageResult (um por página).
+   */
+  parse(pages: PageText[], profiles: ProfileForMatching[]): PageResult[];
 }
