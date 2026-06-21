@@ -1,0 +1,120 @@
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth-context";
+import { ShieldAlert, CheckCircle, AlertTriangle } from "lucide-react";
+import { formatBR } from "@/lib/folga-rules";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { toast } from "sonner";
+
+interface RegistroDisciplinar {
+  id: string;
+  tipo: string;
+  data_ocorrencia: string;
+  motivo: string;
+  descricao_detalhada: string | null;
+  observacoes_admin: string | null;
+  created_at: string;
+}
+
+const TIPOS_LABELS: Record<string, string> = {
+  advertencia_verbal: "Advertência Verbal",
+  advertencia_escrita: "Advertência Escrita",
+  suspensao: "Suspensão",
+  outros: "Outros",
+};
+
+const TIPOS_CORES: Record<string, string> = {
+  advertencia_verbal: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  advertencia_escrita: "bg-orange-100 text-orange-800 border-orange-300",
+  suspensao: "bg-red-100 text-red-800 border-red-300",
+  outros: "bg-gray-100 text-gray-800 border-gray-300",
+};
+
+export default function DisciplinarPage() {
+  const { user } = useAuth();
+  const [registros, setRegistros] = useState<RegistroDisciplinar[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+    const load = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("registros_disciplinares")
+        .select("*")
+        .eq("colaborador_id", user.id)
+        .order("data_ocorrencia", { ascending: false });
+
+      if (error) {
+        toast.error("Erro ao carregar registros disciplinares", { description: error.message });
+        setLoading(false);
+        return;
+      }
+      setRegistros(data || []);
+      setLoading(false);
+    };
+    load();
+  }, [user]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+          <ShieldAlert className="size-6 text-primary" /> Registros Disciplinares
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          Histórico de advertências, suspensões e outras ocorrências.
+        </p>
+      </div>
+
+      {registros.length === 0 ? (
+        <div className="bg-green-50 border border-green-200 rounded-2xl p-8 text-center space-y-3">
+          <CheckCircle className="size-16 text-green-500 mx-auto" />
+          <h2 className="text-2xl font-bold text-green-700">Parabéns!</h2>
+          <p className="text-green-600 max-w-md mx-auto">
+            Você não possui nenhum registro disciplinar. Continue mantendo uma boa conduta!
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {registros.map((r) => (
+            <Card key={r.id} className="border-border shadow-sm">
+              <CardContent className="p-6 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="font-bold text-lg">{r.motivo}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {formatBR(new Date(r.data_ocorrencia + "T00:00:00"))}
+                    </div>
+                  </div>
+                  <Badge className={TIPOS_CORES[r.tipo] || "bg-gray-100"}>
+                    {TIPOS_LABELS[r.tipo] || r.tipo}
+                  </Badge>
+                </div>
+                {r.descricao_detalhada && (
+                  <div className="bg-muted/30 p-3 rounded-xl text-sm">
+                    <span className="font-semibold">Detalhes:</span> {r.descricao_detalhada}
+                  </div>
+                )}
+                {r.observacoes_admin && (
+                  <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-sm text-amber-800">
+                    <span className="font-semibold">Observação do admin:</span> {r.observacoes_admin}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
