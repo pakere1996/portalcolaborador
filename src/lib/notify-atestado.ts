@@ -1,10 +1,21 @@
+// src/lib/notify-atestado.ts
 import { supabase } from "@/integrations/supabase/client";
 
 export async function notifyAtestadoPendente(atestadoId: string, colaboradorNome: string) {
-  const { data, error } = await supabase.functions.invoke("notify-atestado", {
-    body: { atestadoId, colaboradorNome },
-  });
+  try {
+    const response = await supabase.functions.invoke("notify-atestado", {
+      body: { atestadoId, colaboradorNome },
+    });
 
-  if (error) throw new Error(error.message);
-  if (data?.error) throw new Error(data.error);
+    if (response.error) {
+      console.warn("Função de notificação não disponível (404):", response.error);
+      // Não lança erro para não quebrar o fluxo do usuário
+      return;
+    }
+
+    console.log("Notificação enviada com sucesso para administradores.");
+  } catch (error) {
+    console.warn("Erro ao notificar administradores:", error);
+    // Não lança erro para não quebrar o fluxo do usuário
+  }
 }
