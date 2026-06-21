@@ -11,9 +11,7 @@ import Trocas from "./pages/Trocas";
 import Historico from "./pages/Historico";
 import Documentos from "./pages/Documentos";
 import DocumentosAtestados from "./pages/DocumentosAtestados";
-import DisciplinarPage from "./pages/Disciplinar";
-// ...
-<Route path="/documentos/disciplinar" element={<DisciplinarPage />} />
+import DocumentosDisciplinar from "./pages/DocumentosDisciplinar"; // 🔥 NOVO
 
 // Admin Pages
 import HomeAdmin from "./pages/admin/HomeAdmin";
@@ -74,6 +72,7 @@ function AuthenticatedRoutes() {
         <Route path="/documentos" element={<Documentos />} />
         <Route path="/documentos/atestados" element={<DocumentosAtestados />} />
         <Route path="/documentos/ponto" element={<Documentos />} />
+        <Route path="/documentos/disciplinar" element={<DocumentosDisciplinar />} /> {/* 🔥 NOVA ROTA */}
 
         {/* 🔥 Rotas de Home com redirecionamento baseado em isAdmin */}
         <Route path="/home" element={isAdmin ? <Navigate to="/admin/home" replace /> : <Home />} />
@@ -104,7 +103,7 @@ function AuthenticatedRoutes() {
             <Route path="/admin/documentos/atestados" element={<AtestadosAdmin />} />
             <Route path="/admin/documentos/disciplinar" element={<RegistrosDisciplinaresAdmin />} />
             
-            {/* 🔥 Comunicação Group */}
+            {/* Comunicação Group */}
             <Route path="/admin/mensagens" element={<MensagensAdmin />} />
             <Route path="/admin/avisos" element={<QuadroAvisosAdmin />} />
             
