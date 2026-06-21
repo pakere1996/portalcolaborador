@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { FileText, Download, Eye, Filter, DownloadCloud } from "lucide-react";
+import { FileText, Download, Eye, Filter } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
 import {
   Dialog,
@@ -21,13 +21,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 
 interface Documento {
   id: string;
   tipo: string;
-  subtipo?: string | null;
-  quinzena?: number | null;
+  subtipo?: string | null; // "mensal" | "quinzenal" | null
+  quinzena?: number | null; // 1 | 2
   mes: number;
   ano: number;
   storage_path: string;
@@ -35,20 +34,16 @@ interface Documento {
   created_at: string;
 }
 
-const MESES = [
+const TIPOS_DOCUMENTO = [
   { value: "todos", label: "Todos" },
-  { value: "1", label: "Janeiro" },
-  { value: "2", label: "Fevereiro" },
-  { value: "3", label: "Março" },
-  { value: "4", label: "Abril" },
-  { value: "5", label: "Maio" },
-  { value: "6", label: "Junho" },
-  { value: "7", label: "Julho" },
-  { value: "8", label: "Agosto" },
-  { value: "9", label: "Setembro" },
-  { value: "10", label: "Outubro" },
-  { value: "11", label: "Novembro" },
-  { value: "12", label: "Dezembro" },
+  { value: "contracheque", label: "Contracheque" },
+  { value: "ponto", label: "Folha de Ponto" },
+];
+
+const SUBTIPOS_FILTRO = [
+  { value: "todos", label: "Todos" },
+  { value: "mensal", label: "Mensal" },
+  { value: "quinzenal", label: "Adiantamento" },
 ];
 
 export default function Documentos() {
@@ -58,7 +53,6 @@ export default function Documentos() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<Documento | null>(null);
-  const [downloadingAll, setDownloadingAll] = useState(false);
 
   // Filtros
   const [filtroTipo, setFiltroTipo] = useState("todos");
@@ -67,6 +61,7 @@ export default function Documentos() {
   const [filtroMes, setFiltroMes] = useState<string>("todos");
 
   const [anos, setAnos] = useState<number[]>([]);
+  const [meses, setMeses] = useState<number[]>([]);
 
   const load = async () => {
     if (!user) return;
@@ -80,7 +75,7 @@ export default function Documentos() {
       if (filtroTipo !== "todos") {
         query = query.eq("tipo", filtroTipo);
       }
-      if (filtroSubtipo !== "todos" && filtroTipo === "contracheque") {
+      if (filtroSubtipo !== "todos") {
         query = query.eq("subtipo", filtroSubtipo);
       }
       if (filtroAno !== "todos") {
@@ -97,8 +92,11 @@ export default function Documentos() {
       if (error) throw error;
       setDocumentos(data ?? []);
 
+      // Extrai anos e meses disponíveis para filtros
       const anosSet = new Set(data?.map(d => d.ano) ?? []);
+      const mesesSet = new Set(data?.map(d => d.mes) ?? []);
       setAnos(Array.from(anosSet).sort((a, b) => b - a));
+      setMeses(Array.from(mesesSet).sort((a, b) => b - a));
     } catch (error) {
       toast.error("Erro ao carregar documentos", { description: (error as Error).message });
     } finally {
@@ -121,31 +119,6 @@ export default function Documentos() {
     }
   };
 
-  const handleDownloadAll = async () => {
-    if (documentos.length === 0) {
-      toast.warning("Nenhum documento para baixar");
-      return;
-    }
-
-    setDownloadingAll(true);
-    try {
-      for (const doc of documentos) {
-        const { data } = await supabase.storage
-          .from("documentos")
-          .createSignedUrl(doc.storage_path, 60);
-        if (data?.signedUrl) {
-          window.open(data.signedUrl, "_blank");
-        }
-        await new Promise(resolve => setTimeout(resolve, 300));
-      }
-      toast.success(`${documentos.length} documento(s) baixado(s)!`);
-    } catch (error) {
-      toast.error("Erro ao baixar documentos", { description: (error as Error).message });
-    } finally {
-      setDownloadingAll(false);
-    }
-  };
-
   const handlePreview = async (doc: Documento) => {
     setSelectedDoc(doc);
     const { data } = await supabase.storage
@@ -165,9 +138,10 @@ export default function Documentos() {
     return tipo;
   };
 
-  const getSubtipoLabel = (doc: Documento) => {
-    if (doc.tipo !== "contracheque") return "";
-    if (doc.subtipo === "adiantamento") return `Adiantamento ${doc.quinzena}ª`;
+  const getSubtipoLabel = (subtipo?: string | null, quinzena?: number | null) => {
+    if (subtipo === "quinzenal") {
+      return `Adiantamento ${quinzena}ª Quinzena`;
+    }
     return "Mensal";
   };
 
@@ -204,42 +178,38 @@ export default function Documentos() {
             <div className="space-y-1">
               <Label className="text-xs font-bold uppercase text-muted-foreground">Tipo</Label>
               <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-                <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectTrigger className="w-[140px] h-9">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  <SelectItem value="contracheque">Contracheque</SelectItem>
-                  <SelectItem value="ponto">Folha de Ponto</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {filtroTipo === "contracheque" && (
-              <div className="space-y-1">
-                <Label className="text-xs font-bold uppercase text-muted-foreground">Subtipo</Label>
-                <Select value={filtroSubtipo} onValueChange={setFiltroSubtipo}>
-                  <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos</SelectItem>
-                    <SelectItem value="mensal">Mensal</SelectItem>
-                    <SelectItem value="adiantamento">Adiantamento</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div className="space-y-1">
-              <Label className="text-xs font-bold uppercase text-muted-foreground">Mês</Label>
-              <Select value={filtroMes} onValueChange={setFiltroMes}>
-                <SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
-                <SelectContent>
-                  {MESES.map(m => (
-                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  {TIPOS_DOCUMENTO.map(t => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+
+            {/* 🔥 FILTRO POR SUBTIPO */}
+            <div className="space-y-1">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Subtipo</Label>
+              <Select value={filtroSubtipo} onValueChange={setFiltroSubtipo}>
+                <SelectTrigger className="w-[140px] h-9">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SUBTIPOS_FILTRO.map(s => (
+                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-1">
               <Label className="text-xs font-bold uppercase text-muted-foreground">Ano</Label>
               <Select value={filtroAno} onValueChange={setFiltroAno}>
-                <SelectTrigger className="w-[100px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectTrigger className="w-[100px] h-9">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todos">Todos</SelectItem>
                   {anos.map(a => (
@@ -248,6 +218,22 @@ export default function Documentos() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Mês</Label>
+              <Select value={filtroMes} onValueChange={setFiltroMes}>
+                <SelectTrigger className="w-[100px] h-9">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  {meses.map(m => (
+                    <SelectItem key={m} value={String(m)}>{String(m).padStart(2, "0")}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <Button variant="ghost" size="sm" onClick={limparFiltros} className="mt-6 h-9">
               Limpar
             </Button>
@@ -260,19 +246,6 @@ export default function Documentos() {
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDownloadAll}
-                  disabled={downloadingAll}
-                  className="text-primary border-primary/30 hover:bg-primary/5"
-                >
-                  <DownloadCloud className="size-4 mr-1" />
-                  {downloadingAll ? "Baixando..." : `Baixar todos (${documentos.length})`}
-                </Button>
-              </div>
-
               {documentos.map((doc) => (
                 <div
                   key={doc.id}
@@ -283,12 +256,18 @@ export default function Documentos() {
                       <FileText className="size-5" />
                     </div>
                     <div>
-                      <div className="font-medium flex items-center gap-2">
+                      <div className="font-medium flex items-center gap-2 flex-wrap">
                         {getTipoLabel(doc.tipo)}
-                        {doc.subtipo && (
-                          <Badge variant="outline" className={doc.subtipo === "adiantamento" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-blue-50 text-blue-700 border-blue-200"}>
-                            {getSubtipoLabel(doc)}
-                          </Badge>
+                        {/* 🔥 BADGE DE ADIANTAMENTO */}
+                        {doc.subtipo === "quinzenal" && (
+                          <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
+                            Adiantamento {doc.quinzena}ª Quinzena
+                          </span>
+                        )}
+                        {doc.subtipo === "mensal" && (
+                          <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
+                            Mensal
+                          </span>
                         )}
                       </div>
                       <div className="text-sm text-muted-foreground">
@@ -328,7 +307,7 @@ export default function Documentos() {
             <DialogTitle>Visualização do Documento</DialogTitle>
             <DialogDescription>
               {selectedDoc
-                ? `${getTipoLabel(selectedDoc.tipo)} - ${String(selectedDoc.mes).padStart(2, "0")}/${selectedDoc.ano}`
+                ? `${getTipoLabel(selectedDoc.tipo)} - ${String(selectedDoc.mes).padStart(2, "0")}/${selectedDoc.ano}${selectedDoc.subtipo === "quinzenal" ? ` (Adiantamento ${selectedDoc.quinzena}ª Quinzena)` : ""}`
                 : "Documento"}
             </DialogDescription>
           </DialogHeader>
