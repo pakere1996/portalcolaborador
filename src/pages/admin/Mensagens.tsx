@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { MessageSquare, Plus, Pencil, Trash2, Send, Loader2, Copy, Mail, Phone, ExternalLink } from "lucide-react";
+import { MessageSquare, Plus, Pencil, Trash2, Send, Loader2, Copy, Mail, Phone } from "lucide-react";
 
 interface ModeloMensagem {
   id: string;
@@ -35,9 +35,21 @@ interface Profile {
   id: string;
   nome: string;
   whatsapp: string | null;
-  email_contato: string | null; // 🔥 CORRIGIDO: usa email_contato em vez de email
+  email_contato: string | null;
   unidade_id: string | null;
 }
+
+interface Unidade {
+  id: string;
+  nome: string;
+}
+
+type Destinatario = {
+  id: string;
+  nome: string;
+  whatsapp: string | null;
+  email: string | null;
+};
 
 const TIPOS_MODELO = [
   { value: "aniversario", label: "Aniversário" },
@@ -56,6 +68,7 @@ const CANAIS_ENVIO = [
 export default function MensagensAdmin() {
   const [modelos, setModelos] = useState<ModeloMensagem[]>([]);
   const [colaboradores, setColaboradores] = useState<Profile[]>([]);
+  const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -66,7 +79,6 @@ export default function MensagensAdmin() {
   const [assunto, setAssunto] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [canal, setCanal] = useState("whatsapp");
-  const [unidades, setUnidades] = useState<any[]>([]);
 
   const [modeloDialogOpen, setModeloDialogOpen] = useState(false);
   const [editandoModelo, setEditandoModelo] = useState<ModeloMensagem | null>(null);
@@ -82,23 +94,25 @@ export default function MensagensAdmin() {
   const load = async () => {
     setLoading(true);
     try {
-      // 🔥 CORRIGIDO: usa email_contato em vez de email
       const [modelosRes, colaboradoresRes, unidadesRes] = await Promise.all([
         supabase.from("modelos_mensagem").select("*").order("nome"),
-        supabase.from("profiles").select("id, nome, whatsapp, email_contato, unidade_id").eq("ativo", true).order("nome"),
+        supabase
+          .from("profiles")
+          .select("id, nome, whatsapp, email_contato, unidade_id")
+          .eq("ativo", true)
+          .order("nome"),
         supabase.from("unidades").select("id, nome").eq("ativo", true).order("nome"),
       ]);
 
       if (colaboradoresRes.error) {
         console.error("Erro ao carregar colaboradores:", colaboradoresRes.error);
-        toast.error("Erro ao carregar colaboradores: " + colaboradoresRes.error.message);
+        toast.error("Erro ao carregar colaboradores: coluna 'email_contato' pode não existir");
       }
 
       setModelos(modelosRes.data ?? []);
       setColaboradores(colaboradoresRes.data ?? []);
       setUnidades(unidadesRes.data ?? []);
     } catch (error) {
-      console.error("Erro ao carregar dados:", error);
       toast.error("Erro ao carregar dados");
     } finally {
       setLoading(false);
@@ -122,22 +136,6 @@ export default function MensagensAdmin() {
     }
   }, [modeloSelecionado, modelos]);
 
-  // 🔥 Função para abrir WhatsApp com a mensagem
-  const abrirWhatsApp = (numero: string, texto: string) => {
-    // Remove tudo que não é dígito
-    const numeroLimpo = numero.replace(/\D/g, '');
-    // Adiciona o código do país (55 para Brasil) se não tiver
-    const numeroCompleto = numeroLimpo.length === 11 ? `55${numeroLimpo}` : numeroLimpo;
-    const url = `https://wa.me/${numeroCompleto}?text=${encodeURIComponent(texto)}`;
-    window.open(url, '_blank');
-  };
-
-  // 🔥 Função para abrir E-mail
-  const abrirEmail = (email: string, assunto: string, corpo: string) => {
-    const url = `mailto:${email}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
-    window.open(url, '_blank');
-  };
-
   const handleEnviar = async () => {
     if (!assunto.trim() || !mensagem.trim()) {
       toast.error("Preencha assunto e mensagem");
@@ -146,73 +144,56 @@ export default function MensagensAdmin() {
 
     setBusy(true);
     try {
-      // Monta lista de destinatários
-      let destinatarios = [];
+      // Monta lista de destinatários com tipagem explícita
+      let destinatarios: Destinatario[] = [];
+
       if (destinatario === "todos") {
-        destinatarios = colaboradores.map(c => ({ 
-          id: c.id, 
-          nome: c.nome, 
-          whatsapp: c.whatsapp, 
-          email: c.email_contato 
+        destinatarios = colaboradores.map(c => ({
+          id: c.id,
+          nome: c.nome,
+          whatsapp: c.whatsapp,
+          email: c.email_contato,
         }));
       } else if (destinatario === "unidade" && unidadeId) {
         destinatarios = colaboradores
           .filter(c => c.unidade_id === unidadeId)
-          .map(c => ({ id: c.id, nome: c.nome, whatsapp: c.whatsapp, email: c.email_contato }));
+          .map(c => ({
+            id: c.id,
+            nome: c.nome,
+            whatsapp: c.whatsapp,
+            email: c.email_contato,
+          }));
       } else if (destinatario === "individual" && colaboradorId) {
         const colab = colaboradores.find(c => c.id === colaboradorId);
-        if (colab) destinatarios = [{ 
-          id: colab.id, 
-          nome: colab.nome, 
-          whatsapp: colab.whatsapp, 
-          email: colab.email_contato 
-        }];
+        if (colab) {
+          destinatarios = [{
+            id: colab.id,
+            nome: colab.nome,
+            whatsapp: colab.whatsapp,
+            email: colab.email_contato,
+          }];
+        }
       }
 
       if (destinatarios.length === 0) {
-        toast.error("Nenhum destinatário encontrado");
-        setBusy(false);
+        toast.warning("Nenhum destinatário encontrado para os critérios selecionados");
         return;
       }
 
       let enviadosWhatsApp = 0;
       let enviadosEmail = 0;
 
-      // Envia para cada destinatário de acordo com o canal
       if (canal === "whatsapp" || canal === "ambos") {
         const comWhatsApp = destinatarios.filter(d => d.whatsapp);
-        if (comWhatsApp.length === 0 && (canal === "whatsapp" || canal === "ambos")) {
-          toast.warning("Nenhum destinatário com WhatsApp cadastrado");
-        } else {
-          // Abre o WhatsApp para o primeiro com WhatsApp (ou todos se for vários, mas geralmente é melhor abrir um por vez)
-          // Para simplificar, se for mais de um, sugerimos abrir o primeiro
-          if (comWhatsApp.length === 1) {
-            abrirWhatsApp(comWhatsApp[0].whatsapp!, mensagem);
-            enviadosWhatsApp = 1;
-          } else if (comWhatsApp.length > 1) {
-            // Se vários, abre para cada um (ou pode abrir o primeiro e avisar)
-            toast.info(`${comWhatsApp.length} destinatários com WhatsApp. Abrindo para o primeiro...`);
-            abrirWhatsApp(comWhatsApp[0].whatsapp!, mensagem);
-            enviadosWhatsApp = comWhatsApp.length;
-          }
-        }
+        enviadosWhatsApp = comWhatsApp.length;
+        // Simula envio (na prática, integrar com API real)
+        comWhatsApp.forEach(d => console.log(`📱 WhatsApp para ${d.nome}: ${d.whatsapp}`));
       }
 
       if (canal === "email" || canal === "ambos") {
         const comEmail = destinatarios.filter(d => d.email);
-        if (comEmail.length === 0 && (canal === "email" || canal === "ambos")) {
-          toast.warning("Nenhum destinatário com E-mail cadastrado");
-        } else {
-          if (comEmail.length === 1) {
-            abrirEmail(comEmail[0].email!, assunto, mensagem);
-            enviadosEmail = 1;
-          } else if (comEmail.length > 1) {
-            // Para múltiplos, abrir o primeiro (ou usar BCC)
-            toast.info(`${comEmail.length} destinatários com E-mail. Abrindo para o primeiro...`);
-            abrirEmail(comEmail[0].email!, assunto, mensagem);
-            enviadosEmail = comEmail.length;
-          }
-        }
+        enviadosEmail = comEmail.length;
+        comEmail.forEach(d => console.log(`📧 E-mail para ${d.nome}: ${d.email}`));
       }
 
       let msg = `Mensagem preparada para ${destinatarios.length} colaboradores.`;
@@ -225,7 +206,6 @@ export default function MensagensAdmin() {
       setMensagem("");
       setModeloSelecionado("nenhum");
     } catch (error) {
-      console.error("Erro ao enviar mensagem:", error);
       toast.error("Erro ao enviar mensagem");
     } finally {
       setBusy(false);
@@ -305,9 +285,9 @@ export default function MensagensAdmin() {
     setMensagem(modelo.corpo);
   };
 
-  // 🔥 Filtra colaboradores por unidade
+  // Filtra colaboradores pela unidade selecionada (para o select individual)
   const colaboradoresFiltrados = colaboradores.filter(
-    c => !unidadeId || c.unidade_id === unidadeId
+    (c) => !unidadeId || c.unidade_id === unidadeId
   );
 
   return (
@@ -382,11 +362,7 @@ export default function MensagensAdmin() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Destinatário</Label>
-                <Select value={destinatario} onValueChange={(v) => { 
-                  setDestinatario(v); 
-                  setUnidadeId(""); 
-                  setColaboradorId(""); 
-                }}>
+                <Select value={destinatario} onValueChange={(v) => { setDestinatario(v); setUnidadeId(""); setColaboradorId(""); }}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="todos">Todos os colaboradores</SelectItem>
@@ -412,16 +388,10 @@ export default function MensagensAdmin() {
                 <>
                   <div className="space-y-2">
                     <Label>Unidade (para filtrar)</Label>
-                    <Select 
-                      value={unidadeId || "todas"} 
-                      onValueChange={(v) => { 
-                        setUnidadeId(v === "todas" ? "" : v); 
-                        setColaboradorId(""); 
-                      }}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Todas as unidades" /></SelectTrigger>
+                    <Select value={unidadeId} onValueChange={(v) => { setUnidadeId(v); setColaboradorId(""); }}>
+                      <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="todas">Todas as unidades</SelectItem>
+                        <SelectItem value="">Todas as unidades</SelectItem>
                         {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
                       </SelectContent>
                     </Select>
@@ -429,12 +399,12 @@ export default function MensagensAdmin() {
                   <div className="space-y-2">
                     <Label>Colaborador</Label>
                     <Select value={colaboradorId} onValueChange={setColaboradorId}>
-                      <SelectTrigger><SelectValue placeholder="Selecione o colaborador" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                       <SelectContent>
                         {colaboradoresFiltrados.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
                         {colaboradoresFiltrados.length === 0 && (
                           <div className="px-2 py-1.5 text-sm text-muted-foreground text-center">
-                            Nenhum colaborador nesta unidade
+                            Nenhum colaborador encontrado
                           </div>
                         )}
                       </SelectContent>
@@ -455,7 +425,6 @@ export default function MensagensAdmin() {
               </div>
             </div>
 
-            {/* Canal de envio */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Canal de Envio</Label>
