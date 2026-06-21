@@ -20,11 +20,13 @@ import {
   Briefcase,
   Building2,
   ShieldAlert,
-  MessageSquare, // 🔥 NOVO ÍCONE
+  MessageSquare,
+  Bell, // 🔥 NOVO ÍCONE
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/NotificationBell";
+import { AvisosPopout } from "@/components/AvisosPopout"; // 🔥 NOVO
 import logo from "@/assets/pakere-logo.png";
 import { cn } from "@/lib/utils";
 
@@ -44,7 +46,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [folgasOpen, setFolgasOpen] = useState(true);
   const [docsOpen, setDocsOpen] = useState(false);
   const [cadastroOpen, setCadastroOpen] = useState(false);
-  const [comunicacaoOpen, setComunicacaoOpen] = useState(false); // 🔥 NOVO
+  const [comunicacaoOpen, setComunicacaoOpen] = useState(false);
 
   const getIsAdmin = () => {
     const savedRole = localStorage.getItem('user_role');
@@ -64,7 +66,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (path.startsWith("/admin/colaboradores") || path.startsWith("/admin/cargos") || path.startsWith("/admin/unidades")) {
       setCadastroOpen(true);
     }
-    if (path.startsWith("/admin/mensagens")) setComunicacaoOpen(true); // 🔥 NOVO
+    if (path.startsWith("/admin/mensagens") || path.startsWith("/admin/avisos")) setComunicacaoOpen(true);
   }, [path]);
 
   const employeeFolgaNav: NavItem[] = [
@@ -101,11 +103,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/unidades", label: "Unidades", icon: Building2 },
   ];
 
-  // 🔥 NOVA SEÇÃO: Comunicação (admin)
   const adminComunicacaoNav: NavItem[] = [
     { to: "/admin/mensagens", label: "Comunicados", icon: MessageSquare },
-    { to: "/admin/avisos", label: "Quadro de Avisos", icon: Bell }, // 🔥 NOVO
-];
+    { to: "/admin/avisos", label: "Quadro de Avisos", icon: Bell },
+  ];
 
   const folgaNav = isAdmin ? adminFolgaNav : employeeFolgaNav;
   const docsNav = isAdmin ? adminDocsNav : employeeDocsNav;
@@ -191,7 +192,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onClick={() => setFolgasOpen(!folgasOpen)}
               className={cn(
                 "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                path.includes("/calendario") || path.includes("/trocas") || path.includes("/historico") || (path.startsWith("/admin") && !path.includes("/documentos") && !path.includes("/colaboradores") && !path.includes("/mensagens"))
+                path.includes("/calendario") || path.includes("/trocas") || path.includes("/historico") || (path.startsWith("/admin") && !path.includes("/documentos") && !path.includes("/colaboradores") && !path.includes("/mensagens") && !path.includes("/avisos"))
                   ? "text-primary bg-primary/5" 
                   : "text-muted-foreground hover:bg-accent hover:text-foreground",
               )}
@@ -249,14 +250,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             )}
           </div>
 
-          {/* 🔥 NOVA SEÇÃO: Comunicação (apenas admin) */}
           {isAdmin && (
             <div className="space-y-1">
               <button
                 onClick={() => setComunicacaoOpen(!comunicacaoOpen)}
                 className={cn(
                   "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                  path.includes("/admin/mensagens")
+                  path.includes("/admin/mensagens") || path.includes("/admin/avisos")
                     ? "text-primary bg-primary/5" 
                     : "text-muted-foreground hover:bg-accent hover:text-foreground",
                 )}
@@ -302,17 +302,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      import { AvisosPopout } from "@/components/AvisosPopout";
-
-// Dentro do return, após o <main> ou dentro dele:
-<main className="flex-1 min-w-0 p-4 md:p-8">
-  <div className="hidden md:flex justify-end mb-6">
-    <NotificationBell />
-  </div>
-  {children}
-  {/* 🔥 Avisos Popout */}
-  <AvisosPopout />
-</main>
+      <main className="flex-1 min-w-0 p-4 md:p-8">
+        <div className="hidden md:flex justify-end mb-6">
+          <NotificationBell />
+        </div>
+        {children}
+        {/* 🔥 POPOUT DE AVISOS – exibido para todos os usuários logados */}
+        <AvisosPopout />
+      </main>
     </div>
   );
 }
