@@ -302,17 +302,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      import { AvisosPopout } from "@/components/AvisosPopout";
-
-// Dentro do return, após o <main> ou dentro dele:
-<main className="flex-1 min-w-0 p-4 md:p-8">
-  <div className="hidden md:flex justify-end mb-6">
-    <NotificationBell />
-  </div>
-  {children}
-  {/* 🔥 Avisos Popout */}
-  <AvisosPopout />
-</main>
+      <main className="flex-1 min-w-0 p-4 md:p-8">
+        <div className="hidden md:flex justify-end mb-6">
+          <NotificationBell />
+        </div>
+        {children}
+      </main>
     </div>
   );
 }
