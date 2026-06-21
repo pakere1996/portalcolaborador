@@ -41,6 +41,7 @@ import { formatBR } from "@/lib/folga-rules";
 interface Atestado {
   id: string;
   colaborador_id: string;
+  unidade_id: string | null;
   data_atestado: string;
   dias_afastamento: number;
   observacao: string | null;
@@ -65,13 +66,11 @@ export default function DocumentosAtestadosPage() {
   const [duplicate, setDuplicate] = useState<Atestado | null>(null);
   const [pendingUpload, setPendingUpload] = useState<{ data: string; dias: string; observacao: string; file: File } | null>(null);
 
-  // Filtros para histórico
   const [filtroAno, setFiltroAno] = useState<string>("todos");
   const [filtroMes, setFiltroMes] = useState<string>("todos");
   const [anos, setAnos] = useState<number[]>([]);
   const [meses, setMeses] = useState<number[]>([]);
 
-  // Visualização do PDF
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedAtestado, setSelectedAtestado] = useState<Atestado | null>(null);
@@ -91,7 +90,6 @@ export default function DocumentosAtestadosPage() {
     if (error) toast.error("Erro ao carregar atestados", { description: error.message });
     setAtestados((items ?? []) as Atestado[]);
 
-    // Extrai anos e meses para filtros
     const anosSet = new Set(items?.map(a => new Date(a.data_atestado + "T00:00:00").getFullYear()) ?? []);
     const mesesSet = new Set(items?.map(a => new Date(a.data_atestado + "T00:00:00").getMonth() + 1) ?? []);
     setAnos(Array.from(anosSet).sort((a, b) => b - a));
@@ -135,19 +133,9 @@ export default function DocumentosAtestadosPage() {
     setFile(selected);
   };
 
-  // 🔥 VALIDAÇÃO: data não pode ser maior que hoje
-  const validarData = (dataStr: string) => {
-    if (dataStr > hojeStr) {
-      toast.error("Data do atestado não pode ser futura");
-      return false;
-    }
-    return true;
-  };
-
   const uploadAtestado = async (payload: { data: string; dias: string; observacao: string; file: File }) => {
     if (!user || !profile) return;
 
-    // 🔥 VALIDAÇÕES
     if (payload.data > hojeStr) {
       toast.error("Data do atestado não pode ser futura");
       return;
@@ -157,7 +145,6 @@ export default function DocumentosAtestadosPage() {
       return;
     }
 
-    // 🔥 Verifica se a data é muito antiga (mais de 48h)
     const dataAtestado = new Date(payload.data + "T00:00:00");
     const diffHoras = (hoje.getTime() - dataAtestado.getTime()) / (1000 * 60 * 60);
     if (diffHoras > 48) {
@@ -168,6 +155,15 @@ export default function DocumentosAtestadosPage() {
 
     setBusy(true);
     try {
+      // 🔥 Busca a unidade do colaborador
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("unidade_id")
+        .eq("id", user.id)
+        .single();
+
+      const unidadeId = profileData?.unidade_id || null;
+
       const id = newDocumentId();
       const storagePath = atestadoStoragePath(user.id, payload.data, id, payload.file);
       const kind = getFileKind(payload.file);
@@ -181,10 +177,12 @@ export default function DocumentosAtestadosPage() {
         });
       if (uploadError) throw uploadError;
 
+      // 🔥 Inclui unidade_id no insert
       const { data: inserted, error: insertError } = await supabase
         .from("atestados")
         .insert({
           colaborador_id: user.id,
+          unidade_id: unidadeId,
           data_atestado: payload.data,
           dias_afastamento: Number(payload.dias),
           observacao: payload.observacao.trim() || null,
@@ -199,13 +197,12 @@ export default function DocumentosAtestadosPage() {
 
       if (insertError) throw insertError;
 
-      // Notifica admin (ignora erro se função não existir)
+      // Notifica admin (silencia erro 404)
       try {
         const { notifyAtestadoPendente } = await import("@/lib/notify-atestado");
         await notifyAtestadoPendente(inserted.id, profile.nome);
       } catch (notifyError) {
         console.warn("Notificação não disponível:", notifyError);
-        // Não exibe erro para o usuário
       }
 
       toast.success("Atestado enviado para aprovação");
@@ -229,8 +226,6 @@ export default function DocumentosAtestadosPage() {
       toast.error("Preencha todos os campos obrigatórios");
       return;
     }
-    if (!validarData(data)) return;
-
     const payload = { data, dias, observacao, file };
     if (duplicate) {
       setPendingUpload(payload);
@@ -269,7 +264,6 @@ export default function DocumentosAtestadosPage() {
     return formatBR(dt);
   };
 
-  // Filtra atestados pelo histórico
   const atestadosFiltrados = atestados.filter(a => {
     const dataObj = new Date(a.data_atestado + "T00:00:00");
     if (filtroAno !== "todos" && dataObj.getFullYear() !== parseInt(filtroAno)) return false;
@@ -289,7 +283,6 @@ export default function DocumentosAtestadosPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
-        {/* Formulário de envio */}
         <Card className="border-border shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -363,7 +356,6 @@ export default function DocumentosAtestadosPage() {
           </CardContent>
         </Card>
 
-        {/* Histórico com filtros */}
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <h2 className="font-semibold flex items-center gap-2">
@@ -449,7 +441,6 @@ export default function DocumentosAtestadosPage() {
         </div>
       </div>
 
-      {/* Dialog de visualização */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
@@ -471,7 +462,6 @@ export default function DocumentosAtestadosPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de duplicata */}
       <AlertDialog open={!!pendingUpload} onOpenChange={(open) => !open && setPendingUpload(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
