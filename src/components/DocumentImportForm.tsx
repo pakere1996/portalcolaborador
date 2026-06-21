@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { extractTextFromPDF, renderPdfPageAsImage } from "@/lib/pdf-utils";
 import { adminApi } from "@/lib/admin-api";
+import { PDFDocument } from "pdf-lib";
 
 export interface PageResult {
   pageNumber: number;
@@ -358,6 +359,17 @@ export function DocumentImportForm() {
     }
   };
 
+  // 🔥 Função para extrair página do PDF
+  const extractPageFromPdf = async (file: File, pageNumber: number): Promise<Blob> => {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdfDoc = await PDFDocument.load(arrayBuffer);
+    const newPdf = await PDFDocument.create();
+    const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageNumber - 1]);
+    newPdf.addPage(copiedPage);
+    const pdfBytes = await newPdf.save();
+    return new Blob([pdfBytes], { type: "application/pdf" });
+  };
+
   const handleAprovarTudo = async () => {
     const pendentes = pageResults.filter(r => !r.resolvido && !r.ignorado);
     if (pendentes.length > 0) {
@@ -382,8 +394,11 @@ export function DocumentImportForm() {
         }
 
         const storagePath = `documentos/${documentType}/${result.matchedProfile.id}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}_${Date.now()}.pdf`;
+        
+        // 🔥 EXTRAI APENAS A PÁGINA DO COLABORADOR
+        const pagePdfBlob = await extractPageFromPdf(selectedFile!, result.pageNumber);
         const { error: uploadError } = await supabase.storage.from("documentos")
-          .upload(storagePath, selectedFile!, { contentType: "application/pdf", upsert: true });
+          .upload(storagePath, pagePdfBlob, { contentType: "application/pdf", upsert: true });
         if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
 
         const { error: insertError } = await supabase.from("documentos").insert({
@@ -453,7 +468,6 @@ export function DocumentImportForm() {
     </div>
   );
 
-  // Renderização principal
   if (pageResults.length === 0) {
     return (
       <div className="space-y-4">
