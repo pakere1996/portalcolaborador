@@ -386,9 +386,7 @@ export function DocumentosAdminBase({
                 <Label>Unidade *</Label>
                 <Select
                   value={form.unidade_id}
-                  onValueChange={(value) => {
-                    setForm({ ...form, unidade_id: value, colaborador_id: "" });
-                  }}
+                  onValueChange={(value) => setForm({ ...form, unidade_id: value, colaborador_id: "" })}
                 >
                   <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
                   <SelectContent>
@@ -403,7 +401,7 @@ export function DocumentosAdminBase({
                   value={form.colaborador_id}
                   onValueChange={(value) => {
                     setForm({ ...form, colaborador_id: value });
-                    // 🔥 CHAMA onColaboradorChange SE EXISTIR
+                    // 🔥 CHAMA O CALLBACK PARA PREENCHER UNIDADE AUTOMATICAMENTE
                     if (onColaboradorChange) {
                       onColaboradorChange(value, setForm);
                     }
@@ -619,12 +617,12 @@ export function DocumentosAdminBase({
                                     placeholder="0"
                                     className="w-full"
                                   />
-                                  <Label className="text-xs font-medium text-muted-foreground">Observação do Admin</Label>
+                                  <Label className="text-xs font-medium text-muted-foreground">Resposta ao Colaborador</Label>
                                   <Textarea
                                     rows={2}
                                     value={editForm.observacao_admin || ""}
                                     onChange={(e) => setEditForm({ ...editForm, observacao_admin: e.target.value })}
-                                    placeholder="Motivo da rejeição ou observação..."
+                                    placeholder="Resposta para o colaborador sobre a decisão"
                                     className="w-full"
                                   />
                                 </>
@@ -743,6 +741,8 @@ export function DocumentosAdminBase({
                                 >
                                   <Download className="size-4" />
                                 </Button>
+                                {/* 🔥 AÇÕES EXTRAS (ex: Aprovar/Rejeitar) */}
+                                {acoesExtras && acoesExtras(doc)}
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -752,8 +752,6 @@ export function DocumentosAdminBase({
                                 >
                                   <Trash2 className="size-4" />
                                 </Button>
-                                {/* 🔥 AÇÕES EXTRAS (como aprovar/rejeitar) */}
-                                {acoesExtras && acoesExtras(doc)}
                               </>
                             )}
                           </div>
