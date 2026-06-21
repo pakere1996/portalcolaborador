@@ -32,10 +32,26 @@ export default function AtestadosAdmin() {
 
       if (error) throw error;
       toast.success(`Atestado ${newStatus === "aprovado" ? "aprovado" : "rejeitado"} com sucesso!`);
-      // Recarregar (idealmente a base teria refresh)
       window.location.reload();
     } catch (error) {
       toast.error("Erro ao atualizar status", { description: (error as Error).message });
+    }
+  };
+
+  // 🔥 Função para preencher unidade automaticamente ao selecionar colaborador
+  const handleColaboradorChange = async (colaboradorId: string, setForm: any) => {
+    if (!colaboradorId) return;
+    try {
+      const { data } = await supabase
+        .from("profiles")
+        .select("unidade_id")
+        .eq("id", colaboradorId)
+        .single();
+      if (data?.unidade_id) {
+        setForm((prev: any) => ({ ...prev, unidade_id: data.unidade_id }));
+      }
+    } catch (error) {
+      console.warn("Erro ao buscar unidade do colaborador:", error);
     }
   };
 
@@ -47,18 +63,7 @@ export default function AtestadosAdmin() {
       descricao="Gerencie todos os atestados médicos dos colaboradores."
       importTitle="Importar Atestado"
       campoData="data_atestado"
-      // 🔥 Ao selecionar colaborador, preencher unidade automaticamente
-      onColaboradorChange={async (colaboradorId, setForm) => {
-        if (!colaboradorId) return;
-        const { data } = await supabase
-          .from("profiles")
-          .select("unidade_id")
-          .eq("id", colaboradorId)
-          .single();
-        if (data?.unidade_id) {
-          setForm((prev: any) => ({ ...prev, unidade_id: data.unidade_id }));
-        }
-      }}
+      onColaboradorChange={handleColaboradorChange}
       gerarStoragePath={async (colaboradorId, data, id, file) => {
         const path = atestadoStoragePath(colaboradorId, data, id, file);
         const kind = getFileKind(file);
@@ -67,6 +72,7 @@ export default function AtestadosAdmin() {
       }}
       formatarStatus={formatAtestadoStatus}
       statusClass={statusClass}
+      // 🔥 CAMPOS EXTRAS NO FORMULÁRIO DE IMPORTAÇÃO (apenas dias e retorno)
       camposExtras={(form, setForm, busy) => (
         <>
           <div className="space-y-2">
@@ -92,6 +98,7 @@ export default function AtestadosAdmin() {
           )}
         </>
       )}
+      // 🔥 COLUNAS EXTRAS NA TABELA (apenas dias e retorno – status já é exibido pela base)
       colunasExtras={(doc) => {
         const dias = (doc as any).dias_afastamento || 0;
         const dataRetorno = new Date(new Date(doc.data + 'T00:00:00').getTime() + dias * 24 * 60 * 60 * 1000);
@@ -102,9 +109,10 @@ export default function AtestadosAdmin() {
           </div>
         );
       }}
-      acoesExtras={(doc) =>
-        doc.status === "pendente" && (
-          <div className="flex gap-1">
+      // 🔥 AÇÕES EXTRAS (botões Aprovar/Rejeitar para pendentes)
+      acoesExtras={(doc) => (
+        doc.status === "pendente" ? (
+          <div className="flex gap-1 mt-1">
             <Button
               size="sm"
               variant="outline"
@@ -125,42 +133,11 @@ export default function AtestadosAdmin() {
               Rejeitar
             </Button>
           </div>
-        )
-      }
-      editCamposExtras={(editForm, setEditForm) => (
-        <>
-          <div className="space-y-1 mt-2">
-            <Label className="text-xs">Dias de Afastamento</Label>
-            <Input
-              type="number"
-              min="0"
-              value={editForm.dias_afastamento || ""}
-              onChange={(e) => setEditForm({ ...editForm, dias_afastamento: e.target.value })}
-            />
-          </div>
-          <div className="space-y-1 mt-2">
-            <Label className="text-xs">Status</Label>
-            <select
-              className="w-full rounded-md border border-border bg-background px-3 py-1 text-sm"
-              value={editForm.status || "pendente"}
-              onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-            >
-              <option value="pendente">Pendente</option>
-              <option value="aprovado">Aprovado</option>
-              <option value="rejeitado">Rejeitado</option>
-            </select>
-          </div>
-          <div className="space-y-1 mt-2">
-            <Label className="text-xs">Observação do Admin</Label>
-            <Textarea
-              rows={2}
-              value={editForm.observacao_admin || ""}
-              onChange={(e) => setEditForm({ ...editForm, observacao_admin: e.target.value })}
-              placeholder="Motivo da rejeição ou observação..."
-            />
-          </div>
-        </>
+        ) : null
       )}
+      // 🔥 EDIT CAMPOS EXTRAS – REMOVIDOS para evitar duplicação
+      // A base já renderiza status, dias e observação do admin
+      // Não passamos editCamposExtras para não duplicar
       validarForm={(form) => {
         if (!form.dias_afastamento || parseInt(form.dias_afastamento) < 0) {
           return "Informe um número válido de dias de afastamento";
@@ -179,7 +156,7 @@ export default function AtestadosAdmin() {
         const isAdmin = !!roles;
         const baseData = {
           colaborador_id: form.colaborador_id,
-          unidade_id: form.unidade_id, // 🔥 AGORA VEM DO FORM
+          unidade_id: form.unidade_id,
           data_atestado: form.data_documento,
           dias_afastamento: parseInt(form.dias_afastamento) || 0,
           observacao: form.observacao || null,
