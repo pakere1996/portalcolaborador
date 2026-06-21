@@ -1,3 +1,3 @@
-export { FolhaPontoParser } from "./folha-ponto-parser";
-export { ContrachequeParser } from "./contracheque-parser";
-export type { DocumentParser, PageResult, ProfileForMatching } from "./document-parsers";
+// src/lib/parsers/index.ts
+export { parseContracheque, ContrachequeParser } from './contracheque-parser';
+export { parseFolhaPonto, FolhaPontoParser } from './folha-ponto-parser';
