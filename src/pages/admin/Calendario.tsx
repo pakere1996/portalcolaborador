@@ -25,7 +25,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calendar as CalIcon, Filter, User, Trash2, Plus, Settings2, Save, Lock, Info, Unlock, AlertTriangle, ChevronRight, Building, Loader2, CheckCircle, Users, ChevronLeft, ChevronDown } from "lucide-react";
+import { Calendar as CalIcon, Filter, User, Trash2, Plus, Settings2, Save, Lock, Info, Unlock, AlertTriangle, ChevronRight, Building, Loader2, CheckCircle, Users, ChevronLeft } from "lucide-react";
 import { dayType, formatBR, monthKey, parseYMD, ymd, autoBlockedDatesForMonth, calculateDateStatus, getMonthDays } from "@/lib/folga-rules";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +35,6 @@ import { adminApi } from "@/lib/admin-api";
 type Unidade = Tables<'unidades'>;
 type Profile = Tables<'profiles'> & { unidade_id?: string | null };
 
-// Hook para detectar mobile
 const useMediaQuery = (query: string) => {
   const [matches, setMatches] = useState(false);
   useEffect(() => {
@@ -324,16 +323,13 @@ export default function AdminCalendar() {
     return null;
   }, [dlg, manual, year, month0]);
 
-  // 🔥 Função para renderizar o calendário em lista (mobile) com dia da semana
   const renderMobileCalendar = () => {
     const days = getMonthDays(year, month0);
     const monthName = new Date(year, month0).toLocaleString('pt-BR', { month: 'long' });
     const yearStr = year;
-    const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
     return (
       <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
-        {/* Cabeçalho do mês */}
         <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" className="size-8 rounded-full" onClick={goPrev}>
@@ -351,7 +347,6 @@ export default function AdminCalendar() {
           </span>
         </div>
 
-        {/* Lista de dias */}
         <div className="divide-y divide-slate-100 max-h-[70vh] overflow-y-auto">
           {days.map((d) => {
             const iso = ymd(d);
@@ -359,7 +354,6 @@ export default function AdminCalendar() {
             const isWeekendDay = !!dayType(d);
             const limit = dayLimits.get(iso) || 1;
             const isBlocked = manualMap.get(iso)?.liberada === false || autoBlockedDatesForMonth(year, month0).some(b => b.date === iso);
-            const diaSemana = weekdays[d.getDay()];
 
             return (
               <div
@@ -369,11 +363,7 @@ export default function AdminCalendar() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      {/* 🔥 Exibe o dia da semana abreviado antes do número */}
-                      <span className="text-[10px] font-medium text-slate-500 w-8 shrink-0">
-                        {diaSemana}
-                      </span>
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className={cn(
                         "text-sm font-bold",
                         isWeekendDay ? "text-slate-900" : "text-slate-400"
@@ -394,11 +384,10 @@ export default function AdminCalendar() {
                         <span className="text-[9px] text-slate-400">Vago</span>
                       )}
                     </div>
-                    {/* Exibe os nomes dos colaboradores (primeiro nome) */}
                     {occupants.length > 0 ? (
-                      <div className="flex flex-wrap gap-1 mt-1 ml-10">
+                      <div className="flex flex-wrap gap-1 mt-1">
                         {occupants.map((occ, idx) => {
-                          const primeiroNome = occ.userName.split(' ')[0];
+                          const primeiroNome = (occ.userName || "Colaborador").split(' ')[0];
                           return (
                             <span
                               key={idx}
@@ -408,7 +397,7 @@ export default function AdminCalendar() {
                                 occ.type === 'monthly' ? "bg-amber-50 text-amber-600" :
                                 "bg-orange-50 text-orange-600"
                               )}
-                              title={occ.userName}
+                              title={occ.userName || "Colaborador"}
                             >
                               {primeiroNome}
                             </span>
@@ -416,7 +405,7 @@ export default function AdminCalendar() {
                         })}
                       </div>
                     ) : (
-                      <span className="text-[10px] text-slate-400 ml-10">Nenhum colaborador</span>
+                      <span className="text-[10px] text-slate-400">Nenhum colaborador</span>
                     )}
                   </div>
                   <ChevronRight className="size-4 text-slate-300 shrink-0 mt-0.5" />
@@ -443,7 +432,6 @@ export default function AdminCalendar() {
         </div>
       </div>
 
-      {/* Summary Counters */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
           <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Folgas Marcadas</div>
@@ -471,7 +459,6 @@ export default function AdminCalendar() {
         </div>
       </div>
 
-      {/* Filtros */}
       <div className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-wrap gap-8 items-end shadow-sm">
         <div className="space-y-2.5">
           <Label className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400 flex items-center gap-2">
@@ -522,10 +509,7 @@ export default function AdminCalendar() {
         </Button>
       </div>
 
-      {/* 🔥 Renderização condicional: mobile vs desktop */}
-      {isMobile ? (
-        renderMobileCalendar()
-      ) : (
+      {isMobile ? renderMobileCalendar() : (
         <FolgaCalendar
           year={year} month0={month0}
           occupantsByDate={occupantsByDate} manualBlocked={manualMap}
@@ -541,7 +525,6 @@ export default function AdminCalendar() {
         />
       )}
 
-      {/* Dialog de detalhes do dia (mesmo para mobile e desktop) */}
       <Dialog open={!!dlg} onOpenChange={(o) => !o && setDlg(null)}>
         <DialogContent className="max-w-lg rounded-[2.5rem] border-none shadow-2xl p-8">
           <DialogHeader>
@@ -624,7 +607,7 @@ export default function AdminCalendar() {
                           "bg-orange-400"
                         )} />
                         <div>
-                          <div className="font-black text-slate-900 text-lg tracking-tight">{occ.userName}</div>
+                          <div className="font-black text-slate-900 text-lg tracking-tight">{occ.userName || "Colaborador"}</div>
                           <div className="text-[11px] font-bold uppercase tracking-widest mt-0.5 text-slate-400">{occ.origin}</div>
                         </div>
                       </div>
@@ -677,7 +660,6 @@ export default function AdminCalendar() {
         </DialogContent>
       </Dialog>
 
-      {/* AlertDialog de Confirmação de Folga Duplicada */}
       <AlertDialog open={!!confirmDialog} onOpenChange={(open) => !open && setConfirmDialog(null)}>
         <AlertDialogContent className="rounded-[2rem]">
           <AlertDialogHeader>
