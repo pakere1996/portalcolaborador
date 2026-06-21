@@ -35,11 +35,13 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
   canvas.width = viewport.width;
   canvas.height = viewport.height;
   
-  // 🔥 CORREÇÃO: usar a sintaxe correta com 'canvas' em vez de 'canvasContext'
+  // 🔥 CORREÇÃO: use 'canvas' em vez de 'canvasContext'
+  // O pdf.js espera um objeto com a propriedade 'canvas' ou 'canvasContext' dependendo da versão.
+  // Vamos usar a forma mais compatível.
   await page.render({
     canvasContext: context,
     viewport: viewport,
-  }).promise;
+  } as any).promise;
   
   return canvas.toDataURL("image/png");
 };
