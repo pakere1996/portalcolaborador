@@ -3,8 +3,10 @@ import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { FileText, Download, Eye } from "lucide-react";
+import { FileText, Download, Eye, Filter } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
 import {
   Dialog,
@@ -24,13 +26,24 @@ interface Documento {
   created_at: string;
 }
 
+const TIPOS_DOCUMENTO = [
+  { value: "todos", label: "Todos" },
+  { value: "contracheque", label: "Contracheque" },
+  { value: "ponto", label: "Folha de Ponto" },
+];
+
 export default function Documentos() {
   const { user } = useAuth();
   const [documentos, setDocumentos] = useState<Documento[]>([]);
+  const [filteredDocs, setFilteredDocs] = useState<Documento[]>([]);
   const [loading, setLoading] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<Documento | null>(null);
+  
+  // Filtros
+  const [filtroTipo, setFiltroTipo] = useState("todos");
+  const [filtroCompetencia, setFiltroCompetencia] = useState("todos");
 
   const load = async () => {
     if (!user) return;
@@ -45,6 +58,7 @@ export default function Documentos() {
 
       if (error) throw error;
       setDocumentos(data ?? []);
+      setFilteredDocs(data ?? []);
     } catch (error) {
       toast.error("Erro ao carregar documentos", { description: (error as Error).message });
     } finally {
@@ -55,6 +69,30 @@ export default function Documentos() {
   useEffect(() => {
     load();
   }, [user]);
+
+  // Aplicar filtros
+  useEffect(() => {
+    let docs = [...documentos];
+    
+    if (filtroTipo !== "todos") {
+      docs = docs.filter(d => d.tipo === filtroTipo);
+    }
+    
+    if (filtroCompetencia !== "todos") {
+      const [mes, ano] = filtroCompetencia.split("/");
+      docs = docs.filter(d => d.mes === parseInt(mes) && d.ano === parseInt(ano));
+    }
+    
+    setFilteredDocs(docs);
+  }, [documentos, filtroTipo, filtroCompetencia]);
+
+  // Opções de competência (únicas)
+  const competencias = [...new Set(documentos.map(d => `${String(d.mes).padStart(2, "0")}/${d.ano}`))].sort((a, b) => {
+    const [mesA, anoA] = a.split("/").map(Number);
+    const [mesB, anoB] = b.split("/").map(Number);
+    if (anoA !== anoB) return anoB - anoA;
+    return mesB - mesA;
+  });
 
   const handleDownload = async (doc: Documento) => {
     const { data } = await supabase.storage
@@ -107,16 +145,57 @@ export default function Documentos() {
 
       <Card className="border-border shadow-sm">
         <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Filter className="size-4" /> Filtros
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Tipo de Documento</Label>
+              <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIPOS_DOCUMENTO.map(t => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Competência</Label>
+              <Select value={filtroCompetencia} onValueChange={setFiltroCompetencia}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a competência" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  {competencias.map(c => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border shadow-sm">
+        <CardHeader>
           <CardTitle className="text-lg">Histórico de Documentos</CardTitle>
         </CardHeader>
         <CardContent>
-          {documentos.length === 0 ? (
+          {filteredDocs.length === 0 ? (
             <div className="text-center p-8 text-muted-foreground">
-              Nenhum documento disponível.
+              {documentos.length === 0 
+                ? "Nenhum documento disponível." 
+                : "Nenhum documento encontrado com os filtros selecionados."}
             </div>
           ) : (
             <div className="space-y-3">
-              {documentos.map((doc) => (
+              {filteredDocs.map((doc) => (
                 <div
                   key={doc.id}
                   className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl border border-border bg-card hover:bg-muted/20 transition-colors"
@@ -159,7 +238,6 @@ export default function Documentos() {
         </CardContent>
       </Card>
 
-      {/* Dialog de visualização com DialogDescription corrigido */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
