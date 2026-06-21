@@ -1,19 +1,21 @@
-import { useEffect, useState, useRef } from "react";
-import { Bell } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Popover, PopoverContent, PopoverTrigger,
-} from "@/components/ui/popover";
-import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Bell } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import { formatBR } from "@/lib/folga-rules";
 import { useNavigate } from "react-router-dom";
-import { cn } from "@/lib/utils";
-import { syncAdminMonthlyDocumentReminder } from "@/lib/documentos";
 
-interface Notif {
+interface Notification {
   id: string;
   titulo: string;
-  mensagem: string | null;
+  mensagem: string;
   link: string | null;
   lida: boolean;
   created_at: string;
@@ -22,126 +24,151 @@ interface Notif {
 export function NotificationBell() {
   const { user, role } = useAuth();
   const navigate = useNavigate();
-  const [items, setItems] = useState<Notif[]>([]);
+  const [notificacoes, setNotificacoes] = useState<Notification[]>([]);
+  const [atestadosPendentes, setAtestadosPendentes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  
-  // Use refs to track stable values and prevent unnecessary re-renders
-  const userIdRef = useRef<string | null>(null);
-  const roleRef = useRef<string | null>(null);
-  const hasFetchedAdminReminderRef = useRef(false);
+
+  const isAdmin = role === "admin" || localStorage.getItem('user_role') === 'admin';
 
   const load = async () => {
     if (!user) return;
+    setLoading(true);
+    try {
+      // Carrega notificações do sistema
+      const { data: notifData } = await supabase
+        .from("notificacoes")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(20);
 
-    // Only call admin reminder once per session
-    if (role === "admin" && !hasFetchedAdminReminderRef.current) {
-      try {
-        await syncAdminMonthlyDocumentReminder();
-        hasFetchedAdminReminderRef.current = true;
-      } catch {
-        // mantém silencioso para não atrapalhar o sino
+      setNotificacoes(notifData ?? []);
+
+      // 🔥 Se for admin, busca atestados pendentes
+      if (isAdmin) {
+        const { data: atestados } = await supabase
+          .from("atestados")
+          .select("id, colaborador_id, data_atestado, dias_afastamento, created_at, profiles(nome)")
+          .eq("status", "pendente")
+          .order("created_at", { ascending: false });
+
+        if (atestados && atestados.length > 0) {
+          setAtestadosPendentes(atestados);
+        } else {
+          setAtestadosPendentes([]);
+        }
       }
+    } catch (error) {
+      console.error("Erro ao carregar notificações:", error);
+    } finally {
+      setLoading(false);
     }
-
-    const { data } = await supabase
-      .from("notificacoes")
-      .select("id, titulo, mensagem, link, lida, created_at")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(20);
-
-    setItems((data ?? []) as Notif[]);
   };
 
   useEffect(() => {
-    // Only run if user or role actually changed
-    if (user?.id !== userIdRef.current || role !== roleRef.current) {
-      userIdRef.current = user?.id ?? null;
-      roleRef.current = role;
-      
-      // Reset admin reminder flag when user changes
-      if (user?.id !== userIdRef.current) {
-        hasFetchedAdminReminderRef.current = false;
-      }
-      
-      load();
-    }
-
-    const ch = supabase.channel(`notif:${user?.id}:${Math.random().toString(36).slice(2)}`, {
-      config: { private: true },
-    });
-    ch.on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "notificacoes", filter: `user_id=eq.${user?.id}` },
-      () => load(),
-    ).subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [user?.id, role]); // Stable dependencies - only re-run when user ID or role actually changes
-
-  const unread = items.filter((i) => !i.lida).length;
-
-  const handleClick = async (n: Notif) => {
-    if (!n.lida) {
-      await supabase.from("notificacoes").update({ lida: true }).eq("id", n.id);
-    }
-    setOpen(false);
-    if (n.link) navigate(n.link);
-  };
-
-  const markAllRead = async () => {
-    if (!user) return;
-    await supabase.from("notificacoes").update({ lida: true }).eq("user_id", user.id).eq("lida", false);
     load();
+    // Recarregar a cada 30 segundos
+    const interval = setInterval(load, 30000);
+    return () => clearInterval(interval);
+  }, [user, isAdmin]);
+
+  const marcarComoLida = async (id: string) => {
+    await supabase.from("notificacoes").update({ lida: true }).eq("id", id);
+    setNotificacoes(prev => prev.map(n => n.id === id ? { ...n, lida: true } : n));
   };
+
+  const totalNaoLidas = notificacoes.filter(n => !n.lida).length + (atestadosPendentes.length > 0 ? 1 : 0);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative" aria-label="Notificações">
+        <Button variant="ghost" size="icon" className="relative">
           <Bell className="size-5" />
-          {unread > 0 && (
-            <span className="absolute top-1 right-1 size-4 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
-              {unread > 9 ? "9+" : unread}
+          {totalNaoLidas > 0 && (
+            <span className="absolute -top-1 -right-1 size-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+              {totalNaoLidas > 9 ? "9+" : totalNaoLidas}
             </span>
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="end">
-        <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-          <span className="text-sm font-semibold">Notificações</span>
-          {unread > 0 && (
-            <button className="text-xs text-primary hover:underline" onClick={markAllRead}>
-              Marcar todas como lidas
-            </button>
-          )}
+      <PopoverContent className="w-80 max-h-[400px] overflow-y-auto p-0" align="end">
+        <div className="p-3 border-b border-border">
+          <span className="font-semibold">Notificações</span>
         </div>
-        <div className="max-h-96 overflow-y-auto">
-          {items.length === 0 ? (
-            <div className="p-6 text-center text-sm text-muted-foreground">Nenhuma notificação</div>
+        <div className="p-2 space-y-2">
+          {loading ? (
+            <div className="text-center p-4 text-muted-foreground text-sm">Carregando...</div>
           ) : (
-            items.map((n) => (
-              <button
-                key={n.id}
-                onClick={() => handleClick(n)}
-                className={cn(
-                  "w-full text-left px-3 py-2.5 border-b border-border/50 hover:bg-accent transition-colors",
-                  !n.lida && "bg-primary/5",
-                )}
-              >
-                <div className="flex items-start gap-2">
-                  {!n.lida && <span className="mt-1.5 size-2 rounded-full bg-primary shrink-0" />}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{n.titulo}</div>
-                    {n.mensagem && (
-                      <div className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.mensagem}</div>
+            <>
+              {/* 🔥 Atestados pendentes para admin */}
+              {isAdmin && atestadosPendentes.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-amber-600 font-semibold text-sm">📋 Atestados Pendentes</span>
+                    <Badge className="bg-amber-500 text-white">{atestadosPendentes.length}</Badge>
+                  </div>
+                  <div className="space-y-1">
+                    {atestadosPendentes.slice(0, 3).map((a) => (
+                      <div key={a.id} className="text-xs text-amber-800">
+                        <span className="font-medium">{a.profiles?.nome || "Colaborador"}</span>
+                        {" - "}
+                        {formatBR(new Date(a.data_atestado + "T00:00:00"))}
+                        {" ("}{a.dias_afastamento} dia{a.dias_afastamento > 1 ? "s" : ""}{")"}
+                      </div>
+                    ))}
+                    {atestadosPendentes.length > 3 && (
+                      <div className="text-xs text-amber-600 font-medium">
+                        + {atestadosPendentes.length - 3} outros atestados
+                      </div>
                     )}
-                    <div className="text-[10px] text-muted-foreground mt-1">
-                      {new Date(n.created_at).toLocaleString("pt-BR")}
-                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full mt-2 text-amber-700 border-amber-300 hover:bg-amber-100 h-7 text-xs"
+                      onClick={() => {
+                        setOpen(false);
+                        navigate("/admin/documentos/atestados");
+                      }}
+                    >
+                      Ver todos os atestados
+                    </Button>
                   </div>
                 </div>
-              </button>
-            ))
+              )}
+
+              {/* Notificações do sistema */}
+              {notificacoes.length === 0 && atestadosPendentes.length === 0 ? (
+                <div className="text-center p-4 text-muted-foreground text-sm">
+                  Nenhuma notificação
+                </div>
+              ) : (
+                notificacoes.map((n) => (
+                  <div
+                    key={n.id}
+                    className={`p-2 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors ${!n.lida ? "bg-primary/5" : ""}`}
+                    onClick={() => {
+                      if (!n.lida) marcarComoLida(n.id);
+                      if (n.link) {
+                        setOpen(false);
+                        navigate(n.link);
+                      }
+                    }}
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className={`size-2 rounded-full mt-1.5 shrink-0 ${!n.lida ? "bg-blue-500" : "bg-transparent"}`} />
+                      <div>
+                        <div className="text-sm font-medium">{n.titulo}</div>
+                        <div className="text-xs text-muted-foreground">{n.mensagem}</div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          {new Date(n.created_at).toLocaleDateString("pt-BR")}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </>
           )}
         </div>
       </PopoverContent>
