@@ -56,7 +56,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         cadastro: setCadastroOpen,
         comunicacao: setComunicacaoOpen,
       };
-
       Object.values(setters).forEach((setter) => setter(false));
       const currentState = {
         folgas: folgasOpen,
@@ -110,7 +109,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setComunicacaoOpen(shouldOpen.comunicacao);
   }, [path]);
 
-  // Navegação do colaborador
   const employeeFolgaNav: NavItem[] = [
     { to: "/calendario", label: "Calendário", icon: Calendar },
     { to: "/trocas", label: "Trocas", icon: ArrowLeftRight },
@@ -126,6 +124,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/bloqueios", label: "Datas Bloqueadas", icon: Ban },
   ];
 
+  // 🔥 COLABORADOR: Meus Documentos + Atestados + Registros Disciplinares
   const employeeDocsNav: NavItem[] = [
     { to: "/documentos", label: "Meus Documentos", icon: FileText, end: true },
     { to: "/documentos/atestados", label: "Atestados", icon: FileWarning },
@@ -349,29 +348,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-border bg-card/80 backdrop-blur">
           <div className="px-3 py-2 mb-2">
-            <div className="text-sm font-medium truncate">
-              {profile?.nome ?? "—"}
-            </div>
+            <div className="text-sm font-medium truncate">{profile?.nome ?? "—"}</div>
             <div className="text-xs text-muted-foreground">
               {isAdmin ? "Administrador" : profile?.cargo ?? "Funcionário"}
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
-            onClick={signOut}
-          >
+          <Button variant="ghost" size="sm" className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10" onClick={signOut}>
             <LogOut className="size-4" /> Sair
           </Button>
         </div>
       </aside>
 
       {open && (
-        <div
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 md:hidden"
-          onClick={() => setOpen(false)}
-        />
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 md:hidden" onClick={() => setOpen(false)} />
       )}
 
       <main className="flex-1 min-w-0 p-4 md:p-8">
