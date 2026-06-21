@@ -196,7 +196,7 @@ export function DocumentImportForm() {
           mes: periodo?.mes ?? null,
           ano: periodo?.ano ?? null,
           unidadeId: unidade?.id ?? null,
-          matchStatus: matchedProfile ? "automatico" : "revisao",
+          matchStatus: matchedProfile ? "automatico" : "revisao" as const,
           matchedProfile,
           resolvido: !!matchedProfile,
           ignorado: false,
