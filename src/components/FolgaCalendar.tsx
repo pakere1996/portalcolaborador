@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   MONTH_NAMES,
   WEEKDAY_LABELS,
@@ -68,10 +68,10 @@ export interface FolgaCalendarProps {
   locked?: { unlockDateBR: string } | null;
 }
 
-// Hook para detectar mobile
-const useMediaQuery = (query: string) => {
-  const [matches, setMatches] = React.useState(false);
-  React.useEffect(() => {
+// Hook para detectar mobile – usando React explicitamente
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
     const media = window.matchMedia(query);
     if (media.matches !== matches) setMatches(media.matches);
     const listener = () => setMatches(media.matches);
@@ -79,7 +79,7 @@ const useMediaQuery = (query: string) => {
     return () => media.removeEventListener('change', listener);
   }, [matches, query]);
   return matches;
-};
+}
 
 export function FolgaCalendar(props: FolgaCalendarProps) {
   const {
