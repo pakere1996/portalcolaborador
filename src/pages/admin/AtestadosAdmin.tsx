@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   atestadoStoragePath,
   getFileKind,
@@ -12,8 +13,33 @@ import {
   statusClass,
 } from "@/lib/documentos-regulatorios";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export default function AtestadosAdmin() {
+  // 🔥 Função para aprovar/rejeitar diretamente sem abrir edição
+  const handleStatusAction = async (id: string, newStatus: "aprovado" | "rejeitado", obs?: string) => {
+    try {
+      const updates: any = {
+        status: newStatus,
+        respondido_em: new Date().toISOString(),
+        respondido_por: (await supabase.auth.getUser()).data.user?.id,
+      };
+      if (obs) updates.observacao_admin = obs;
+
+      const { error } = await supabase
+        .from("atestados")
+        .update(updates)
+        .eq("id", id);
+
+      if (error) throw error;
+      toast.success(`Atestado ${newStatus === "aprovado" ? "aprovado" : "rejeitado"} com sucesso!`);
+      // Recarrega a lista (a base tem função load, mas precisamos forçar)
+      window.location.reload(); // Simplificado, mas idealmente a base teria uma prop para refresh
+    } catch (error) {
+      toast.error("Erro ao atualizar status", { description: (error as Error).message });
+    }
+  };
+
   return (
     <DocumentosAdminBase
       tipo="atestados"
@@ -22,6 +48,18 @@ export default function AtestadosAdmin() {
       descricao="Gerencie todos os atestados médicos dos colaboradores."
       importTitle="Importar Atestado"
       campoData="data_atestado"
+      // 🔥 CORREÇÃO: ao selecionar colaborador, preencher unidade automaticamente
+      onColaboradorChange={async (colaboradorId, setForm) => {
+        if (!colaboradorId) return;
+        const { data } = await supabase
+          .from("profiles")
+          .select("unidade_id")
+          .eq("id", colaboradorId)
+          .single();
+        if (data?.unidade_id) {
+          setForm((prev: any) => ({ ...prev, unidade_id: data.unidade_id }));
+        }
+      }}
       gerarStoragePath={async (colaboradorId, data, id, file) => {
         const path = atestadoStoragePath(colaboradorId, data, id, file);
         const kind = getFileKind(file);
@@ -62,15 +100,69 @@ export default function AtestadosAdmin() {
           <div className="text-sm space-y-1">
             <div><span className="font-semibold">Dias:</span> {dias}</div>
             <div><span className="font-semibold">Retorno:</span> {dataRetorno.toLocaleDateString('pt-BR')}</div>
-            {doc.status && (
-              <Badge className={statusClass(doc.status)}>
-                {formatAtestadoStatus(doc.status)}
-              </Badge>
-            )}
           </div>
         );
       }}
-      // 🔥 editCamposExtras removido – a base já renderiza status e dias
+      // 🔥 Botões de ação extras na tabela (aprovado/rejeitado direto)
+      acoesExtras={(doc) => (
+        doc.status === "pendente" && (
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              variant="outline"
+              className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100 h-7 px-2 text-[10px]"
+              onClick={() => handleStatusAction(doc.id, "aprovado")}
+            >
+              Aprovar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100 h-7 px-2 text-[10px]"
+              onClick={() => {
+                const obs = prompt("Motivo da rejeição (opcional):");
+                handleStatusAction(doc.id, "rejeitado", obs || undefined);
+              }}
+            >
+              Rejeitar
+            </Button>
+          </div>
+        )
+      )}
+      editCamposExtras={(editForm, setEditForm) => (
+        <>
+          <div className="space-y-1 mt-2">
+            <Label className="text-xs">Dias de Afastamento</Label>
+            <Input
+              type="number"
+              min="0"
+              value={editForm.dias_afastamento || ""}
+              onChange={(e) => setEditForm({ ...editForm, dias_afastamento: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1 mt-2">
+            <Label className="text-xs">Status</Label>
+            <select
+              className="w-full rounded-md border border-border bg-background px-3 py-1 text-sm"
+              value={editForm.status || "pendente"}
+              onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+            >
+              <option value="pendente">Pendente</option>
+              <option value="aprovado">Aprovado</option>
+              <option value="rejeitado">Rejeitado</option>
+            </select>
+          </div>
+          <div className="space-y-1 mt-2">
+            <Label className="text-xs">Observação do Admin</Label>
+            <Textarea
+              rows={2}
+              value={editForm.observacao_admin || ""}
+              onChange={(e) => setEditForm({ ...editForm, observacao_admin: e.target.value })}
+              placeholder="Motivo da rejeição ou observação..."
+            />
+          </div>
+        </>
+      )}
       validarForm={(form) => {
         if (!form.dias_afastamento || parseInt(form.dias_afastamento) < 0) {
           return "Informe um número válido de dias de afastamento";
