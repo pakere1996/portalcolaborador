@@ -68,8 +68,8 @@ export interface FolgaCalendarProps {
   locked?: { unlockDateBR: string } | null;
 }
 
-// Hook para detectar mobile – usando React explicitamente
-function useMediaQuery(query: string) {
+// 🔥 Hook para detectar mobile – importado corretamente
+const useMediaQuery = (query: string) => {
   const [matches, setMatches] = useState(false);
   useEffect(() => {
     const media = window.matchMedia(query);
@@ -79,7 +79,10 @@ function useMediaQuery(query: string) {
     return () => media.removeEventListener('change', listener);
   }, [matches, query]);
   return matches;
-}
+};
+
+// 🔥 Nomes dos dias da semana abreviados (3 letras)
+const DIAS_SEMANA_ABR = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 export function FolgaCalendar(props: FolgaCalendarProps) {
   const {
@@ -178,13 +181,11 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     pending: "bg-violet-600 text-white border-violet-700 shadow-md",
   };
 
-  // 🔥 Função para renderizar o calendário em lista (mobile)
+  // 🔥 Função para renderizar o calendário em lista (mobile) – COM DIA DA SEMANA
   const renderMobileCalendar = () => {
     const days = getMonthDays(year, month0);
     const monthName = new Date(year, month0).toLocaleString('pt-BR', { month: 'long' });
     const yearStr = year;
-
-    const occupiedDays = cells.filter(c => c.kind === "day" && c.occupants.length > 0);
 
     return (
       <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
@@ -211,6 +212,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
             const hasMyFolga = c.occupants.some(occ => occ.userId === myUserId);
             const isBlocked = c.status === "blocked" || c.status === "taken" || c.status === "birthday";
             const isWeekend = c.date.getDay() === 0 || c.date.getDay() === 6;
+            const diaSemana = DIAS_SEMANA_ABR[c.date.getDay()];
 
             return (
               <div
@@ -221,6 +223,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
+                      {/* 🔥 DIA DA SEMANA + NÚMERO DO DIA */}
+                      <span className="text-xs font-medium text-slate-500 w-8">{diaSemana}</span>
                       <span className={cn(
                         "text-sm font-bold",
                         isWeekend ? "text-slate-900" : "text-slate-400",
@@ -243,7 +247,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                       )}
                     </div>
                     {c.occupants.length > 0 ? (
-                      <div className="flex flex-wrap gap-1 mt-1">
+                      <div className="flex flex-wrap gap-1 mt-1 ml-8">
                         {c.occupants.map((occ, idx) => {
                           const nome = occ.userName?.split(' ')[0] || "Colaborador";
                           return (
@@ -263,10 +267,10 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                         })}
                       </div>
                     ) : (
-                      <span className="text-[10px] text-slate-400">Nenhum colaborador</span>
+                      <span className="text-[10px] text-slate-400 ml-8">Nenhum colaborador</span>
                     )}
                     {hasMyFolga && (
-                      <div className="mt-1 text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 inline-block">
+                      <div className="mt-1 text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 inline-block ml-8">
                         {c.label || "Minha Folga"}
                       </div>
                     )}
@@ -286,7 +290,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     return renderMobileCalendar();
   }
 
-  // Versão Desktop (grid)
+  // Versão Desktop (grid) – mantida igual
   return (
     <TooltipProvider>
       <div className="bg-white border border-slate-200 rounded-[2rem] p-6 md:p-10 shadow-sm">
