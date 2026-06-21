@@ -367,7 +367,7 @@ export function DocumentImportForm() {
     const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageNumber - 1]);
     newPdf.addPage(copiedPage);
     const pdfBytes = await newPdf.save();
-    return new Blob([pdfBytes], { type: "application/pdf" });
+    return new Blob([pdfBytes.buffer], { type: "application/pdf" });
   };
 
   const handleAprovarTudo = async () => {
