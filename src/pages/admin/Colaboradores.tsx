@@ -20,7 +20,7 @@ import { Tables } from "@/integrations/supabase/types";
 import { adminApi } from "@/lib/admin-api";
 
 type Profile = Tables<'profiles'> & { role?: string | null };
-type Unidade = Tables<'unidades'>;
+type Unidade = Tables<'unidades'> & { possui_relogio_ponto?: boolean };
 type Cargo = Tables<'cargos'>;
 
 const blankEditForm = {
@@ -81,7 +81,6 @@ export default function Colaboradores() {
         role: rolesMap.get(p.id)?.[0] ?? null,
       }));
 
-      // Ordenação: Unidade → Status (ativo primeiro) → Nome
       const sortedProfiles = profilesWithRoles.sort((a, b) => {
         const unidadeA = uRes.data?.find(u => u.id === a.unidade_id)?.nome || "";
         const unidadeB = uRes.data?.find(u => u.id === b.unidade_id)?.nome || "";
@@ -121,7 +120,6 @@ export default function Colaboradores() {
 
   const toUpperCaseTrim = (str: string) => str.trim().toUpperCase();
 
-  // Validação dos campos obrigatórios
   const validateForm = (form: any) => {
     const errors: string[] = [];
     if (!form.nome?.trim()) errors.push("Nome");
@@ -206,9 +204,9 @@ export default function Colaboradores() {
       ativo: p.ativo,
       senha: "",
       regime_trabalho: p.regime_trabalho ?? "none",
-      dataDemissao: p.data_demissao ?? "",
-      tipo_vinculo: p.tipo_vinculo ?? "CLT",
-      possui_folha_ponto: p.possui_folha_ponto ?? false,
+      dataDemissao: (p as any).data_demissao ?? "",
+      tipo_vinculo: (p as any).tipo_vinculo ?? "CLT",
+      possui_folha_ponto: (p as any).possui_folha_ponto ?? false,
     });
   };
 
@@ -405,8 +403,8 @@ export default function Colaboradores() {
                       {unidades.find(u => u.id === p.unidade_id)?.nome ?? "—"}
                     </td>
                     <td className="p-4 text-center">
-                      <Badge className={p.tipo_vinculo === "Socio" ? "bg-purple-100 text-purple-700 border-purple-200" : "bg-blue-100 text-blue-700 border-blue-200"}>
-                        {p.tipo_vinculo === "Socio" ? "Sócio" : "CLT"}
+                      <Badge className={(p as any).tipo_vinculo === "Socio" ? "bg-purple-100 text-purple-700 border-purple-200" : "bg-blue-100 text-blue-700 border-blue-200"}>
+                        {(p as any).tipo_vinculo === "Socio" ? "Sócio" : "CLT"}
                       </Badge>
                     </td>
                     <td className="p-4 text-center">
@@ -421,7 +419,7 @@ export default function Colaboradores() {
                       </Badge>
                     </td>
                     <td className="p-4 text-center">
-                      {p.possui_folha_ponto ? (
+                      {(p as any).possui_folha_ponto ? (
                         <Badge className="bg-green-100 text-green-700 border-green-200">Sim</Badge>
                       ) : (
                         <Badge variant="outline" className="text-muted-foreground">Não</Badge>
