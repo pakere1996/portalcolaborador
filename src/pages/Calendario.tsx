@@ -13,6 +13,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Dialog as ExcecaoDialog,
+  DialogContent as ExcecaoDialogContent,
+  DialogHeader as ExcecaoDialogHeader,
+  DialogTitle as ExcecaoDialogTitle,
+  DialogFooter as ExcecaoDialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
   Calendar as CalIcon,
@@ -20,6 +29,7 @@ import {
   CalendarCheck,
   ArrowLeftRight,
   User,
+  Send,
 } from "lucide-react";
 import {
   dayType,
@@ -55,6 +65,12 @@ export default function CalendarioPage() {
 
   const [selectedDay, setSelectedDay] = useState<{ iso: string; status: string } | null>(null);
 
+  // Estado para o diálogo de solicitação de exceção
+  const [excecaoDialogOpen, setExcecaoDialogOpen] = useState(false);
+  const [excecaoData, setExcecaoData] = useState<string>("");
+  const [excecaoMotivo, setExcecaoMotivo] = useState("");
+  const [enviandoExcecao, setEnviandoExcecao] = useState(false);
+
   // --- LOAD ---
   const load = async () => {
     if (!user) return;
@@ -72,9 +88,6 @@ export default function CalendarioPage() {
         supabase.from("solicitacoes_especiais").select("*").eq("status", "pendente").gte("data", start).lte("data", end),
         supabase.from("prioridade_aniversario").select("*").eq("status", "ativa").gte("data", start).lte("data", end),
       ]);
-
-      console.log("✅ Folgas carregadas:", fRes.data);
-      console.log("✅ Perfis carregados:", pRes.data);
 
       setFolgas(fRes.data ?? []);
       setManualBlocked(bRes.data ?? []);
@@ -124,10 +137,8 @@ export default function CalendarioPage() {
   // --- Ocupantes (apenas da mesma unidade) ---
   const occupantsByDate = useMemo(() => {
     const m = new Map<string, DayOccupant[]>();
-    // Filtra perfis pela mesma unidade do usuário
     const myProfile = profiles.find(p => p.id === user?.id);
     const userUnidade = myProfile?.unidade_id;
-    // Se não tiver unidade, não exibe ninguém (exceto admin, que verá todos)
     const filteredProfiles = userUnidade
       ? profiles.filter(p => p.unidade_id === userUnidade)
       : profiles;
@@ -147,7 +158,6 @@ export default function CalendarioPage() {
       });
     }
 
-    // Folgas: também filtra pela unidade
     folgas.forEach(f => {
       const profile = profiles.find(p => p.id === f.user_id);
       if (profile && (userUnidade ? profile.unidade_id === userUnidade : true)) {
@@ -260,7 +270,7 @@ export default function CalendarioPage() {
       return;
     }
 
-    // Verifica se o usuário é admin (consulta direta à tabela user_roles)
+    // Verifica se o usuário é admin
     const { data: roleData } = await supabase
       .from('user_roles')
       .select('role')
@@ -269,7 +279,6 @@ export default function CalendarioPage() {
       .maybeSingle();
     const isAdmin = !!roleData;
 
-    // Se não for admin, verifica se o destinatário é da mesma unidade
     if (!isAdmin) {
       const myProfile = profiles.find(p => p.id === user.id);
       const destProfile = profiles.find(p => p.id === destinatarioId);
@@ -283,7 +292,6 @@ export default function CalendarioPage() {
       }
     }
 
-    // Verifica se já existe solicitação pendente
     const { data: existing, error: checkError } = await supabase
       .from('trocas_folga')
       .select('id')
@@ -326,14 +334,38 @@ export default function CalendarioPage() {
     }
   };
 
-  const solicitacaoExtra = async (iso: string) => {
+  // --- Nova função: abrir diálogo de exceção ---
+  const abrirExcecao = (iso: string) => {
+    setExcecaoData(iso);
+    setExcecaoMotivo("");
+    setExcecaoDialogOpen(true);
+  };
+
+  // --- Função para enviar a solicitação de exceção ---
+  const enviarExcecao = async () => {
     if (!user) return;
-    const hasFolgaNoDia = folgas.some(f => f.user_id === user.id && f.data === iso);
-    if (hasFolgaNoDia) {
-      toast.info("Você já tem uma folga neste dia.");
-      return;
+    setEnviandoExcecao(true);
+    try {
+      const { error } = await supabase
+        .from('solicitacoes_especiais')
+        .insert({
+          user_id: user.id,
+          data: excecaoData,
+          motivo: excecaoMotivo.trim() || "Solicitação de exceção (sem motivo informado)",
+          status: 'pendente',
+        });
+
+      if (error) throw error;
+
+      toast.success("Solicitação de exceção enviada para o administrador!");
+      setExcecaoDialogOpen(false);
+      setSelectedDay(null);
+      load();
+    } catch (e) {
+      toast.error("Erro ao enviar solicitação", { description: (e as Error).message });
+    } finally {
+      setEnviandoExcecao(false);
     }
-    navigate(`/solicitar?data=${iso}`);
   };
 
   const currentMonthKey = monthKey(new Date(year, month0, 1));
@@ -362,13 +394,11 @@ export default function CalendarioPage() {
     hoje.setHours(0, 0, 0, 0);
     const fixedFolgaFutura = fixedDateInWeek ? fixedDateInWeek >= hoje : false;
 
-    // Regra para trocar em dia de semana:
     const canTradeWeekday = !isWeekend &&
       fixedDay !== null &&
       fixedDateInWeek !== null &&
       fixedFolgaFutura;
 
-    // Regra para trocar em fim de semana:
     const hasMonthlyFolga = folgas.some(f =>
       f.user_id === user?.id &&
       monthKey(parseYMD(f.data)) === monthKey(date) &&
@@ -379,6 +409,9 @@ export default function CalendarioPage() {
 
     const canTrade = canTradeWeekday || canTradeWeekend;
 
+    // Verifica se o dia está ocupado (para mostrar a opção de exceção quando lotado)
+    const isDayTaken = selectedDay.status === 'taken' || selectedDay.status === 'blocked';
+
     return {
       occupants,
       isMine,
@@ -386,6 +419,7 @@ export default function CalendarioPage() {
       canTrade,
       isWeekend,
       date,
+      isDayTaken,
     };
   }, [selectedDay, occupantsByDate, user, profiles, folgas]);
 
@@ -426,6 +460,7 @@ export default function CalendarioPage() {
         currentMonthKey={currentMonthKey}
       />
 
+      {/* Dialog de detalhes do dia */}
       <Dialog open={!!selectedDay} onOpenChange={(o) => !o && setSelectedDay(null)}>
         <DialogContent className="max-w-md rounded-[2rem] border-none shadow-2xl p-8">
           <DialogHeader>
@@ -545,15 +580,19 @@ export default function CalendarioPage() {
                   <div className="text-sm text-slate-500">Troca aprovada para esta data.</div>
                 )}
 
-                {selectedDay.status !== 'blocked' &&
-                 selectedDay.status !== 'taken' &&
-                 selectedDay.status !== 'past' &&
+                {/* Botão de solicitar exceção – aparece quando o dia está ocupado/lotado/bloqueado, mas NÃO é do próprio */}
+                {selectedDay.status !== 'past' &&
                  selectedDay.status !== 'mine' &&
                  selectedDay.status !== 'fixed' &&
                  selectedDay.status !== 'pending' &&
-                 selectedDay.status !== 'birthday' &&
-                 selectedDay.status !== 'swapped' && (
-                  <Button variant="ghost" onClick={() => solicitacaoExtra(selectedDay.iso)} className="w-full">
+                 selectedDay.status !== 'swapped' &&
+                 dayInfo.isDayTaken && (
+                  <Button
+                    variant="outline"
+                    className="w-full border-amber-200 text-amber-700 hover:bg-amber-50"
+                    onClick={() => abrirExcecao(selectedDay.iso)}
+                    disabled={busy}
+                  >
                     <AlertCircle className="size-4 mr-2" /> Solicitar exceção
                   </Button>
                 )}
@@ -568,6 +607,47 @@ export default function CalendarioPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de solicitação de exceção */}
+      <ExcecaoDialog open={excecaoDialogOpen} onOpenChange={(o) => !o && setExcecaoDialogOpen(false)}>
+        <ExcecaoDialogContent className="max-w-md rounded-[2rem] border-none shadow-2xl p-8">
+          <ExcecaoDialogHeader>
+            <ExcecaoDialogTitle className="text-2xl font-black flex items-center gap-3">
+              <AlertCircle className="size-6 text-amber-500" />
+              Solicitar exceção
+            </ExcecaoDialogTitle>
+          </ExcecaoDialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label className="text-sm font-semibold text-slate-700">Data</Label>
+              <div className="mt-1 text-lg font-bold text-slate-900">
+                {excecaoData && formatBR(parseYMD(excecaoData))}
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="motivo" className="text-sm font-semibold text-slate-700">
+                Justificativa <span className="text-slate-400 text-xs font-normal">(opcional)</span>
+              </Label>
+              <Textarea
+                id="motivo"
+                placeholder="Descreva o motivo da solicitação (ex: compromisso pessoal, urgência, etc.)"
+                value={excecaoMotivo}
+                onChange={(e) => setExcecaoMotivo(e.target.value)}
+                rows={4}
+                className="mt-1 resize-none rounded-xl border-slate-200 focus:border-primary focus:ring-primary"
+              />
+            </div>
+          </div>
+          <ExcecaoDialogFooter className="gap-3">
+            <Button variant="ghost" onClick={() => setExcecaoDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={enviarExcecao} disabled={enviandoExcecao}>
+              {enviandoExcecao ? "Enviando..." : <><Send className="size-4 mr-2" /> Enviar solicitação</>}
+            </Button>
+          </ExcecaoDialogFooter>
+        </ExcecaoDialogContent>
+      </ExcecaoDialog>
     </div>
   );
 }
