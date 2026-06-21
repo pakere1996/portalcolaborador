@@ -14,6 +14,28 @@ import {
 import { extractTextFromPDF, renderPdfPageAsImage } from "@/lib/pdf-utils";
 import { adminApi } from "@/lib/admin-api";
 
+// 🔥 EXPORTAR PageResult PARA OUTROS ARQUIVOS
+export interface PageResult {
+  pageNumber: number;
+  text: string;
+  nome: string | null;
+  cnpj: string | null;
+  mes: number | null;
+  ano: number | null;
+  unidadeId: string | null;
+  matchStatus: "automatico" | "revisao";
+  matchedProfile: ProfileForMatching | null;
+  resolvido: boolean;
+  ignorado: boolean;
+  aprovado: boolean;
+  aprovadoEm?: string;
+  duplicadoId: string | null;
+  acaoSeDuplicado: "substituir" | "manter_antigo" | null;
+  matricula?: string | null;
+  cargo?: string | null;
+  regime_trabalho?: string | null;
+}
+
 interface ProfileForMatching {
   id: string;
   nome: string;
@@ -33,24 +55,6 @@ interface Unidade {
   id: string;
   nome: string;
   cnpj: string | null;
-}
-
-interface PageResult {
-  pageNumber: number;
-  text: string;
-  nome: string | null;
-  cnpj: string | null;
-  mes: number | null;
-  ano: number | null;
-  unidadeId: string | null;
-  matchStatus: "automatico" | "revisao"; // 🔥 union type corrigido
-  matchedProfile: ProfileForMatching | null;
-  resolvido: boolean;
-  ignorado: boolean;
-  aprovado: boolean;
-  aprovadoEm?: string;
-  duplicadoId: string | null;
-  acaoSeDuplicado: "substituir" | "manter_antigo" | null;
 }
 
 const normalizeNome = (str: string): string => {
