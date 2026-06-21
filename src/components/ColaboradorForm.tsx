@@ -7,7 +7,7 @@ import { formatCPF, onlyDigits } from "@/lib/cpf";
 import { formatPhone } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 
-type Unidade = Tables<'unidades'>;
+type Unidade = Tables<'unidades'> & { possui_relogio_ponto?: boolean };
 type Cargo = Tables<'cargos'>;
 
 interface ColaboradorFormProps {
@@ -198,7 +198,6 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
           </Select>
         </div>
 
-        {/* 🔥 CORRIGIDO: campos de data agora usam 'dataNascimento' e 'dataAdmissao' */}
         <div className="space-y-2">
           <Label htmlFor="dataNascimento">Data de Nascimento *</Label>
           <Input 
