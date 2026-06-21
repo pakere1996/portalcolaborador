@@ -29,6 +29,7 @@ import {
   ymd,
   getMonthDays,
   isSameWeek,
+  getWeekStart,
 } from "@/lib/folga-rules";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -305,29 +306,60 @@ export default function CalendarioPage() {
 
     // Verifica se o usuário tem folga fixa
     const myProfile = profiles.find(p => p.id === user?.id);
-    const hasFixedFolga = myProfile?.folga_fixa_semana !== null && myProfile?.folga_fixa_semana !== undefined;
+    const fixedDay = myProfile?.folga_fixa_semana ?? null; // 1=segunda, ..., 5=sexta
 
-    // Verifica se o usuário já usou a folga da semana (tem outra folga na mesma semana)
-    const sameWeekFolgas = folgas.filter(f =>
+    // Calcular a data da folga fixa na mesma semana do dia selecionado (se houver)
+    let fixedDateInWeek: Date | null = null;
+    if (fixedDay !== null && fixedDay >= 1 && fixedDay <= 5) {
+      const weekStart = getWeekStart(date); // início da semana (segunda)
+      const fixedDate = new Date(weekStart);
+      fixedDate.setDate(weekStart.getDate() + (fixedDay - 1)); // ajusta para o dia da semana fixo
+      fixedDateInWeek = fixedDate;
+    }
+
+    // Verifica se o usuário já tem uma folga (não fixa) na mesma semana (ex: troca aprovada, folga extra)
+    const otherFolgasSameWeek = folgas.filter(f =>
       f.user_id === user?.id &&
-      isSameWeek(date, parseYMD(f.data))
+      isSameWeek(date, parseYMD(f.data)) &&
+      f.data !== iso // exclui a folga do dia selecionado (se houver)
     );
-    const hasUsedWeekFolga = sameWeekFolgas.some(f => f.data !== iso);
+    // Se o usuário tem folga fixa, e a folga fixa está na mesma semana, ela não conta como "outra"
+    const hasOtherFolgaInWeek = otherFolgasSameWeek.some(f => {
+      if (fixedDateInWeek && f.data === ymd(fixedDateInWeek)) {
+        return false; // é a folga fixa, não é "outra"
+      }
+      return true;
+    });
 
-    // Verifica se o usuário já tem folga mensal no mês (extra não conta)
+    // Verifica se a folga fixa ainda não passou
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const fixedFolgaFutura = fixedDateInWeek ? fixedDateInWeek >= hoje : false;
+
+    // Condição para trocar em dia de semana:
+    // - O dia selecionado é dia de semana (segunda a sexta)
+    // - O usuário tem folga fixa definida
+    // - A folga fixa está na mesma semana do dia selecionado
+    // - A folga fixa ainda não passou
+    // - Não há outra folga (não fixa) na mesma semana (além da fixa)
+    const canTradeWeekday = !isWeekend &&
+      fixedDay !== null &&
+      fixedDateInWeek !== null &&
+      fixedFolgaFutura &&
+      !hasOtherFolgaInWeek;
+
+    // Condição para trocar em fim de semana:
+    // - O dia selecionado é fim de semana
+    // - O usuário NÃO tem folga mensal (extra não conta) no mês
     const hasMonthlyFolga = folgas.some(f =>
       f.user_id === user?.id &&
       monthKey(parseYMD(f.data)) === monthKey(date) &&
       (f.tipo === 'sabado' || f.tipo === 'domingo') &&
       f.extra !== true
     );
-
-    // Condições para mostrar botão de troca:
-    // - Para dia de semana: se tem folga fixa e ainda não usou a folga da semana
-    const canTradeWeekday = !isWeekend && hasFixedFolga && !hasUsedWeekFolga;
-    // - Para fim de semana: se NÃO tem folga mensal marcada
     const canTradeWeekend = isWeekend && !hasMonthlyFolga;
 
+    // Pode trocar se qualquer condição for verdadeira
     const canTrade = canTradeWeekday || canTradeWeekend;
 
     return {
@@ -337,8 +369,9 @@ export default function CalendarioPage() {
       isOccupied: occupants.length > 0,
       canTrade,
       hasMonthlyFolga,
-      hasUsedWeekFolga,
-      hasFixedFolga,
+      hasOtherFolgaInWeek,
+      fixedFolgaFutura,
+      fixedDay,
       isWeekend,
       date,
     };
@@ -464,13 +497,20 @@ export default function CalendarioPage() {
                   </Button>
                 )}
                 {selectedDay.status === 'fixed' && (
-                  <div className="text-sm text-slate-500">Sua folga fixa semanal. Para trocar, use o botão "Trocar" ao lado de um ocupante.</div>
+                  <div className="text-sm text-slate-500">
+                    Sua folga fixa semanal.
+                    {dayInfo.canTrade ? " Para trocar, use o botão 'Trocar' ao lado de um ocupante." : " Você já usou sua folga desta semana ou a data já passou."}
+                  </div>
                 )}
                 {selectedDay.status === 'blocked' && (
                   <div className="text-sm text-slate-500">Esta data está bloqueada administrativamente.</div>
                 )}
                 {selectedDay.status === 'taken' && (
-                  <div className="text-sm text-slate-500">Limite de colaboradores atingido.</div>
+                  <div className="text-sm text-slate-500">
+                    {dayInfo.isWeekend 
+                      ? "Limite de colaboradores atingido." 
+                      : "Este dia está ocupado por outro colaborador."}
+                  </div>
                 )}
                 {selectedDay.status === 'past' && (
                   <div className="text-sm text-slate-500">Data já passou.</div>
