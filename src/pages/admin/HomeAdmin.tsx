@@ -152,75 +152,69 @@ export default function AdminHomeAdminPage() {
   const [pendentes, setPendentes] = useState<AtestadoPendente[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNotification, setShowNotification] = useState(false);
-  const [alreadyNotified, setAlreadyNotified] = useState(false);
+
+  const carregarPendentes = async () => {
+    setLoading(true);
+    try {
+      // 1. Buscar atestados pendentes
+      const { data: atestados, error: atestadosError } = await supabase
+        .from("atestados")
+        .select("id, colaborador_id, data_atestado, dias_afastamento, created_at")
+        .eq("status", "pendente")
+        .order("created_at", { ascending: false });
+
+      if (atestadosError) throw atestadosError;
+
+      if (!atestados || atestados.length === 0) {
+        setPendentes([]);
+        setLoading(false);
+        return;
+      }
+
+      // 2. Buscar nomes dos colaboradores
+      const colaboradorIds = atestados.map((a) => a.colaborador_id);
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, nome")
+        .in("id", colaboradorIds);
+
+      if (profilesError) throw profilesError;
+
+      const profileMap = new Map(profiles?.map((p) => [p.id, p.nome]) || []);
+
+      const pendentesFormatados: AtestadoPendente[] = atestados.map((item) => ({
+        id: item.id,
+        colaborador_id: item.colaborador_id,
+        colaborador_nome: profileMap.get(item.colaborador_id) || "Colaborador",
+        data_atestado: item.data_atestado,
+        dias_afastamento: item.dias_afastamento,
+        created_at: item.created_at,
+      }));
+
+      setPendentes(pendentesFormatados);
+
+      if (pendentesFormatados.length > 0) {
+        setShowNotification(true);
+        toast.info(`📋 ${pendentesFormatados.length} atestado(s) pendente(s) de aprovação`, {
+          duration: 6000,
+          action: {
+            label: "Ver agora",
+            onClick: () => {
+              window.location.href = "/admin/documentos/atestados";
+            },
+          },
+        });
+      }
+    } catch (error) {
+      console.error("Erro ao carregar atestados pendentes:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const carregarPendentes = async () => {
-      // Evita múltiplas chamadas
-      if (alreadyNotified) return;
-      
-      setLoading(true);
-      try {
-        // 1. Busca atestados pendentes (sem join)
-        const { data: atestados, error: atestadosError } = await supabase
-          .from("atestados")
-          .select("id, colaborador_id, data_atestado, dias_afastamento, created_at")
-          .eq("status", "pendente")
-          .order("created_at", { ascending: false });
-
-        if (atestadosError) throw atestadosError;
-
-        if (!atestados || atestados.length === 0) {
-          setPendentes([]);
-          setLoading(false);
-          return;
-        }
-
-        // 2. Busca nomes dos colaboradores
-        const colaboradorIds = atestados.map((a) => a.colaborador_id);
-        const { data: profiles, error: profilesError } = await supabase
-          .from("profiles")
-          .select("id, nome")
-          .in("id", colaboradorIds);
-
-        if (profilesError) throw profilesError;
-
-        const profileMap = new Map(profiles?.map((p) => [p.id, p.nome]) || []);
-
-        const pendentesFormatados: AtestadoPendente[] = atestados.map((item) => ({
-          id: item.id,
-          colaborador_id: item.colaborador_id,
-          colaborador_nome: profileMap.get(item.colaborador_id) || "Colaborador",
-          data_atestado: item.data_atestado,
-          dias_afastamento: item.dias_afastamento,
-          created_at: item.created_at,
-        }));
-
-        setPendentes(pendentesFormatados);
-
-        // 3. Notifica apenas uma vez
-        if (pendentesFormatados.length > 0 && !alreadyNotified) {
-          setAlreadyNotified(true);
-          setShowNotification(true);
-          toast.info(`📋 ${pendentesFormatados.length} atestado(s) pendente(s) de aprovação`, {
-            duration: 6000,
-            action: {
-              label: "Ver agora",
-              onClick: () => {
-                window.location.href = "/admin/documentos/atestados";
-              },
-            },
-          });
-        }
-      } catch (error) {
-        console.error("Erro ao carregar atestados pendentes:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     carregarPendentes();
-  }, [alreadyNotified]);
+  }, []);
 
   const groupedModules = adminModules.reduce((acc, module) => {
     if (!acc[module.category]) {
@@ -239,7 +233,6 @@ export default function AdminHomeAdminPage() {
         <p className="text-muted-foreground mt-1">Acesso rápido aos módulos de gestão.</p>
       </div>
 
-      {/* Card de Atestados Pendentes – só aparece se houver pendentes */}
       {!loading && pendentes.length > 0 && (
         <Card className="border-amber-200 bg-amber-50/50 shadow-sm">
           <CardHeader className="pb-3">
@@ -276,7 +269,6 @@ export default function AdminHomeAdminPage() {
         </Card>
       )}
 
-      {/* Módulos agrupados por categoria */}
       {Object.entries(groupedModules).map(([category, modules]) => (
         <div key={category} className="space-y-4">
           <h2 className="text-xl font-semibold border-b pb-1 text-primary">{category}</h2>
@@ -302,7 +294,7 @@ export default function AdminHomeAdminPage() {
         </div>
       )}
 
-      {/* Popout de Notificação para Atestados Pendentes */}
+      {/* 🔥 Popout de notificação – com asChild para evitar erro de HTML inválido */}
       <AlertDialog open={showNotification} onOpenChange={setShowNotification}>
         <AlertDialogContent className="max-w-md rounded-2xl">
           <AlertDialogHeader>
@@ -315,7 +307,11 @@ export default function AdminHomeAdminPage() {
                 <X className="size-4" />
               </Button>
             </div>
-            <AlertDialogDescription className="text-base">
+          </AlertDialogHeader>
+
+          {/* 🔥 Correção: AlertDialogDescription com asChild para usar <div> em vez de <p> */}
+          <AlertDialogDescription asChild>
+            <div className="text-base text-muted-foreground">
               Existem <strong>{pendentes.length}</strong> atestado(s) aguardando sua aprovação.
               <br />
               <br />
@@ -327,8 +323,9 @@ export default function AdminHomeAdminPage() {
                   </span>
                 </div>
               ))}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
+            </div>
+          </AlertDialogDescription>
+
           <AlertDialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowNotification(false)}>
               Fechar
