@@ -304,99 +304,129 @@ export default function MensagensAdmin() {
 
       {/* Formulário de Envio */}
       <Card className="border-border shadow-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Send className="size-5 text-primary" /> Enviar Mensagem
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Destinatário</Label>
-                <Select value={destinatario} onValueChange={(v) => { setDestinatario(v); setUnidadeId(""); setColaboradorId(""); }}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos os colaboradores</SelectItem>
-                    <SelectItem value="unidade">Por unidade</SelectItem>
-                    <SelectItem value="individual">Colaborador específico</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+  <CardHeader>
+    <CardTitle className="flex items-center gap-2">
+      <Send className="size-5 text-primary" /> Enviar Mensagem
+    </CardTitle>
+  </CardHeader>
+  <CardContent>
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="space-y-2">
+          <Label>Destinatário</Label>
+          <Select value={destinatario} onValueChange={(v) => { 
+            setDestinatario(v); 
+            setUnidadeId(""); 
+            setColaboradorId(""); 
+          }}>
+            <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os colaboradores</SelectItem>
+              <SelectItem value="unidade">Por unidade</SelectItem>
+              <SelectItem value="individual">Colaborador específico</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-              {destinatario === "unidade" && (
-                <div className="space-y-2">
-                  <Label>Unidade</Label>
-                  <Select value={unidadeId} onValueChange={setUnidadeId}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {destinatario === "individual" && (
-                <div className="space-y-2">
-                  <Label>Colaborador</Label>
-                  <Select value={colaboradorId} onValueChange={setColaboradorId}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      {colaboradores.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label>Modelo (opcional)</Label>
-                <Select value={modeloSelecionado} onValueChange={setModeloSelecionado}>
-                  <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="nenhum">Nenhum</SelectItem>
-                    {modelos.map(m => <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* 🔥 Canal de envio */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Canal de Envio</Label>
-                <Select value={canal} onValueChange={setCanal}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    {CANAIS_ENVIO.map(c => (
-                      <SelectItem key={c.value} value={c.value}>
-                        {c.value === "whatsapp" && <Phone className="size-3 mr-1 inline" />}
-                        {c.value === "email" && <Mail className="size-3 mr-1 inline" />}
-                        {c.value === "ambos" && <><Phone className="size-3 mr-1 inline" /> + <Mail className="size-3 mr-1 inline" /></>}
-                        {c.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Assunto *</Label>
-              <Input value={assunto} onChange={(e) => setAssunto(e.target.value)} placeholder="Assunto da mensagem" />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Mensagem *</Label>
-              <Textarea rows={6} value={mensagem} onChange={(e) => setMensagem(e.target.value)} placeholder="Digite a mensagem..." />
-            </div>
-
-            <Button onClick={handleEnviar} disabled={busy} className="w-full md:w-auto">
-              {busy ? <Loader2 className="size-4 mr-2 animate-spin" /> : <Send className="size-4 mr-2" />}
-              {busy ? "Enviando..." : "Enviar Mensagem"}
-            </Button>
+        {destinatario === "unidade" && (
+          <div className="space-y-2">
+            <Label>Unidade</Label>
+            <Select value={unidadeId} onValueChange={setUnidadeId}>
+              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectContent>
+                {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
-        </CardContent>
-      </Card>
+        )}
+
+        {/* 🔥 Quando for "individual", primeiro exibe a unidade para filtrar */}
+        {destinatario === "individual" && (
+          <>
+            <div className="space-y-2">
+              <Label>Unidade (para filtrar)</Label>
+              <Select 
+                value={unidadeId} 
+                onValueChange={(v) => { 
+                  setUnidadeId(v); 
+                  setColaboradorId(""); // reseta colaborador ao mudar unidade
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Todas as unidades" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Todas as unidades</SelectItem>
+                  {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Colaborador</Label>
+              <Select value={colaboradorId} onValueChange={setColaboradorId}>
+                <SelectTrigger><SelectValue placeholder="Selecione o colaborador" /></SelectTrigger>
+                <SelectContent>
+                  {colaboradores
+                    .filter(c => !unidadeId || c.unidade_id === unidadeId)
+                    .map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                  {colaboradores.filter(c => !unidadeId || c.unidade_id === unidadeId).length === 0 && (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground text-center">
+                      Nenhum colaborador encontrado
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        )}
+
+        <div className="space-y-2">
+          <Label>Modelo (opcional)</Label>
+          <Select value={modeloSelecionado} onValueChange={setModeloSelecionado}>
+            <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="nenhum">Nenhum</SelectItem>
+              {modelos.map(m => <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Canal de envio */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Canal de Envio</Label>
+          <Select value={canal} onValueChange={setCanal}>
+            <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+            <SelectContent>
+              {CANAIS_ENVIO.map(c => (
+                <SelectItem key={c.value} value={c.value}>
+                  {c.value === "whatsapp" && <Phone className="size-3 mr-1 inline" />}
+                  {c.value === "email" && <Mail className="size-3 mr-1 inline" />}
+                  {c.value === "ambos" && <><Phone className="size-3 mr-1 inline" /> + <Mail className="size-3 mr-1 inline" /></>}
+                  {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Assunto *</Label>
+        <Input value={assunto} onChange={(e) => setAssunto(e.target.value)} placeholder="Assunto da mensagem" />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Mensagem *</Label>
+        <Textarea rows={6} value={mensagem} onChange={(e) => setMensagem(e.target.value)} placeholder="Digite a mensagem..." />
+      </div>
+
+      <Button onClick={handleEnviar} disabled={busy} className="w-full md:w-auto">
+        {busy ? <Loader2 className="size-4 mr-2 animate-spin" /> : <Send className="size-4 mr-2" />}
+        {busy ? "Enviando..." : "Enviar Mensagem"}
+      </Button>
+    </div>
+  </CardContent>
+</Card>
 
       {/* Dialog para criar/editar modelo */}
       <Dialog open={modeloDialogOpen} onOpenChange={setModeloDialogOpen}>
