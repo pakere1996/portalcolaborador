@@ -126,14 +126,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/bloqueios", label: "Datas Bloqueadas", icon: Ban },
   ];
 
-  // 🔥 DOIS ITENS SEPARADOS: "Contracheques" e "Folhas de Ponto"
+  // 🔥 COLABORADOR: apenas UM item "Meus Documentos"
   const employeeDocsNav: NavItem[] = [
-    { to: "/documentos/contracheque", label: "Contracheques", icon: FileText, end: true },
-    { to: "/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
-    { to: "/documentos/atestados", label: "Atestados", icon: FileWarning },
-    { to: "/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
+    { to: "/documentos", label: "Meus Documentos", icon: FileText, end: true },
   ];
 
+  // ADMIN: mantém os itens separados
   const adminDocsNav: NavItem[] = [
     { to: "/admin/documentos/contracheque", label: "Contracheques", icon: FileText, end: true },
     { to: "/admin/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
