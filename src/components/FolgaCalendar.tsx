@@ -225,7 +225,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
             const isWeekend = c.date.getDay() === 0 || c.date.getDay() === 6;
             const diaSemana = DIAS_SEMANA_ABR[c.date.getDay()];
 
-            // Se for final de semana e o usuário já tem uma folga no mês, mostra como indisponível
+            // 🔥 Se for final de semana e o usuário já tem uma folga no mês, mostra como indisponível
             const isDisabledForUser = isWeekend && hasMonthlyFolga && !hasMyFolga;
 
             return (
@@ -233,10 +233,10 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                 key={c.iso}
                 className={cn(
                   "px-4 py-3 hover:bg-slate-50/50 transition-colors cursor-pointer",
-                  isDisabledForUser && "opacity-60 cursor-not-allowed"
+                  isDisabledForUser && "opacity-60"
                 )}
                 onClick={() => {
-                  if (isDisabledForUser) return;
+                  // 🔥 SEMPRE chama onSelectDay, mesmo se "indisponível" (para permitir troca/exceção)
                   onSelectDay?.(c.iso, { status: c.status, reason: c.tooltip });
                 }}
               >
@@ -267,40 +267,28 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                         </span>
                       )}
                     </div>
-                    {/* Ocultar nomes de outros colaboradores para o usuário comum */}
-                    {isAdmin ? (
-                      c.occupants.length > 0 ? (
-                        <div className="flex flex-wrap gap-1 mt-1 ml-8">
-                          {c.occupants.map((occ, idx) => {
-                            const nome = occ.userName?.split(' ')[0] || "Colaborador";
-                            return (
-                              <span
-                                key={idx}
-                                className={cn(
-                                  "text-[10px] px-1.5 py-0.5 rounded font-medium truncate max-w-[120px]",
-                                  occ.type === 'fixed' ? "bg-blue-50 text-blue-600" :
-                                  occ.type === 'monthly' ? "bg-amber-50 text-amber-600" :
-                                  "bg-orange-50 text-orange-600"
-                                )}
-                                title={occ.userName}
-                              >
-                                {nome}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-slate-400 ml-8">Nenhum colaborador</span>
-                      )
+                    {c.occupants.length > 0 ? (
+                      <div className="flex flex-wrap gap-1 mt-1 ml-8">
+                        {c.occupants.map((occ, idx) => {
+                          const nome = occ.userName?.split(' ')[0] || "Colaborador";
+                          return (
+                            <span
+                              key={idx}
+                              className={cn(
+                                "text-[10px] px-1.5 py-0.5 rounded font-medium truncate max-w-[120px]",
+                                occ.type === 'fixed' ? "bg-blue-50 text-blue-600" :
+                                occ.type === 'monthly' ? "bg-amber-50 text-amber-600" :
+                                "bg-orange-50 text-orange-600"
+                              )}
+                              title={occ.userName}
+                            >
+                              {nome}
+                            </span>
+                          );
+                        })}
+                      </div>
                     ) : (
-                      // Para o colaborador, mostrar apenas se ele tem folga
-                      hasMyFolga && (
-                        <div className="flex flex-wrap gap-1 mt-1 ml-8">
-                          <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-amber-50 text-amber-600">
-                            {myUserId ? "Você" : "Colaborador"}
-                          </span>
-                        </div>
-                      )
+                      <span className="text-[10px] text-slate-400 ml-8">Nenhum colaborador</span>
                     )}
                     {hasMyFolga && (
                       <div className="mt-1 text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 inline-block ml-8">
@@ -318,6 +306,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     );
   };
 
+  // Versão Desktop (grid)
   if (isMobile) {
     return renderMobileCalendar();
   }
@@ -376,6 +365,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
 
             const hasMyFolga = c.occupants.some(occ => occ.userId === myUserId);
 
+            // 🔥 Se for final de semana e o usuário já tem uma folga no mês, desabilita visualmente
             const isDisabledForUser = (isSunday || isSaturday) && hasMonthlyFolga && !hasMyFolga;
 
             return (
@@ -384,11 +374,11 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                 className={cn(
                   "min-h-[100px] md:min-h-[140px] p-3 flex flex-col relative transition-all duration-300 group border-none",
                   statusStyles[c.status],
-                  isClickable && !isDisabledForUser && "cursor-pointer hover:shadow-lg hover:z-10 hover:scale-[1.02]",
-                  isDisabledForUser && "opacity-60 cursor-not-allowed"
+                  isClickable && "cursor-pointer hover:shadow-lg hover:z-10 hover:scale-[1.02]",
+                  isDisabledForUser && "opacity-60"
                 )}
                 onClick={() => {
-                  if (isDisabledForUser) return;
+                  // 🔥 SEMPRE chama onSelectDay, mesmo se "indisponível" (para permitir troca/exceção)
                   onSelectDay?.(c.iso, { status: c.status, reason: c.tooltip });
                 }}
               >
@@ -440,64 +430,57 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                   </div>
                 </div>
 
-                {isAdmin ? (
-                  c.occupants.length > 0 && (
-                    <div className="flex flex-col gap-1.5 overflow-hidden">
-                      {c.occupants.slice(0, 4).map((occ, idx) => (
-                        <div
-                          key={idx}
-                          className={cn(
-                            "text-[10px] px-2.5 py-1 rounded-full border truncate w-fit max-w-full font-semibold shadow-sm",
-                            tagColors[occ.type]
-                          )}
-                        >
-                          {occ.userName?.split(" ")[0]}
-                        </div>
-                      ))}
-                      {c.occupants.length > 4 && (
-                        <div className="text-[10px] text-slate-400 font-bold pl-1 flex items-center gap-1 mt-1">
-                          <Users className="size-3" /> +{c.occupants.length - 4}
-                        </div>
-                      )}
-                    </div>
-                  )
-                ) : (
-                  // Para colaborador, mostrar apenas se ele tem folga
-                  hasMyFolga && (
-                    <div className="mt-auto flex flex-col gap-1">
-                      <div className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
-                        {c.label || "Minha Folga"}
+                {isAdmin && c.occupants.length > 0 && (
+                  <div className="flex flex-col gap-1.5 overflow-hidden">
+                    {c.occupants.slice(0, 4).map((occ, idx) => (
+                      <div
+                        key={idx}
+                        className={cn(
+                          "text-[10px] px-2.5 py-1 rounded-full border truncate w-fit max-w-full font-semibold shadow-sm",
+                          tagColors[occ.type]
+                        )}
+                      >
+                        {occ.userName?.split(" ")[0]}
                       </div>
-                    </div>
-                  )
-                )}
-
-                {!isAdmin && !hasMyFolga && c.label && c.status !== "past" && (
-                  <div className="mt-auto flex flex-col gap-1">
-                    <div
-                      className={cn(
-                        "text-[10px] font-bold rounded-full px-2 py-0.5 w-fit",
-                        c.status === "fixed"
-                          ? tagColors.fixed
-                          : c.status === "pending"
-                          ? tagColors.pending
-                          : "bg-slate-100 text-slate-500 border-slate-200"
-                      )}
-                    >
-                      {c.label}
-                    </div>
+                    ))}
+                    {c.occupants.length > 4 && (
+                      <div className="text-[10px] text-slate-400 font-bold pl-1 flex items-center gap-1 mt-1">
+                        <Users className="size-3" /> +{c.occupants.length - 4}
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {!isAdmin && !hasMyFolga && c.status === "available" && !isBlocked && (
+                {!isAdmin && (
                   <div className="mt-auto flex flex-col gap-1">
-                    {!hasMonthlyFolga ? (
+                    {hasMyFolga && (
+                      <div className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
+                        {c.label || "Minha Folga"}
+                      </div>
+                    )}
+                    {!hasMyFolga && c.label && c.status !== "past" && (
+                      <div
+                        className={cn(
+                          "text-[10px] font-bold rounded-full px-2 py-0.5 w-fit",
+                          c.status === "fixed"
+                            ? tagColors.fixed
+                            : c.status === "pending"
+                            ? tagColors.pending
+                            : "bg-slate-100 text-slate-500 border-slate-200"
+                        )}
+                      >
+                        {c.label}
+                      </div>
+                    )}
+                    {/* 🔥 Exibe "Selecionar" apenas se o usuário ainda não tem uma folga no mês */}
+                    {!hasMyFolga && c.status === "available" && !isBlocked && !hasMonthlyFolga && (
                       <div className="opacity-0 group-hover:opacity-100 transition-all transform translate-y-1 group-hover:translate-y-0">
                         <span className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">
                           Selecionar
                         </span>
                       </div>
-                    ) : (
+                    )}
+                    {!hasMyFolga && c.status === "available" && !isBlocked && hasMonthlyFolga && (
                       <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest">
                         Indisponível
                       </div>
