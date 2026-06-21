@@ -65,8 +65,7 @@ interface DocumentosAdminBaseProps {
   editCamposExtras?: (editForm: any, setEditForm: any) => React.ReactNode;
   validarForm?: (form: any) => string | null;
   beforeInsert?: (form: any, path: string, kind: string) => Promise<any> | any;
-  // 🔥 NOVAS PROPS
-  onColaboradorChange?: (colaboradorId: string, setForm: any) => void;
+  onColaboradorChange?: (colaboradorId: string, setForm: any, unidades: Unidade[]) => void;
   acoesExtras?: (doc: DocumentoAdmin) => React.ReactNode;
 }
 
@@ -401,9 +400,8 @@ export function DocumentosAdminBase({
                   value={form.colaborador_id}
                   onValueChange={(value) => {
                     setForm({ ...form, colaborador_id: value });
-                    // 🔥 CHAMA O CALLBACK PARA PREENCHER UNIDADE AUTOMATICAMENTE
                     if (onColaboradorChange) {
-                      onColaboradorChange(value, setForm);
+                      onColaboradorChange(value, setForm, unidades);
                     }
                   }}
                   disabled={!form.unidade_id}
@@ -598,7 +596,6 @@ export function DocumentosAdminBase({
                             <div className="space-y-2 min-w-[200px]">
                               {tipo === "atestados" ? (
                                 <>
-                                  <Label className="text-xs font-medium text-muted-foreground">Status</Label>
                                   <select
                                     className="w-full rounded-md border border-border bg-background px-3 py-1 text-sm"
                                     value={editForm.status || "pendente"}
@@ -608,27 +605,24 @@ export function DocumentosAdminBase({
                                     <option value="aprovado">Aprovado</option>
                                     <option value="rejeitado">Rejeitado</option>
                                   </select>
-                                  <Label className="text-xs font-medium text-muted-foreground">Dias de Afastamento</Label>
                                   <Input
                                     type="number"
                                     min="0"
                                     value={editForm.dias_afastamento || ""}
                                     onChange={(e) => setEditForm({ ...editForm, dias_afastamento: e.target.value })}
-                                    placeholder="0"
+                                    placeholder="Dias"
                                     className="w-full"
                                   />
-                                  <Label className="text-xs font-medium text-muted-foreground">Resposta ao Colaborador</Label>
                                   <Textarea
                                     rows={2}
                                     value={editForm.observacao_admin || ""}
                                     onChange={(e) => setEditForm({ ...editForm, observacao_admin: e.target.value })}
-                                    placeholder="Resposta para o colaborador sobre a decisão"
+                                    placeholder="Observação do Admin"
                                     className="w-full"
                                   />
                                 </>
                               ) : (
                                 <>
-                                  <Label className="text-xs font-medium text-muted-foreground">Tipo</Label>
                                   <select
                                     className="w-full rounded-md border border-border bg-background px-3 py-1 text-sm"
                                     value={editForm.tipo || "outro"}
@@ -639,13 +633,12 @@ export function DocumentosAdminBase({
                                     <option value="justa_causa">Justa Causa</option>
                                     <option value="outro">Outro</option>
                                   </select>
-                                  <Label className="text-xs font-medium text-muted-foreground">Dias de Afastamento</Label>
                                   <Input
                                     type="number"
                                     min="0"
                                     value={editForm.dias_afastamento || ""}
                                     onChange={(e) => setEditForm({ ...editForm, dias_afastamento: e.target.value })}
-                                    placeholder="0"
+                                    placeholder="Dias"
                                     className="w-full"
                                   />
                                 </>
@@ -741,8 +734,6 @@ export function DocumentosAdminBase({
                                 >
                                   <Download className="size-4" />
                                 </Button>
-                                {/* 🔥 AÇÕES EXTRAS (ex: Aprovar/Rejeitar) */}
-                                {acoesExtras && acoesExtras(doc)}
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -752,6 +743,8 @@ export function DocumentosAdminBase({
                                 >
                                   <Trash2 className="size-4" />
                                 </Button>
+                                {/* 🔥 Ações extras (Aprovar/Rejeitar) */}
+                                {acoesExtras && acoesExtras(doc)}
                               </>
                             )}
                           </div>
