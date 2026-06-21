@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { MessageSquare, Plus, Pencil, Trash2, Send, Loader2, Copy, Mail, Phone, Users, Building2 } from "lucide-react";
+import { MessageSquare, Plus, Pencil, Trash2, Send, Loader2, Copy, Mail, Phone } from "lucide-react";
 
 interface ModeloMensagem {
   id: string;
@@ -35,7 +35,7 @@ interface Profile {
   id: string;
   nome: string;
   whatsapp: string | null;
-  email: string | null;
+  email_contato: string | null; // 🔥 CORRIGIDO: email_contato
   unidade_id: string | null;
 }
 
@@ -65,14 +65,17 @@ export default function MensagensAdmin() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
+  // Estado do formulário de envio
   const [destinatario, setDestinatario] = useState("todos");
-  const [unidadeId, setUnidadeId] = useState("");
-  const [colaboradorId, setColaboradorId] = useState("");
+  // 🔥 Usa "todas" como valor sentinela para unidadeId
+  const [unidadeId, setUnidadeId] = useState("todas");
+  const [colaboradorId, setColaboradorId] = useState("nenhum");
   const [modeloSelecionado, setModeloSelecionado] = useState("nenhum");
   const [assunto, setAssunto] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [canal, setCanal] = useState("whatsapp");
 
+  // Estado para modelos (CRUD)
   const [modeloDialogOpen, setModeloDialogOpen] = useState(false);
   const [editandoModelo, setEditandoModelo] = useState<ModeloMensagem | null>(null);
   const [modeloForm, setModeloForm] = useState({
@@ -81,7 +84,6 @@ export default function MensagensAdmin() {
     corpo: "",
     tipo: "outro",
   });
-
   const [confirmDelete, setConfirmDelete] = useState<ModeloMensagem | null>(null);
 
   const load = async () => {
@@ -89,19 +91,17 @@ export default function MensagensAdmin() {
     try {
       const [modelosRes, colaboradoresRes, unidadesRes] = await Promise.all([
         supabase.from("modelos_mensagem").select("*").order("nome"),
-        supabase.from("profiles").select("id, nome, whatsapp, email, unidade_id").eq("ativo", true).order("nome"),
+        // 🔥 CORRIGIDO: usa email_contato em vez de email
+        supabase.from("profiles").select("id, nome, whatsapp, email_contato, unidade_id").eq("ativo", true).order("nome"),
         supabase.from("unidades").select("id, nome").eq("ativo", true).order("nome"),
       ]);
 
-      if (colaboradoresRes.error) {
-        console.error("Erro ao carregar colaboradores:", colaboradoresRes.error);
-        toast.error("Erro ao carregar colaboradores");
-      } else {
-        console.log(`✅ ${colaboradoresRes.data?.length || 0} colaboradores carregados`);
-        setColaboradores(colaboradoresRes.data ?? []);
-      }
+      if (modelosRes.error) throw modelosRes.error;
+      if (colaboradoresRes.error) throw colaboradoresRes.error;
+      if (unidadesRes.error) throw unidadesRes.error;
 
       setModelos(modelosRes.data ?? []);
+      setColaboradores(colaboradoresRes.data ?? []);
       setUnidades(unidadesRes.data ?? []);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
@@ -115,6 +115,7 @@ export default function MensagensAdmin() {
     load();
   }, []);
 
+  // Quando selecionar um modelo, preenche os campos
   useEffect(() => {
     if (modeloSelecionado === "nenhum") {
       setAssunto("");
@@ -136,33 +137,33 @@ export default function MensagensAdmin() {
 
     setBusy(true);
     try {
-      // Monta lista de destinatários com base no tipo selecionado
-      let destinatarios: any[] = [];
-      
+      // Monta lista de destinatários
+      let destinatarios: Profile[] = [];
+
       if (destinatario === "todos") {
-        destinatarios = colaboradores.map(c => ({ ...c }));
-      } else if (destinatario === "unidade" && unidadeId) {
-        destinatarios = colaboradores.filter(c => c.unidade_id === unidadeId).map(c => ({ ...c }));
-      } else if (destinatario === "individual" && colaboradorId) {
+        destinatarios = colaboradores;
+      } else if (destinatario === "unidade" && unidadeId !== "todas") {
+        destinatarios = colaboradores.filter(c => c.unidade_id === unidadeId);
+      } else if (destinatario === "individual" && colaboradorId !== "nenhum") {
         const colab = colaboradores.find(c => c.id === colaboradorId);
-        if (colab) destinatarios = [{ ...colab }];
+        if (colab) destinatarios = [colab];
       }
 
-      // Verifica se há destinatários para os canais escolhidos
+      // Filtra por canal escolhido
       let enviadosWhatsApp = 0;
       let enviadosEmail = 0;
 
       if (canal === "whatsapp" || canal === "ambos") {
         const comWhatsApp = destinatarios.filter(d => d.whatsapp);
         enviadosWhatsApp = comWhatsApp.length;
-        // Simula envio para cada um (aqui você pode integrar com a API real)
+        // Aqui você integraria com a API de WhatsApp
         comWhatsApp.forEach(d => console.log(`📱 WhatsApp para ${d.nome}: ${d.whatsapp}`));
       }
 
       if (canal === "email" || canal === "ambos") {
-        const comEmail = destinatarios.filter(d => d.email);
+        const comEmail = destinatarios.filter(d => d.email_contato);
         enviadosEmail = comEmail.length;
-        comEmail.forEach(d => console.log(`📧 E-mail para ${d.nome}: ${d.email}`));
+        comEmail.forEach(d => console.log(`📧 E-mail para ${d.nome}: ${d.email_contato}`));
       }
 
       let msg = `Mensagem enviada para ${destinatarios.length} colaboradores.`;
@@ -177,13 +178,13 @@ export default function MensagensAdmin() {
       setMensagem("");
       setModeloSelecionado("nenhum");
     } catch (error) {
-      console.error("Erro ao enviar:", error);
       toast.error("Erro ao enviar mensagem");
     } finally {
       setBusy(false);
     }
   };
 
+  // CRUD de modelos
   const salvarModelo = async () => {
     if (!modeloForm.nome.trim() || !modeloForm.assunto.trim() || !modeloForm.corpo.trim()) {
       toast.error("Preencha todos os campos");
@@ -223,8 +224,7 @@ export default function MensagensAdmin() {
       setModeloForm({ nome: "", assunto: "", corpo: "", tipo: "outro" });
       load();
     } catch (error) {
-      console.error("Erro ao salvar modelo:", error);
-      toast.error("Erro ao salvar modelo", { description: (error as Error).message });
+      toast.error("Erro ao salvar modelo");
     } finally {
       setBusy(false);
     }
@@ -258,10 +258,11 @@ export default function MensagensAdmin() {
     setMensagem(modelo.corpo);
   };
 
-  // Filtrar colaboradores por unidade (para exibição no select)
-  const colaboradoresFiltrados = unidadeId
-    ? colaboradores.filter(c => c.unidade_id === unidadeId)
-    : colaboradores;
+  // Obtém colaboradores filtrados por unidade (para o select de colaborador individual)
+  const colaboradoresFiltrados = () => {
+    if (unidadeId === "todas") return colaboradores;
+    return colaboradores.filter(c => c.unidade_id === unidadeId);
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -336,14 +337,11 @@ export default function MensagensAdmin() {
               {/* Destinatário */}
               <div className="space-y-2">
                 <Label>Destinatário</Label>
-                <Select 
-                  value={destinatario} 
-                  onValueChange={(v) => { 
-                    setDestinatario(v); 
-                    setUnidadeId(""); 
-                    setColaboradorId(""); 
-                  }}
-                >
+                <Select value={destinatario} onValueChange={(v) => { 
+                  setDestinatario(v); 
+                  setUnidadeId("todas"); 
+                  setColaboradorId("nenhum"); 
+                }}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="todos">Todos os colaboradores</SelectItem>
@@ -353,45 +351,33 @@ export default function MensagensAdmin() {
                 </Select>
               </div>
 
-              {/* Unidade (para "Por unidade" ou "Colaborador específico") */}
-              {(destinatario === "unidade" || destinatario === "individual") && (
+              {/* Unidade (para filtro) */}
+              {destinatario === "unidade" || destinatario === "individual" ? (
                 <div className="space-y-2">
                   <Label>{destinatario === "unidade" ? "Unidade" : "Unidade (para filtrar)"}</Label>
-                  <Select 
-                    value={unidadeId} 
-                    onValueChange={(v) => { 
-                      setUnidadeId(v); 
-                      if (destinatario === "individual") setColaboradorId("");
-                    }}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
+                  <Select value={unidadeId} onValueChange={(v) => { setUnidadeId(v); setColaboradorId("nenhum"); }}>
+                    <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todas as unidades</SelectItem>
+                      <SelectItem value="todas">Todas</SelectItem>
                       {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
-              )}
+              ) : null}
 
-              {/* Colaborador (apenas para "individual") */}
+              {/* Colaborador (apenas para individual) */}
               {destinatario === "individual" && (
                 <div className="space-y-2">
                   <Label>Colaborador</Label>
-                  <Select 
-                    value={colaboradorId} 
-                    onValueChange={setColaboradorId}
-                    disabled={!unidadeId && colaboradoresFiltrados.length === 0}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Selecione o colaborador" /></SelectTrigger>
+                  <Select value={colaboradorId} onValueChange={setColaboradorId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
-                      {colaboradoresFiltrados.length === 0 ? (
+                      <SelectItem value="nenhum">Nenhum</SelectItem>
+                      {colaboradoresFiltrados().map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                      {colaboradoresFiltrados().length === 0 && (
                         <div className="px-2 py-1.5 text-sm text-muted-foreground text-center">
-                          {unidadeId ? "Nenhum colaborador nesta unidade" : "Selecione uma unidade ou \"Todas\""}
+                          Nenhum colaborador nesta unidade
                         </div>
-                      ) : (
-                        colaboradoresFiltrados.map(c => (
-                          <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
-                        ))
                       )}
                     </SelectContent>
                   </Select>
