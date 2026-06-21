@@ -12,6 +12,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Dialog as ExcecaoDialog,
@@ -19,6 +20,7 @@ import {
   DialogHeader as ExcecaoDialogHeader,
   DialogTitle as ExcecaoDialogTitle,
   DialogFooter as ExcecaoDialogFooter,
+  DialogDescription as ExcecaoDialogDescription,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -334,14 +336,12 @@ export default function CalendarioPage() {
     }
   };
 
-  // --- Nova função: abrir diálogo de exceção ---
   const abrirExcecao = (iso: string) => {
     setExcecaoData(iso);
     setExcecaoMotivo("");
     setExcecaoDialogOpen(true);
   };
 
-  // --- Função para enviar a solicitação de exceção ---
   const enviarExcecao = async () => {
     if (!user) return;
     setEnviandoExcecao(true);
@@ -409,7 +409,6 @@ export default function CalendarioPage() {
 
     const canTrade = canTradeWeekday || canTradeWeekend;
 
-    // Verifica se o dia está ocupado (para mostrar a opção de exceção quando lotado)
     const isDayTaken = selectedDay.status === 'taken' || selectedDay.status === 'blocked';
 
     return {
@@ -462,19 +461,16 @@ export default function CalendarioPage() {
 
       {/* Dialog de detalhes do dia */}
       <Dialog open={!!selectedDay} onOpenChange={(o) => !o && setSelectedDay(null)}>
-  <DialogContent className="max-w-md rounded-[2rem] border-none shadow-2xl p-8">
-    <DialogHeader>
-      <DialogTitle className="text-2xl font-black flex items-center gap-3">
-        <CalIcon className="size-6 text-primary" />
-        {selectedDay && formatBR(parseYMD(selectedDay.iso))}
-      </DialogTitle>
-      <DialogDescription className="sr-only">
-        Detalhes da data selecionada
-      </DialogDescription>
-    </DialogHeader>
-    {/* resto do conteúdo */}
-  </DialogContent>
-</Dialog>
+        <DialogContent className="max-w-md rounded-[2rem] border-none shadow-2xl p-8">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black flex items-center gap-3">
+              <CalIcon className="size-6 text-primary" />
+              {selectedDay && formatBR(parseYMD(selectedDay.iso))}
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              Detalhes da data selecionada
+            </DialogDescription>
+          </DialogHeader>
 
           {selectedDay && dayInfo && (
             <div className="space-y-6 py-4">
@@ -622,6 +618,9 @@ export default function CalendarioPage() {
               <AlertCircle className="size-6 text-amber-500" />
               Solicitar exceção
             </ExcecaoDialogTitle>
+            <ExcecaoDialogDescription className="sr-only">
+              Formulário para solicitar exceção de folga
+            </ExcecaoDialogDescription>
           </ExcecaoDialogHeader>
           <div className="space-y-4 py-4">
             <div>
