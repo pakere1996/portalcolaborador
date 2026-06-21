@@ -110,7 +110,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
   const hoje = new Date();
   const hojeStr = ymd(hoje);
 
-  // Verifica se o usuário já tem uma folga de final de semana neste mês (ativa ou já usada)
+  // Verifica se o usuário já tem uma folga de final de semana neste mês
   const hasMonthlyFolga = useMemo(() => {
     if (!myUserId || !currentMonthKey) return false;
     return allFolgas.some(f => 
@@ -120,7 +120,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     );
   }, [allFolgas, myUserId, currentMonthKey]);
 
-  // Busca a folga do usuário no mês atual (para verificar se já passou)
+  // Busca a folga do usuário no mês atual
   const userFolgaData = useMemo(() => {
     if (!myUserId || !currentMonthKey) return null;
     const folga = allFolgas.find(f => 
@@ -131,7 +131,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     return folga?.data || null;
   }, [allFolgas, myUserId, currentMonthKey]);
 
-  // Verifica se a folga do usuário já passou (data anterior a hoje)
+  // Verifica se a folga mensal do usuário já passou
   const userFolgaPassou = useMemo(() => {
     if (!userFolgaData) return false;
     return userFolgaData < hojeStr;
@@ -246,11 +246,11 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
             const diaSemana = DIAS_SEMANA_ABR[c.date.getDay()];
             const isPast = c.status === "past";
 
-            // 🔥 Se for final de semana e o usuário já tem uma folga no mês, NÃO exibe "Nenhum colaborador"
-            const shouldHideEmptyMessage = hasMonthlyFolga && !hasMyFolga && isWeekend;
+            // 🔥 Apenas para finais de semana: esconde "Nenhum colaborador" se já tem folga mensal
+            const shouldHideEmptyMessage = isWeekend && hasMonthlyFolga && !hasMyFolga;
 
-            // Se a folga do usuário já passou, não permite trocar
-            const isUserFolgaPassada = hasMyFolga && isPast;
+            // 🔥 Apenas para finais de semana: bloqueia clique se a folga mensal já passou
+            const isUserFolgaPassada = isWeekend && hasMyFolga && isPast;
 
             return (
               <div
@@ -261,7 +261,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                 )}
                 onClick={() => {
                   if (isUserFolgaPassada) {
-                    toast.warning("Esta folga já foi utilizada e não pode ser alterada.");
+                    toast.warning("Sua folga deste mês já foi utilizada e não pode ser alterada.");
                     return;
                   }
                   onSelectDay?.(c.iso, { status: c.status, reason: c.tooltip });
@@ -310,7 +310,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                         })}
                       </div>
                     ) : (
-                      // 🔥 Só exibe "Nenhum colaborador" se NÃO tiver que esconder
+                      // 🔥 Só exibe "Nenhum colaborador" se NÃO for para esconder
                       !shouldHideEmptyMessage && (
                         <span className="text-[10px] text-slate-400 ml-8">Nenhum colaborador</span>
                       )
@@ -318,12 +318,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     {hasMyFolga && (
                       <div className="mt-1 text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 inline-block ml-8">
                         {c.label || "Minha Folga"}
-                        {isPast && " (Utilizada)"}
-                      </div>
-                    )}
-                    {!hasMyFolga && isWeekend && hasMonthlyFolga && (
-                      <div className="mt-1 text-[10px] text-slate-400 font-medium ml-8">
-                        {/* 🔥 Não exibe nada em vez de "Indisponível" */}
+                        {isPast && isWeekend && " (Utilizada)"}
                       </div>
                     )}
                   </div>
@@ -386,8 +381,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
 
             const isClickable = !!onSelectDay;
             const dayOfWeek = c.date.getDay();
-            const isSunday = dayOfWeek === 0;
-            const isSaturday = dayOfWeek === 6;
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
             const isBlocked =
               c.status === "blocked" ||
@@ -396,8 +390,12 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
 
             const hasMyFolga = c.occupants.some(occ => occ.userId === myUserId);
             const isPast = c.status === "past";
-            const isUserFolgaPassada = hasMyFolga && isPast;
-            const shouldHideEmptyMessage = hasMonthlyFolga && !hasMyFolga && (isSunday || isSaturday);
+
+            // 🔥 Apenas para finais de semana: esconde "Nenhum colaborador" se já tem folga mensal
+            const shouldHideEmptyMessage = isWeekend && hasMonthlyFolga && !hasMyFolga;
+
+            // 🔥 Apenas para finais de semana: bloqueia clique se a folga mensal já passou
+            const isUserFolgaPassada = isWeekend && hasMyFolga && isPast;
 
             return (
               <div
@@ -410,7 +408,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                 )}
                 onClick={() => {
                   if (isUserFolgaPassada) {
-                    toast.warning("Esta folga já foi utilizada e não pode ser alterada.");
+                    toast.warning("Sua folga deste mês já foi utilizada e não pode ser alterada.");
                     return;
                   }
                   onSelectDay?.(c.iso, { status: c.status, reason: c.tooltip });
@@ -423,7 +421,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                         "text-sm font-bold tracking-tight",
                         c.status === "available"
                           ? "text-emerald-700"
-                          : (isSunday || isSaturday) && c.status !== "past"
+                          : isWeekend && c.status !== "past"
                           ? "text-slate-900"
                           : "text-slate-400",
                         c.status === "past" && "text-slate-300",
@@ -434,7 +432,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     >
                       {c.date.getDate()}
                     </span>
-                    {isAdmin && (isSunday || isSaturday) && (
+                    {isAdmin && isWeekend && (
                       <span className={cn(
                         "text-[9px] font-black mt-0.5 px-1.5 py-0.5 rounded-md border",
                         c.occupancy >= c.limit 
@@ -490,7 +488,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     {hasMyFolga && (
                       <div className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
                         {c.label || "Minha Folga"}
-                        {isPast && " (Utilizada)"}
+                        {isPast && isWeekend && " (Utilizada)"}
                       </div>
                     )}
                     {!hasMyFolga && c.label && c.status !== "past" && (
