@@ -104,7 +104,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // 🔥 NOVA SEÇÃO: Comunicação (admin)
   const adminComunicacaoNav: NavItem[] = [
     { to: "/admin/mensagens", label: "Comunicados", icon: MessageSquare },
-  ];
+    { to: "/admin/avisos", label: "Quadro de Avisos", icon: Bell }, // 🔥 NOVO
+];
 
   const folgaNav = isAdmin ? adminFolgaNav : employeeFolgaNav;
   const docsNav = isAdmin ? adminDocsNav : employeeDocsNav;
