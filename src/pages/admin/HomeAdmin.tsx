@@ -31,7 +31,6 @@ import {
   X,
 } from "lucide-react";
 
-// Módulos do admin
 const adminModules = [
   {
     title: "Colaboradores",
@@ -157,7 +156,7 @@ export default function AdminHomeAdminPage() {
   const carregarPendentes = async () => {
     setLoading(true);
     try {
-      // 🔥 CORREÇÃO: usar a sintaxe correta de relacionamento
+      // 🔥 CORREÇÃO: usar o alias correto para o relacionamento
       const { data, error } = await supabase
         .from("atestados")
         .select(`
@@ -166,7 +165,7 @@ export default function AdminHomeAdminPage() {
           data_atestado,
           dias_afastamento,
           created_at,
-          profiles:colaborador_id (nome)
+          profiles:profiles!colaborador_id (nome)
         `)
         .eq("status", "pendente")
         .order("created_at", { ascending: false });
@@ -184,7 +183,6 @@ export default function AdminHomeAdminPage() {
 
       setPendentes(pendentesFormatados);
 
-      // 🔥 Exibe notificação se houver pendentes
       if (pendentesFormatados.length > 0) {
         setShowNotification(true);
         toast.info(`📋 ${pendentesFormatados.length} atestado(s) pendente(s) de aprovação`, {
@@ -199,7 +197,6 @@ export default function AdminHomeAdminPage() {
       }
     } catch (error) {
       console.error("Erro ao carregar atestados pendentes:", error);
-      // Não exibe toast de erro para o usuário
     } finally {
       setLoading(false);
     }
@@ -209,7 +206,6 @@ export default function AdminHomeAdminPage() {
     carregarPendentes();
   }, []);
 
-  // Agrupa módulos por categoria
   const groupedModules = adminModules.reduce((acc, module) => {
     if (!acc[module.category]) {
       acc[module.category] = [];
@@ -227,7 +223,6 @@ export default function AdminHomeAdminPage() {
         <p className="text-muted-foreground mt-1">Acesso rápido aos módulos de gestão.</p>
       </div>
 
-      {/* 🔥 Card de Atestados Pendentes – só aparece se houver pendentes */}
       {!loading && pendentes.length > 0 && (
         <Card className="border-amber-200 bg-amber-50/50 shadow-sm">
           <CardHeader className="pb-3">
@@ -264,7 +259,6 @@ export default function AdminHomeAdminPage() {
         </Card>
       )}
 
-      {/* Módulos agrupados por categoria */}
       {Object.entries(groupedModules).map(([category, modules]) => (
         <div key={category} className="space-y-4">
           <h2 className="text-xl font-semibold border-b pb-1 text-primary">{category}</h2>
@@ -290,7 +284,6 @@ export default function AdminHomeAdminPage() {
         </div>
       )}
 
-      {/* 🔥 Popout de notificação para atestados pendentes */}
       <AlertDialog open={showNotification} onOpenChange={setShowNotification}>
         <AlertDialogContent className="max-w-md rounded-2xl">
           <AlertDialogHeader>
