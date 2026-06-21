@@ -19,11 +19,13 @@ import {
   Lock,
   LockOpen,
   CheckCircle2,
+  ChevronRight as ChevronRightIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
 
 export interface DayOccupant {
   userId: string;
@@ -66,6 +68,19 @@ export interface FolgaCalendarProps {
   locked?: { unlockDateBR: string } | null;
 }
 
+// Hook para detectar mobile
+const useMediaQuery = (query: string) => {
+  const [matches, setMatches] = React.useState(false);
+  React.useEffect(() => {
+    const media = window.matchMedia(query);
+    if (media.matches !== matches) setMatches(media.matches);
+    const listener = () => setMatches(media.matches);
+    media.addEventListener('change', listener);
+    return () => media.removeEventListener('change', listener);
+  }, [matches, query]);
+  return matches;
+};
+
 export function FolgaCalendar(props: FolgaCalendarProps) {
   const {
     year,
@@ -84,6 +99,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     onSelectDay,
     locked,
   } = props;
+
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   const cells = useMemo<DayInfo[]>(() => {
     const first = new Date(year, month0, 1);
@@ -110,11 +127,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
         locked,
       });
 
-      // 🔥 Obtém ocupantes do dia (inclui todos os usuários)
       const occupants = occupantsByDate?.get(iso) || [];
-
-      // 🔥 Verifica se o usuário atual tem folga neste dia (mesmo se passado)
-      const hasMyFolga = occupants.some(occ => occ.userId === myUserId);
 
       result.push({
         kind: "day",
@@ -165,6 +178,115 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     pending: "bg-violet-600 text-white border-violet-700 shadow-md",
   };
 
+  // 🔥 Função para renderizar o calendário em lista (mobile)
+  const renderMobileCalendar = () => {
+    const days = getMonthDays(year, month0);
+    const monthName = new Date(year, month0).toLocaleString('pt-BR', { month: 'long' });
+    const yearStr = year;
+
+    const occupiedDays = cells.filter(c => c.kind === "day" && c.occupants.length > 0);
+
+    return (
+      <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="size-8 rounded-full" onClick={onPrev}>
+              <ChevronLeft className="size-4" />
+            </Button>
+            <span className="font-bold text-sm capitalize">
+              {monthName} {yearStr}
+            </span>
+            <Button variant="ghost" size="icon" className="size-8 rounded-full" onClick={onNext}>
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            {days.filter(d => d.getDay() === 0 || d.getDay() === 6).length} dias úteis
+          </span>
+        </div>
+
+        <div className="divide-y divide-slate-100 max-h-[70vh] overflow-y-auto">
+          {cells.map((c) => {
+            if (c.kind === "blank") return null;
+            const hasMyFolga = c.occupants.some(occ => occ.userId === myUserId);
+            const isBlocked = c.status === "blocked" || c.status === "taken" || c.status === "birthday";
+            const isWeekend = c.date.getDay() === 0 || c.date.getDay() === 6;
+
+            return (
+              <div
+                key={c.iso}
+                className="px-4 py-3 hover:bg-slate-50/50 transition-colors cursor-pointer"
+                onClick={() => onSelectDay?.(c.iso, { status: c.status, reason: c.tooltip })}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={cn(
+                        "text-sm font-bold",
+                        isWeekend ? "text-slate-900" : "text-slate-400",
+                        c.status === "past" && "text-slate-300"
+                      )}>
+                        {c.date.getDate()}
+                      </span>
+                      {isBlocked && (
+                        <Badge variant="outline" className="text-[9px] bg-rose-50 text-rose-600 border-rose-200 px-1.5 py-0 h-5">
+                          Bloqueado
+                        </Badge>
+                      )}
+                      {isAdmin && isWeekend && (
+                        <Badge className="text-[9px] bg-primary/10 text-primary border-primary/20 px-1.5 py-0 h-5">
+                          {c.occupancy}/{c.limit}
+                        </Badge>
+                      )}
+                      {isWeekend && !isBlocked && c.occupants.length === 0 && !isAdmin && (
+                        <span className="text-[9px] text-slate-400">Disponível</span>
+                      )}
+                    </div>
+                    {c.occupants.length > 0 ? (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {c.occupants.map((occ, idx) => {
+                          const nome = occ.userName?.split(' ')[0] || "Colaborador";
+                          return (
+                            <span
+                              key={idx}
+                              className={cn(
+                                "text-[10px] px-1.5 py-0.5 rounded font-medium truncate max-w-[120px]",
+                                occ.type === 'fixed' ? "bg-blue-50 text-blue-600" :
+                                occ.type === 'monthly' ? "bg-amber-50 text-amber-600" :
+                                "bg-orange-50 text-orange-600"
+                              )}
+                              title={occ.userName}
+                            >
+                              {nome}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-slate-400">Nenhum colaborador</span>
+                    )}
+                    {hasMyFolga && (
+                      <div className="mt-1 text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 inline-block">
+                        {c.label || "Minha Folga"}
+                      </div>
+                    )}
+                  </div>
+                  <ChevronRightIcon className="size-4 text-slate-300 shrink-0 mt-0.5" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // 🔥 Renderização condicional: mobile vs desktop
+  if (isMobile) {
+    return renderMobileCalendar();
+  }
+
+  // Versão Desktop (grid)
   return (
     <TooltipProvider>
       <div className="bg-white border border-slate-200 rounded-[2rem] p-6 md:p-10 shadow-sm">
@@ -217,7 +339,6 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
               c.status === "taken" ||
               c.status === "birthday";
 
-            // 🔥 Verifica se o usuário atual tem folga neste dia (mesmo passado)
             const hasMyFolga = c.occupants.some(occ => occ.userId === myUserId);
 
             return (
@@ -280,7 +401,6 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                   </div>
                 </div>
 
-                {/* Admin view: show all occupants with names */}
                 {isAdmin && c.occupants.length > 0 && (
                   <div className="flex flex-col gap-1.5 overflow-hidden">
                     {c.occupants.slice(0, 4).map((occ, idx) => (
@@ -302,7 +422,6 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                   </div>
                 )}
 
-                {/* 🔥 Non-admin view: mostra minhas folgas mesmo se passado */}
                 {!isAdmin && (
                   <div className="mt-auto flex flex-col gap-1">
                     {hasMyFolga && (
