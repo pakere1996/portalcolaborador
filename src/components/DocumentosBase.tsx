@@ -30,7 +30,7 @@ import { toast } from "sonner";
 interface Documento {
   id: string;
   colaborador_id: string;
-  tipo: string; // agora pode ser "contracheque", "adiantamento" ou "ponto"
+  tipo: string; // "contracheque", "adiantamento", "ponto"
   mes: number;
   ano: number;
   storage_path: string;
@@ -38,7 +38,6 @@ interface Documento {
   nome_pdf: string | null;
   created_at: string;
   aprovado_em?: string | null;
-  quinzena?: number | null; // para adiantamentos
 }
 
 interface Profile {
@@ -64,7 +63,6 @@ interface DocumentosBaseProps {
   colunasExtras?: (doc: Documento) => React.ReactNode;
 }
 
-// Hook para detectar mobile
 const useMediaQuery = (query: string) => {
   const [matches, setMatches] = useState(false);
   useEffect(() => {
@@ -111,7 +109,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Busca documentos do tipo específico
       const { data: docs, error: docsError } = await supabase
         .from("documentos")
         .select("*")
@@ -137,7 +134,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
       const profileMap = new Map(profs?.map(p => [p.id, p]) ?? []);
       const unitMap = new Map(units?.map(u => [u.id, u.nome]) ?? []);
 
-      // Ordenação: ano/mês decrescente, depois nome do colaborador
       const sortedDocs = (docs ?? []).sort((a, b) => {
         if (a.ano !== b.ano) return b.ano - a.ano;
         if (a.mes !== b.mes) return b.mes - a.mes;
@@ -309,7 +305,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <DocumentImportForm />
+            <DocumentImportForm tipoPadrao={tipo} />
           </CardContent>
         </Card>
       )}
@@ -406,11 +402,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
                         <div className="text-xs text-muted-foreground">
                           {unidade?.nome && <span>{unidade.nome} • </span>}
                           {String(doc.mes).padStart(2, "0")}/{doc.ano}
-                          {tipo === "adiantamento" && doc.quinzena && (
-                            <span className="ml-1 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
-                              {doc.quinzena}ª Quinzena
-                            </span>
-                          )}
                         </div>
                         <div className="text-xs text-muted-foreground mt-0.5">
                           <Badge variant="outline" className="text-[10px]">
@@ -536,11 +527,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
                           ) : (
                             <span className="font-mono">{String(doc.mes).padStart(2, "0")}/{doc.ano}</span>
                           )}
-                          {tipo === "adiantamento" && doc.quinzena && editando !== doc.id && (
-                            <div className="text-[10px] text-blue-600 font-medium">
-                              {doc.quinzena}ª Quinzena
-                            </div>
-                          )}
                         </td>
                         <td className="p-4 hidden md:table-cell">
                           <Badge variant="outline" className="text-[10px]">
@@ -634,13 +620,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
                 
                 <div className="text-muted-foreground">Tipo</div>
                 <div className="font-medium">{getTipoLabel(selectedDoc.tipo)}</div>
-
-                {selectedDoc.tipo === "adiantamento" && selectedDoc.quinzena && (
-                  <>
-                    <div className="text-muted-foreground">Quinzena</div>
-                    <div className="font-medium">{selectedDoc.quinzena}ª Quinzena</div>
-                  </>
-                )}
                 
                 <div className="text-muted-foreground">Unidade</div>
                 <div className="font-medium">
