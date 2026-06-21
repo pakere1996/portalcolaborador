@@ -10,6 +10,8 @@ import {
   monthKey,
   parseYMD,
   type DateStatusKind,
+  type FolgaRecord,
+  type ProfileRecord,
 } from "@/lib/folga-rules";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,11 +61,11 @@ export interface FolgaCalendarProps {
   occupantsByDate?: Map<string, DayOccupant[]>;
   manualBlocked: Map<string, { reason: string; liberada: boolean }>;
   dayLimits: Map<string, number>;
-  birthdayByDate?: Map<string, { userId: string; userName?: string }>;
+  birthdayByDate?: Map<string, { userId: string; userName?: string; status?: string }>;
   myUserId: string | null;
-  allFolgas: { user_id: string; data: string; tipo?: string }[];
-  allProfiles: { id: string; folga_fixa_semana: number | null }[];
-  pendingRequests: { data: string }[];
+  allFolgas: FolgaRecord[];
+  allProfiles: ProfileRecord[];
+  pendingRequests: { data: string; user_id?: string }[];
   isAdmin?: boolean;
   onPrev: () => void;
   onNext: () => void;
@@ -110,28 +112,29 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
   const hoje = new Date();
   const hojeStr = ymd(hoje);
 
-  // Verifica se o usuário já tem uma folga de final de semana neste mês
+  // Verifica se o usuário já tem uma folga de final de semana neste mês (extra não conta)
   const hasMonthlyFolga = useMemo(() => {
     if (!myUserId || !currentMonthKey) return false;
-    return allFolgas.some(f => 
-      f.user_id === myUserId && 
-      monthKey(parseYMD(f.data)) === currentMonthKey && 
-      (f.tipo === 'sabado' || f.tipo === 'domingo')
+    return allFolgas.some(f =>
+      f.user_id === myUserId &&
+      monthKey(parseYMD(f.data)) === currentMonthKey &&
+      (f.tipo === 'sabado' || f.tipo === 'domingo') &&
+      f.extra !== true
     );
   }, [allFolgas, myUserId, currentMonthKey]);
 
-  // Busca a folga do usuário no mês atual
+  // Busca a folga mensal do usuário no mês atual (não extra)
   const userFolgaData = useMemo(() => {
     if (!myUserId || !currentMonthKey) return null;
-    const folga = allFolgas.find(f => 
-      f.user_id === myUserId && 
-      monthKey(parseYMD(f.data)) === currentMonthKey && 
-      (f.tipo === 'sabado' || f.tipo === 'domingo')
+    const folga = allFolgas.find(f =>
+      f.user_id === myUserId &&
+      monthKey(parseYMD(f.data)) === currentMonthKey &&
+      (f.tipo === 'sabado' || f.tipo === 'domingo') &&
+      f.extra !== true
     );
     return folga?.data || null;
   }, [allFolgas, myUserId, currentMonthKey]);
 
-  // Verifica se a folga mensal do usuário já passou
   const userFolgaPassou = useMemo(() => {
     if (!userFolgaData) return false;
     return userFolgaData < hojeStr;
@@ -142,7 +145,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     const lead = first.getDay();
     const days = getMonthDays(year, month0);
 
-    const bdayMap = birthdayByDate || new Map<string, { userId: string; userName?: string }>();
+    const bdayMap = birthdayByDate || new Map<string, { userId: string; userName?: string; status?: string }>();
     const result: DayInfo[] = [];
 
     for (let i = 0; i < lead; i++) result.push({ kind: "blank" });
@@ -246,10 +249,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
             const diaSemana = DIAS_SEMANA_ABR[c.date.getDay()];
             const isPast = c.status === "past";
 
-            // 🔥 Apenas para finais de semana: esconde "Nenhum colaborador" se já tem folga mensal
             const shouldHideEmptyMessage = isWeekend && hasMonthlyFolga && !hasMyFolga;
-
-            // 🔥 Apenas para finais de semana: bloqueia clique se a folga mensal já passou
             const isUserFolgaPassada = isWeekend && hasMyFolga && isPast;
 
             return (
@@ -310,7 +310,6 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                         })}
                       </div>
                     ) : (
-                      // 🔥 Só exibe "Nenhum colaborador" se NÃO for para esconder
                       !shouldHideEmptyMessage && (
                         <span className="text-[10px] text-slate-400 ml-8">Nenhum colaborador</span>
                       )
@@ -391,10 +390,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
             const hasMyFolga = c.occupants.some(occ => occ.userId === myUserId);
             const isPast = c.status === "past";
 
-            // 🔥 Apenas para finais de semana: esconde "Nenhum colaborador" se já tem folga mensal
             const shouldHideEmptyMessage = isWeekend && hasMonthlyFolga && !hasMyFolga;
-
-            // 🔥 Apenas para finais de semana: bloqueia clique se a folga mensal já passou
             const isUserFolgaPassada = isWeekend && hasMyFolga && isPast;
 
             return (
@@ -435,9 +431,9 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     {isAdmin && isWeekend && (
                       <span className={cn(
                         "text-[9px] font-black mt-0.5 px-1.5 py-0.5 rounded-md border",
-                        c.occupancy >= c.limit 
-                          ? "bg-rose-100 text-rose-700 border-rose-200" 
-                          : c.occupancy >= c.limit * 0.7 
+                        c.occupancy >= c.limit
+                          ? "bg-rose-100 text-rose-700 border-rose-200"
+                          : c.occupancy >= c.limit * 0.7
                           ? "bg-amber-100 text-amber-700 border-amber-200"
                           : "bg-emerald-100 text-emerald-700 border-emerald-200"
                       )}>
