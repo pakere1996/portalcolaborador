@@ -1,123 +1,44 @@
-import { PageResult } from "@/components/DocumentImportForm";
-
-interface PageData {
-  pageNumber: number;
-  text: string;
-}
-
-interface ProfileMatch {
-  id: string;
-  nome: string;
-  cpf: string;
-  matricula: string | null;
-  unidade_id: string | null;
-  possui_folha_ponto?: boolean;
-  regime_trabalho?: string | null;
-}
+import { PageResult, ProfileForMatching } from "@/components/DocumentImportForm";
 
 /**
- * Analisa as páginas de uma folha de ponto e tenta extrair informações relevantes
- * para vincular a um colaborador.
+ * Parser para folhas de ponto
  */
 export const parseFolhaPonto = (
-  pages: PageData[],
-  profiles: ProfileMatch[]
-): PageResult[] => {
-  return pages.map((p) => {
-    const text = p.text;
-    const lines = text.split('\n').filter(line => line.trim().length > 0);
-    
-    let nome: string | null = null;
-    let cpf: string | null = null;
-    let matricula: string | null = null;
-    let cnpj: string | null = null;
-    let mes: number | null = null;
-    let ano: number | null = null;
-    let unidadeId: string | null = null;
-    let matchedProfile: ProfileMatch | null = null;
+  page: { pageNumber: number; text: string },
+  profiles: ProfileForMatching[]
+): PageResult => {
+  const text = page.text;
+  const nomeMatch = text.match(/Colaborador:\s*([^\n]+)/i);
+  const cpfMatch = text.match(/CPF:\s*([\d.]+)/i);
+  const mesMatch = text.match(/Período:\s*(\d{1,2})/i);
+  const anoMatch = text.match(/Ano:\s*(\d{4})/i);
+  const cnpjMatch = text.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
 
-    for (const line of lines) {
-      // Procura por nome
-      if (!nome && line.length > 5 && line.length < 60) {
-        const nomeCandidato = line.trim();
-        if (!/^\d/.test(nomeCandidato) && !/^(?:total|frequência|dia|entrada|saída)/i.test(nomeCandidato)) {
-          nome = nomeCandidato;
-        }
-      }
+  const nome = nomeMatch ? nomeMatch[1].trim() : null;
+  const cpf = cpfMatch ? cpfMatch[1].trim() : null;
+  const mes = mesMatch ? parseInt(mesMatch[1]) : null;
+  const ano = anoMatch ? parseInt(anoMatch[1]) : null;
+  const cnpj = cnpjMatch ? cnpjMatch[0] : null;
 
-      // Procura por CPF
-      if (!cpf) {
-        const cpfMatch = line.match(/\d{3}\.\d{3}\.\d{3}-\d{2}/);
-        if (cpfMatch) {
-          cpf = cpfMatch[0];
-        }
-      }
+  let matchedProfile: ProfileForMatching | null = null;
+  if (nome) {
+    matchedProfile = profiles.find(p => p.nome.toLowerCase().includes(nome.toLowerCase())) || null;
+  }
 
-      // Procura por CNPJ
-      if (!cnpj) {
-        const cnpjMatch = line.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
-        if (cnpjMatch) {
-          cnpj = cnpjMatch[0];
-        }
-      }
-
-      // Procura por matrícula
-      if (!matricula) {
-        const matriculaMatch = line.match(/matr[ií]cula\s*[:.]?\s*(\d+)/i);
-        if (matriculaMatch) {
-          matricula = matriculaMatch[1];
-        }
-      }
-
-      // Procura por período (mês/ano)
-      if (!mes || !ano) {
-        const periodoMatch = line.match(/(\d{2})\/(\d{4})/);
-        if (periodoMatch) {
-          mes = parseInt(periodoMatch[1]);
-          ano = parseInt(periodoMatch[2]);
-        }
-      }
-    }
-
-    // Tenta encontrar match com algum perfil
-    if (nome) {
-      const nomeNormalizado = nome
-        .toUpperCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-      
-      const matched = profiles.find((profile) => {
-        const profileNome = profile.nome
-          .toUpperCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .replace(/\s+/g, ' ')
-          .trim();
-        return nomeNormalizado.includes(profileNome) || profileNome.includes(nomeNormalizado);
-      });
-
-      if (matched) {
-        matchedProfile = matched;
-      }
-    }
-
-    return {
-      pageNumber: p.pageNumber,
-      text: p.text,
-      nome,
-      cnpj,
-      mes,
-      ano,
-      unidadeId: unidadeId || (matchedProfile?.unidade_id ?? null),
-      matchStatus: matchedProfile ? "automatico" : "revisao",
-      matchedProfile: matchedProfile || null,
-      resolvido: !!matchedProfile,
-      ignorado: false,
-      aprovado: false,
-      duplicadoId: null,
-      acaoSeDuplicado: null,
-    };
-  });
+  return {
+    pageNumber: page.pageNumber,
+    text,
+    nome,
+    cnpj,
+    mes,
+    ano,
+    unidadeId: null,
+    matchStatus: matchedProfile ? "automatico" : "revisao",
+    matchedProfile,
+    resolvido: !!matchedProfile,
+    ignorado: false,
+    aprovado: false,
+    duplicadoId: null,
+    acaoSeDuplicado: null,
+  };
 };
