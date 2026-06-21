@@ -340,21 +340,21 @@ export default function MensagensAdmin() {
           </div>
         )}
 
-        {/* 🔥 Quando for "individual", primeiro exibe a unidade para filtrar */}
         {destinatario === "individual" && (
           <>
             <div className="space-y-2">
               <Label>Unidade (para filtrar)</Label>
+              {/* 🔥 Usa "todas" como valor sentinela, não string vazia */}
               <Select 
-                value={unidadeId} 
+                value={unidadeId || "todas"} 
                 onValueChange={(v) => { 
-                  setUnidadeId(v); 
-                  setColaboradorId(""); // reseta colaborador ao mudar unidade
+                  setUnidadeId(v === "todas" ? "" : v); 
+                  setColaboradorId(""); 
                 }}
               >
                 <SelectTrigger><SelectValue placeholder="Todas as unidades" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todas as unidades</SelectItem>
+                  <SelectItem value="todas">Todas as unidades</SelectItem>
                   {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -390,7 +390,6 @@ export default function MensagensAdmin() {
         </div>
       </div>
 
-      {/* Canal de envio */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Canal de Envio</Label>
