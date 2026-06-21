@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, History, Download, Pencil, Trash2, Loader2, X, FileText } from "lucide-react";
+import { Upload, History, Download, Pencil, Trash2, Loader2, X, FileText, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { formatBR } from "@/lib/folga-rules";
 import {
@@ -19,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
 interface Profile {
@@ -32,7 +33,7 @@ interface Unidade {
   nome: string;
 }
 
-interface DocumentoAdmin {
+export interface DocumentoAdmin {
   id: string;
   colaborador_id: string;
   unidade_id: string;
@@ -65,7 +66,7 @@ interface DocumentosAdminBaseProps {
   editCamposExtras?: (editForm: any, setEditForm: any) => React.ReactNode;
   validarForm?: (form: any) => string | null;
   beforeInsert?: (form: any, path: string, kind: string) => Promise<any> | any;
-  onColaboradorChange?: (colaboradorId: string, setForm: any, unidades: Unidade[]) => void;
+  onColaboradorChange?: (colaboradorId: string, setForm: any) => void;
   acoesExtras?: (doc: DocumentoAdmin) => React.ReactNode;
 }
 
@@ -124,6 +125,9 @@ export function DocumentosAdminBase({
   const [excluirDialogOpen, setExcluirDialogOpen] = useState(false);
   const [documentoParaExcluir, setDocumentoParaExcluir] = useState<DocumentoAdmin | null>(null);
   const [excluindo, setExcluindo] = useState(false);
+
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -245,6 +249,18 @@ export function DocumentosAdminBase({
       .createSignedUrl(doc.storage_path, 60);
     if (data?.signedUrl) window.open(data.signedUrl, "_blank");
     else toast.error("Erro ao gerar link de download");
+  }, []);
+
+  const handlePreview = useCallback(async (doc: DocumentoAdmin) => {
+    const { data } = await supabase.storage
+      .from("documentos_admin")
+      .createSignedUrl(doc.storage_path, 60);
+    if (data?.signedUrl) {
+      setPreviewUrl(data.signedUrl);
+      setPreviewOpen(true);
+    } else {
+      toast.error("Erro ao gerar link de visualização");
+    }
   }, []);
 
   const handleEditSave = async () => {
@@ -401,7 +417,7 @@ export function DocumentosAdminBase({
                   onValueChange={(value) => {
                     setForm({ ...form, colaborador_id: value });
                     if (onColaboradorChange) {
-                      onColaboradorChange(value, setForm, unidades);
+                      onColaboradorChange(value, setForm);
                     }
                   }}
                   disabled={!form.unidade_id}
@@ -596,6 +612,7 @@ export function DocumentosAdminBase({
                             <div className="space-y-2 min-w-[200px]">
                               {tipo === "atestados" ? (
                                 <>
+                                  <Label className="text-xs font-medium text-muted-foreground">Status</Label>
                                   <select
                                     className="w-full rounded-md border border-border bg-background px-3 py-1 text-sm"
                                     value={editForm.status || "pendente"}
@@ -605,24 +622,27 @@ export function DocumentosAdminBase({
                                     <option value="aprovado">Aprovado</option>
                                     <option value="rejeitado">Rejeitado</option>
                                   </select>
+                                  <Label className="text-xs font-medium text-muted-foreground">Dias de Afastamento</Label>
                                   <Input
                                     type="number"
                                     min="0"
                                     value={editForm.dias_afastamento || ""}
                                     onChange={(e) => setEditForm({ ...editForm, dias_afastamento: e.target.value })}
-                                    placeholder="Dias"
+                                    placeholder="0"
                                     className="w-full"
                                   />
+                                  <Label className="text-xs font-medium text-muted-foreground">Observação do Admin</Label>
                                   <Textarea
                                     rows={2}
                                     value={editForm.observacao_admin || ""}
                                     onChange={(e) => setEditForm({ ...editForm, observacao_admin: e.target.value })}
-                                    placeholder="Observação do Admin"
+                                    placeholder="Observação para o colaborador"
                                     className="w-full"
                                   />
                                 </>
                               ) : (
                                 <>
+                                  <Label className="text-xs font-medium text-muted-foreground">Tipo</Label>
                                   <select
                                     className="w-full rounded-md border border-border bg-background px-3 py-1 text-sm"
                                     value={editForm.tipo || "outro"}
@@ -633,12 +653,13 @@ export function DocumentosAdminBase({
                                     <option value="justa_causa">Justa Causa</option>
                                     <option value="outro">Outro</option>
                                   </select>
+                                  <Label className="text-xs font-medium text-muted-foreground">Dias de Afastamento</Label>
                                   <Input
                                     type="number"
                                     min="0"
                                     value={editForm.dias_afastamento || ""}
                                     onChange={(e) => setEditForm({ ...editForm, dias_afastamento: e.target.value })}
-                                    placeholder="Dias"
+                                    placeholder="0"
                                     className="w-full"
                                   />
                                 </>
@@ -673,14 +694,24 @@ export function DocumentosAdminBase({
                           </td>
                         )}
                         <td className="p-4 text-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-blue-600"
-                            onClick={() => handleDownload(doc)}
-                          >
-                            <FileText className="size-4 mr-1" /> {doc.storage_type === "pdf" ? "PDF" : "Imagem"}
-                          </Button>
+                          <div className="flex items-center justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-blue-600"
+                              onClick={() => handlePreview(doc)}
+                            >
+                              <Eye className="size-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-blue-600"
+                              onClick={() => handleDownload(doc)}
+                            >
+                              <Download className="size-4" />
+                            </Button>
+                          </div>
                         </td>
                         <td className="p-4 text-right whitespace-nowrap">
                           <div className="flex justify-end gap-1">
@@ -743,7 +774,6 @@ export function DocumentosAdminBase({
                                 >
                                   <Trash2 className="size-4" />
                                 </Button>
-                                {/* 🔥 Ações extras (Aprovar/Rejeitar) */}
                                 {acoesExtras && acoesExtras(doc)}
                               </>
                             )}
@@ -786,6 +816,37 @@ export function DocumentosAdminBase({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Visualização do Documento</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-[500px] bg-muted/20 rounded-lg overflow-hidden">
+            {previewUrl ? (
+              <iframe
+                src={previewUrl}
+                className="w-full h-[600px] border-0"
+                title="Visualização do documento"
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                Carregando visualização...
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setPreviewOpen(false)}>Fechar</Button>
+            <Button
+              onClick={() => {
+                if (documentoParaExcluir) handleDownload(documentoParaExcluir);
+              }}
+            >
+              <Download className="size-4 mr-1" /> Baixar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
