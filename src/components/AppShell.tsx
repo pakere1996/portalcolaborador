@@ -27,7 +27,6 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/NotificationBell";
 import { AvisosPopout } from "@/components/AvisosPopout";
-import { AtestadosPendentesPopout } from "@/components/AtestadosPendentesPopout";
 import logo from "@/assets/pakere-logo.png";
 import { cn } from "@/lib/utils";
 
@@ -127,14 +126,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/bloqueios", label: "Datas Bloqueadas", icon: Ban },
   ];
 
-  // Colaborador: Meus Documentos + Atestados + Registros Disciplinares
   const employeeDocsNav: NavItem[] = [
     { to: "/documentos", label: "Meus Documentos", icon: FileText, end: true },
     { to: "/documentos/atestados", label: "Atestados", icon: FileWarning },
     { to: "/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
   ];
 
-  // Admin: itens separados
   const adminDocsNav: NavItem[] = [
     { to: "/admin/documentos/contracheque", label: "Contracheques", icon: FileText, end: true },
     { to: "/admin/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
@@ -383,7 +380,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         {children}
         <AvisosPopout />
-        <AtestadosPendentesPopout />
       </main>
     </div>
   );
