@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { MessageSquare, Plus, Pencil, Trash2, Send, Loader2, Copy, Mail, Phone } from "lucide-react";
+import { MessageSquare, Plus, Pencil, Trash2, Send, Loader2, Copy, Mail, Phone, ExternalLink } from "lucide-react";
 
 interface ModeloMensagem {
   id: string;
@@ -35,13 +35,8 @@ interface Profile {
   id: string;
   nome: string;
   whatsapp: string | null;
-  email_contato: string | null; // 🔥 CORRIGIDO: email_contato
+  email_contato: string | null; // 🔥 CORRIGIDO: usa email_contato em vez de email
   unidade_id: string | null;
-}
-
-interface Unidade {
-  id: string;
-  nome: string;
 }
 
 const TIPOS_MODELO = [
@@ -61,21 +56,18 @@ const CANAIS_ENVIO = [
 export default function MensagensAdmin() {
   const [modelos, setModelos] = useState<ModeloMensagem[]>([]);
   const [colaboradores, setColaboradores] = useState<Profile[]>([]);
-  const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  // Estado do formulário de envio
   const [destinatario, setDestinatario] = useState("todos");
-  // 🔥 Usa "todas" como valor sentinela para unidadeId
-  const [unidadeId, setUnidadeId] = useState("todas");
-  const [colaboradorId, setColaboradorId] = useState("nenhum");
+  const [unidadeId, setUnidadeId] = useState("");
+  const [colaboradorId, setColaboradorId] = useState("");
   const [modeloSelecionado, setModeloSelecionado] = useState("nenhum");
   const [assunto, setAssunto] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [canal, setCanal] = useState("whatsapp");
+  const [unidades, setUnidades] = useState<any[]>([]);
 
-  // Estado para modelos (CRUD)
   const [modeloDialogOpen, setModeloDialogOpen] = useState(false);
   const [editandoModelo, setEditandoModelo] = useState<ModeloMensagem | null>(null);
   const [modeloForm, setModeloForm] = useState({
@@ -84,21 +76,23 @@ export default function MensagensAdmin() {
     corpo: "",
     tipo: "outro",
   });
+
   const [confirmDelete, setConfirmDelete] = useState<ModeloMensagem | null>(null);
 
   const load = async () => {
     setLoading(true);
     try {
+      // 🔥 CORRIGIDO: usa email_contato em vez de email
       const [modelosRes, colaboradoresRes, unidadesRes] = await Promise.all([
         supabase.from("modelos_mensagem").select("*").order("nome"),
-        // 🔥 CORRIGIDO: usa email_contato em vez de email
         supabase.from("profiles").select("id, nome, whatsapp, email_contato, unidade_id").eq("ativo", true).order("nome"),
         supabase.from("unidades").select("id, nome").eq("ativo", true).order("nome"),
       ]);
 
-      if (modelosRes.error) throw modelosRes.error;
-      if (colaboradoresRes.error) throw colaboradoresRes.error;
-      if (unidadesRes.error) throw unidadesRes.error;
+      if (colaboradoresRes.error) {
+        console.error("Erro ao carregar colaboradores:", colaboradoresRes.error);
+        toast.error("Erro ao carregar colaboradores: " + colaboradoresRes.error.message);
+      }
 
       setModelos(modelosRes.data ?? []);
       setColaboradores(colaboradoresRes.data ?? []);
@@ -115,7 +109,6 @@ export default function MensagensAdmin() {
     load();
   }, []);
 
-  // Quando selecionar um modelo, preenche os campos
   useEffect(() => {
     if (modeloSelecionado === "nenhum") {
       setAssunto("");
@@ -129,6 +122,22 @@ export default function MensagensAdmin() {
     }
   }, [modeloSelecionado, modelos]);
 
+  // 🔥 Função para abrir WhatsApp com a mensagem
+  const abrirWhatsApp = (numero: string, texto: string) => {
+    // Remove tudo que não é dígito
+    const numeroLimpo = numero.replace(/\D/g, '');
+    // Adiciona o código do país (55 para Brasil) se não tiver
+    const numeroCompleto = numeroLimpo.length === 11 ? `55${numeroLimpo}` : numeroLimpo;
+    const url = `https://wa.me/${numeroCompleto}?text=${encodeURIComponent(texto)}`;
+    window.open(url, '_blank');
+  };
+
+  // 🔥 Função para abrir E-mail
+  const abrirEmail = (email: string, assunto: string, corpo: string) => {
+    const url = `mailto:${email}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
+    window.open(url, '_blank');
+  };
+
   const handleEnviar = async () => {
     if (!assunto.trim() || !mensagem.trim()) {
       toast.error("Preencha assunto e mensagem");
@@ -138,39 +147,77 @@ export default function MensagensAdmin() {
     setBusy(true);
     try {
       // Monta lista de destinatários
-      let destinatarios: Profile[] = [];
-
+      let destinatarios = [];
       if (destinatario === "todos") {
-        destinatarios = colaboradores;
-      } else if (destinatario === "unidade" && unidadeId !== "todas") {
-        destinatarios = colaboradores.filter(c => c.unidade_id === unidadeId);
-      } else if (destinatario === "individual" && colaboradorId !== "nenhum") {
+        destinatarios = colaboradores.map(c => ({ 
+          id: c.id, 
+          nome: c.nome, 
+          whatsapp: c.whatsapp, 
+          email: c.email_contato 
+        }));
+      } else if (destinatario === "unidade" && unidadeId) {
+        destinatarios = colaboradores
+          .filter(c => c.unidade_id === unidadeId)
+          .map(c => ({ id: c.id, nome: c.nome, whatsapp: c.whatsapp, email: c.email_contato }));
+      } else if (destinatario === "individual" && colaboradorId) {
         const colab = colaboradores.find(c => c.id === colaboradorId);
-        if (colab) destinatarios = [colab];
+        if (colab) destinatarios = [{ 
+          id: colab.id, 
+          nome: colab.nome, 
+          whatsapp: colab.whatsapp, 
+          email: colab.email_contato 
+        }];
       }
 
-      // Filtra por canal escolhido
+      if (destinatarios.length === 0) {
+        toast.error("Nenhum destinatário encontrado");
+        setBusy(false);
+        return;
+      }
+
       let enviadosWhatsApp = 0;
       let enviadosEmail = 0;
 
+      // Envia para cada destinatário de acordo com o canal
       if (canal === "whatsapp" || canal === "ambos") {
         const comWhatsApp = destinatarios.filter(d => d.whatsapp);
-        enviadosWhatsApp = comWhatsApp.length;
-        // Aqui você integraria com a API de WhatsApp
-        comWhatsApp.forEach(d => console.log(`📱 WhatsApp para ${d.nome}: ${d.whatsapp}`));
+        if (comWhatsApp.length === 0 && (canal === "whatsapp" || canal === "ambos")) {
+          toast.warning("Nenhum destinatário com WhatsApp cadastrado");
+        } else {
+          // Abre o WhatsApp para o primeiro com WhatsApp (ou todos se for vários, mas geralmente é melhor abrir um por vez)
+          // Para simplificar, se for mais de um, sugerimos abrir o primeiro
+          if (comWhatsApp.length === 1) {
+            abrirWhatsApp(comWhatsApp[0].whatsapp!, mensagem);
+            enviadosWhatsApp = 1;
+          } else if (comWhatsApp.length > 1) {
+            // Se vários, abre para cada um (ou pode abrir o primeiro e avisar)
+            toast.info(`${comWhatsApp.length} destinatários com WhatsApp. Abrindo para o primeiro...`);
+            abrirWhatsApp(comWhatsApp[0].whatsapp!, mensagem);
+            enviadosWhatsApp = comWhatsApp.length;
+          }
+        }
       }
 
       if (canal === "email" || canal === "ambos") {
-        const comEmail = destinatarios.filter(d => d.email_contato);
-        enviadosEmail = comEmail.length;
-        comEmail.forEach(d => console.log(`📧 E-mail para ${d.nome}: ${d.email_contato}`));
+        const comEmail = destinatarios.filter(d => d.email);
+        if (comEmail.length === 0 && (canal === "email" || canal === "ambos")) {
+          toast.warning("Nenhum destinatário com E-mail cadastrado");
+        } else {
+          if (comEmail.length === 1) {
+            abrirEmail(comEmail[0].email!, assunto, mensagem);
+            enviadosEmail = 1;
+          } else if (comEmail.length > 1) {
+            // Para múltiplos, abrir o primeiro (ou usar BCC)
+            toast.info(`${comEmail.length} destinatários com E-mail. Abrindo para o primeiro...`);
+            abrirEmail(comEmail[0].email!, assunto, mensagem);
+            enviadosEmail = comEmail.length;
+          }
+        }
       }
 
-      let msg = `Mensagem enviada para ${destinatarios.length} colaboradores.`;
+      let msg = `Mensagem preparada para ${destinatarios.length} colaboradores.`;
       if (enviadosWhatsApp > 0) msg += ` ${enviadosWhatsApp} via WhatsApp.`;
       if (enviadosEmail > 0) msg += ` ${enviadosEmail} via E-mail.`;
-      if (destinatarios.length === 0) msg = "Nenhum destinatário encontrado para os canais selecionados.";
-
       toast.success(msg);
 
       // Limpa campos
@@ -178,13 +225,13 @@ export default function MensagensAdmin() {
       setMensagem("");
       setModeloSelecionado("nenhum");
     } catch (error) {
+      console.error("Erro ao enviar mensagem:", error);
       toast.error("Erro ao enviar mensagem");
     } finally {
       setBusy(false);
     }
   };
 
-  // CRUD de modelos
   const salvarModelo = async () => {
     if (!modeloForm.nome.trim() || !modeloForm.assunto.trim() || !modeloForm.corpo.trim()) {
       toast.error("Preencha todos os campos");
@@ -258,11 +305,10 @@ export default function MensagensAdmin() {
     setMensagem(modelo.corpo);
   };
 
-  // Obtém colaboradores filtrados por unidade (para o select de colaborador individual)
-  const colaboradoresFiltrados = () => {
-    if (unidadeId === "todas") return colaboradores;
-    return colaboradores.filter(c => c.unidade_id === unidadeId);
-  };
+  // 🔥 Filtra colaboradores por unidade
+  const colaboradoresFiltrados = colaboradores.filter(
+    c => !unidadeId || c.unidade_id === unidadeId
+  );
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -334,13 +380,12 @@ export default function MensagensAdmin() {
         <CardContent>
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Destinatário */}
               <div className="space-y-2">
                 <Label>Destinatário</Label>
                 <Select value={destinatario} onValueChange={(v) => { 
                   setDestinatario(v); 
-                  setUnidadeId("todas"); 
-                  setColaboradorId("nenhum"); 
+                  setUnidadeId(""); 
+                  setColaboradorId(""); 
                 }}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
@@ -351,40 +396,53 @@ export default function MensagensAdmin() {
                 </Select>
               </div>
 
-              {/* Unidade (para filtro) */}
-              {destinatario === "unidade" || destinatario === "individual" ? (
+              {destinatario === "unidade" && (
                 <div className="space-y-2">
-                  <Label>{destinatario === "unidade" ? "Unidade" : "Unidade (para filtrar)"}</Label>
-                  <Select value={unidadeId} onValueChange={(v) => { setUnidadeId(v); setColaboradorId("nenhum"); }}>
-                    <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todas">Todas</SelectItem>
-                      {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
-
-              {/* Colaborador (apenas para individual) */}
-              {destinatario === "individual" && (
-                <div className="space-y-2">
-                  <Label>Colaborador</Label>
-                  <Select value={colaboradorId} onValueChange={setColaboradorId}>
+                  <Label>Unidade</Label>
+                  <Select value={unidadeId} onValueChange={setUnidadeId}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="nenhum">Nenhum</SelectItem>
-                      {colaboradoresFiltrados().map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
-                      {colaboradoresFiltrados().length === 0 && (
-                        <div className="px-2 py-1.5 text-sm text-muted-foreground text-center">
-                          Nenhum colaborador nesta unidade
-                        </div>
-                      )}
+                      {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
               )}
 
-              {/* Modelo */}
+              {destinatario === "individual" && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Unidade (para filtrar)</Label>
+                    <Select 
+                      value={unidadeId || "todas"} 
+                      onValueChange={(v) => { 
+                        setUnidadeId(v === "todas" ? "" : v); 
+                        setColaboradorId(""); 
+                      }}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Todas as unidades" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todas">Todas as unidades</SelectItem>
+                        {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Colaborador</Label>
+                    <Select value={colaboradorId} onValueChange={setColaboradorId}>
+                      <SelectTrigger><SelectValue placeholder="Selecione o colaborador" /></SelectTrigger>
+                      <SelectContent>
+                        {colaboradoresFiltrados.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                        {colaboradoresFiltrados.length === 0 && (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground text-center">
+                            Nenhum colaborador nesta unidade
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+
               <div className="space-y-2">
                 <Label>Modelo (opcional)</Label>
                 <Select value={modeloSelecionado} onValueChange={setModeloSelecionado}>
