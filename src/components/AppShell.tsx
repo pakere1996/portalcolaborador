@@ -126,7 +126,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/bloqueios", label: "Datas Bloqueadas", icon: Ban },
   ];
 
-  // 🔥 Ajuste dos links de documentos para rotas específicas
+  // 🔥 DOIS ITENS SEPARADOS: "Contracheques" e "Folhas de Ponto"
   const employeeDocsNav: NavItem[] = [
     { to: "/documentos/contracheque", label: "Contracheques", icon: FileText, end: true },
     { to: "/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
