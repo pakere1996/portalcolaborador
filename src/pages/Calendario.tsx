@@ -75,8 +75,6 @@ export default function CalendarioPage() {
 
       console.log("✅ Folgas carregadas:", fRes.data);
       console.log("✅ Perfis carregados:", pRes.data);
-      console.log("✅ Karine está na lista?", pRes.data?.some(p => p.id === '89cfc22a-b060-45bc-9fd3-e40ec7747ac3'));
-      console.log("✅ Cristiane tem folga fixa?", pRes.data?.find(p => p.id === user.id)?.folga_fixa_semana);
 
       setFolgas(fRes.data ?? []);
       setManualBlocked(bRes.data ?? []);
@@ -123,22 +121,24 @@ export default function CalendarioPage() {
     return m;
   }, [prios]);
 
-  // --- Ocupantes ---
+  // --- Ocupantes (apenas da mesma unidade) ---
   const occupantsByDate = useMemo(() => {
-    console.log("🔄 Recalculando occupantsByDate...");
     const m = new Map<string, DayOccupant[]>();
-    const nm = new Map(profiles.map(p => [p.id, p.nome]));
+    // Filtra perfis pela mesma unidade do usuário
+    const myProfile = profiles.find(p => p.id === user?.id);
+    const userUnidade = myProfile?.unidade_id;
+    // Se não tiver unidade, não exibe ninguém (exceto admin, que verá todos)
+    const filteredProfiles = userUnidade
+      ? profiles.filter(p => p.unidade_id === userUnidade)
+      : profiles;
+
+    const nm = new Map(filteredProfiles.map(p => [p.id, p.nome]));
 
     const days = getMonthDays(year, month0);
     for (const d of days) {
       const iso = ymd(d);
       const wd = d.getDay();
-      const fixedOnes = profiles.filter(p => p.folga_fixa_semana === wd);
-      
-      // Log específico para o dia 22/06
-      if (iso === '2026-06-22') {
-        console.log(`📅 Dia ${iso} - wd: ${wd}, fixedOnes:`, fixedOnes);
-      }
+      const fixedOnes = filteredProfiles.filter(p => p.folga_fixa_semana === wd);
 
       fixedOnes.forEach(p => {
         const arr = m.get(iso) ?? [];
@@ -147,33 +147,40 @@ export default function CalendarioPage() {
       });
     }
 
+    // Folgas: também filtra pela unidade
     folgas.forEach(f => {
-      const iso = f.data;
-      const arr = m.get(iso) ?? [];
-      arr.push({
-        userId: f.user_id,
-        userName: nm.get(f.user_id) || "Colaborador",
-        type: 'monthly',
-        origin: f.extra ? "Extra" : "Mensal",
-      });
-      m.set(iso, arr);
+      const profile = profiles.find(p => p.id === f.user_id);
+      if (profile && (userUnidade ? profile.unidade_id === userUnidade : true)) {
+        const iso = f.data;
+        const arr = m.get(iso) ?? [];
+        arr.push({
+          userId: f.user_id,
+          userName: nm.get(f.user_id) || "Colaborador",
+          type: 'monthly',
+          origin: f.extra ? "Extra" : "Mensal",
+        });
+        m.set(iso, arr);
+      }
     });
 
     pendentes.forEach(p => {
-      const iso = p.data;
-      const arr = m.get(iso) ?? [];
-      arr.push({
-        userId: p.user_id,
-        userName: nm.get(p.user_id) || "Colaborador",
-        type: "pending",
-        origin: "Solicitação Pendente",
-        requestId: p.id,
-      });
-      m.set(iso, arr);
+      const profile = profiles.find(prof => prof.id === p.user_id);
+      if (profile && (userUnidade ? profile.unidade_id === userUnidade : true)) {
+        const iso = p.data;
+        const arr = m.get(iso) ?? [];
+        arr.push({
+          userId: p.user_id,
+          userName: nm.get(p.user_id) || "Colaborador",
+          type: "pending",
+          origin: "Solicitação Pendente",
+          requestId: p.id,
+        });
+        m.set(iso, arr);
+      }
     });
 
     return m;
-  }, [profiles, folgas, pendentes, year, month0]);
+  }, [profiles, folgas, pendentes, year, month0, user?.id]);
 
   // --- Navegação ---
   const goPrev = () => { const d = new Date(year, month0 - 1, 1); setYear(d.getFullYear()); setMonth0(d.getMonth()); };
@@ -253,6 +260,29 @@ export default function CalendarioPage() {
       return;
     }
 
+    // Verifica se o usuário é admin (consulta direta à tabela user_roles)
+    const { data: roleData } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('role', 'admin')
+      .maybeSingle();
+    const isAdmin = !!roleData;
+
+    // Se não for admin, verifica se o destinatário é da mesma unidade
+    if (!isAdmin) {
+      const myProfile = profiles.find(p => p.id === user.id);
+      const destProfile = profiles.find(p => p.id === destinatarioId);
+      if (!myProfile || !destProfile) {
+        toast.error("Perfil não encontrado");
+        return;
+      }
+      if (myProfile.unidade_id !== destProfile.unidade_id) {
+        toast.error("Você só pode trocar com colaboradores da sua unidade.");
+        return;
+      }
+    }
+
     // Verifica se já existe solicitação pendente
     const { data: existing, error: checkError } = await supabase
       .from('trocas_folga')
@@ -317,8 +347,6 @@ export default function CalendarioPage() {
     const occupants = occupantsByDate.get(iso) || [];
     const isMine = occupants.some(occ => occ.userId === user?.id);
 
-    console.log(`📊 DayInfo para ${iso}:`, { occupants, isMine, isWeekend });
-
     const myProfile = profiles.find(p => p.id === user?.id);
     const fixedDay = myProfile?.folga_fixa_semana ?? null;
 
@@ -350,8 +378,6 @@ export default function CalendarioPage() {
     const canTradeWeekend = isWeekend && !hasMonthlyFolga;
 
     const canTrade = canTradeWeekday || canTradeWeekend;
-
-    console.log(`📊 canTrade para ${iso}:`, { canTrade, canTradeWeekday, canTradeWeekend, fixedDay, fixedDateInWeek, fixedFolgaFutura });
 
     return {
       occupants,
@@ -445,8 +471,6 @@ export default function CalendarioPage() {
                   <h4 className="text-sm font-bold text-slate-600">Colaboradores neste dia:</h4>
                   {dayInfo.occupants.map((occ, idx) => {
                     const isMe = occ.userId === user?.id;
-                    // Mostra o botão "Trocar" mesmo se o dia estiver "taken" (ocupado),
-                    // desde que canTrade seja true e não seja bloqueado/passado
                     const showTrade = !isMe &&
                       dayInfo.canTrade &&
                       selectedDay.status !== 'blocked' &&
