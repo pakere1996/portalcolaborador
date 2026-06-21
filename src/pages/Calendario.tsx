@@ -462,13 +462,19 @@ export default function CalendarioPage() {
 
       {/* Dialog de detalhes do dia */}
       <Dialog open={!!selectedDay} onOpenChange={(o) => !o && setSelectedDay(null)}>
-        <DialogContent className="max-w-md rounded-[2rem] border-none shadow-2xl p-8">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black flex items-center gap-3">
-              <CalIcon className="size-6 text-primary" />
-              {selectedDay && formatBR(parseYMD(selectedDay.iso))}
-            </DialogTitle>
-          </DialogHeader>
+  <DialogContent className="max-w-md rounded-[2rem] border-none shadow-2xl p-8">
+    <DialogHeader>
+      <DialogTitle className="text-2xl font-black flex items-center gap-3">
+        <CalIcon className="size-6 text-primary" />
+        {selectedDay && formatBR(parseYMD(selectedDay.iso))}
+      </DialogTitle>
+      <DialogDescription className="sr-only">
+        Detalhes da data selecionada
+      </DialogDescription>
+    </DialogHeader>
+    {/* resto do conteúdo */}
+  </DialogContent>
+</Dialog>
 
           {selectedDay && dayInfo && (
             <div className="space-y-6 py-4">
