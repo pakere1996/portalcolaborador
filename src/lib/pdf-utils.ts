@@ -1,4 +1,5 @@
 import * as pdfjsLib from "pdfjs-dist";
+import { PDFDocument } from "pdf-lib";
 
 // Configura o worker com arquivo local
 const workerUrl = new URL(
@@ -15,13 +16,13 @@ export interface PageText {
 export const extractTextFromPDF = async (file: File): Promise<PageText[]> => {
   try {
     console.log("🔍 Iniciando extração de texto do PDF:", file.name);
-    
+
     const arrayBuffer = await file.arrayBuffer();
     console.log("📄 ArrayBuffer carregado, tamanho:", arrayBuffer.byteLength);
-    
+
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     console.log(`📚 PDF carregado, ${pdf.numPages} páginas`);
-    
+
     const pages: PageText[] = [];
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
@@ -30,7 +31,7 @@ export const extractTextFromPDF = async (file: File): Promise<PageText[]> => {
       pages.push({ pageNumber: i, text });
       console.log(`📝 Página ${i} extraída, ${text.length} caracteres`);
     }
-    
+
     return pages;
   } catch (error) {
     console.error("❌ Erro ao extrair texto do PDF:", error);
@@ -41,31 +42,58 @@ export const extractTextFromPDF = async (file: File): Promise<PageText[]> => {
 export const renderPdfPageAsImage = async (file: File, pageNumber: number): Promise<string> => {
   try {
     console.log(`🖼️ Renderizando página ${pageNumber} do PDF:`, file.name);
-    
+
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const page = await pdf.getPage(pageNumber);
     const viewport = page.getViewport({ scale: 1.5 });
-    
+
     // Cria um canvas e obtém o contexto
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     if (!context) throw new Error("Canvas context não disponível");
-    
+
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-    
-    // 🔥 CORREÇÃO: Usar 'canvas' em vez de 'canvasContext' (API mais recente)
+
+    // 🔥 CORREÇÃO: Usar a API correta com 'canvas' (não 'canvasContext')
     await page.render({
-      canvas: canvas,        // <-- propriedade 'canvas' (não 'canvasContext')
+      canvasContext: context,  // Suportado em versões mais antigas
       viewport: viewport,
     }).promise;
-    
+
     const dataUrl = canvas.toDataURL("image/png");
     console.log("✅ Imagem renderizada com sucesso");
     return dataUrl;
   } catch (error) {
     console.error("❌ Erro ao renderizar página do PDF:", error);
     throw new Error(`Falha ao renderizar página do PDF: ${(error as Error).message}`);
+  }
+};
+
+/**
+ * Extrai uma única página de um PDF (a partir de bytes) e retorna como Blob de um novo PDF.
+ * Usado para baixar apenas a página correspondente a um colaborador específico,
+ * sem precisar separar o arquivo no momento da importação.
+ */
+export const extractSinglePageAsBlob = async (
+  pdfBytes: ArrayBuffer,
+  pageNumber: number
+): Promise<Blob> => {
+  try {
+    console.log(`✂️ Extraindo página ${pageNumber} como PDF individual`);
+
+    const sourcePdf = await PDFDocument.load(pdfBytes);
+    const newPdf = await PDFDocument.create();
+
+    const [copiedPage] = await newPdf.copyPages(sourcePdf, [pageNumber - 1]);
+    newPdf.addPage(copiedPage);
+
+    const newPdfBytes = await newPdf.save();
+    console.log("✅ Página extraída com sucesso");
+    return new Blob([newPdfBytes], { type: "application/pdf" });
+  } catch (error) {
+    console.error("❌ Erro ao extrair página individual do PDF:", error);
+    throw new Error(`Falha ao extrair página do PDF: ${(error as Error).message}`);
   }
 };
