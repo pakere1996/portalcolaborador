@@ -1,9 +1,6 @@
 // src/lib/parsers/folha-ponto-parser.ts
 import { PageResult, ProfileForMatching } from "@/components/DocumentImportForm";
 
-/**
- * Parser para folhas de ponto - implementação mínima.
- */
 export function parseFolhaPonto(
   pages: { pageNumber: number; text: string }[],
   profiles: ProfileForMatching[]
@@ -24,6 +21,8 @@ export function parseFolhaPonto(
     duplicadoId: null,
     acaoSeDuplicado: null,
     matricula: null,
+    cargo: null,
+    regime_trabalho: null,
   }));
 }
 
