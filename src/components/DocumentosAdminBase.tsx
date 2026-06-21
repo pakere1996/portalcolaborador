@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, History, Download, Pencil, Trash2, Loader2, X, FileText, Eye } from "lucide-react";
+import { Upload, History, Download, Pencil, Trash2, Loader2, X, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { formatBR } from "@/lib/folga-rules";
 import {
@@ -19,7 +19,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
 interface Profile {
@@ -33,7 +32,7 @@ interface Unidade {
   nome: string;
 }
 
-export interface DocumentoAdmin {
+interface DocumentoAdmin {
   id: string;
   colaborador_id: string;
   unidade_id: string;
@@ -66,8 +65,8 @@ interface DocumentosAdminBaseProps {
   editCamposExtras?: (editForm: any, setEditForm: any) => React.ReactNode;
   validarForm?: (form: any) => string | null;
   beforeInsert?: (form: any, path: string, kind: string) => Promise<any> | any;
-  onColaboradorChange?: (colaboradorId: string, setForm: any) => void;
   acoesExtras?: (doc: DocumentoAdmin) => React.ReactNode;
+  onColaboradorChange?: (colaboradorId: string, setForm: any) => void;
 }
 
 export function DocumentosAdminBase({
@@ -85,8 +84,8 @@ export function DocumentosAdminBase({
   editCamposExtras,
   validarForm,
   beforeInsert,
-  onColaboradorChange,
   acoesExtras,
+  onColaboradorChange,
 }: DocumentosAdminBaseProps) {
   const [aba, setAba] = useState<"importar" | "historico">("importar");
   const [documentos, setDocumentos] = useState<DocumentoAdmin[]>([]);
@@ -125,9 +124,6 @@ export function DocumentosAdminBase({
   const [excluirDialogOpen, setExcluirDialogOpen] = useState(false);
   const [documentoParaExcluir, setDocumentoParaExcluir] = useState<DocumentoAdmin | null>(null);
   const [excluindo, setExcluindo] = useState(false);
-
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -251,18 +247,6 @@ export function DocumentosAdminBase({
     else toast.error("Erro ao gerar link de download");
   }, []);
 
-  const handlePreview = useCallback(async (doc: DocumentoAdmin) => {
-    const { data } = await supabase.storage
-      .from("documentos_admin")
-      .createSignedUrl(doc.storage_path, 60);
-    if (data?.signedUrl) {
-      setPreviewUrl(data.signedUrl);
-      setPreviewOpen(true);
-    } else {
-      toast.error("Erro ao gerar link de visualização");
-    }
-  }, []);
-
   const handleEditSave = async () => {
     if (!editando) return;
     setEditBusy(true);
@@ -356,6 +340,13 @@ export function DocumentosAdminBase({
     return formatBR(dt);
   };
 
+  const handleColaboradorChange = (value: string) => {
+    setForm({ ...form, colaborador_id: value });
+    if (onColaboradorChange) {
+      onColaboradorChange(value, setForm);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div>
@@ -414,12 +405,7 @@ export function DocumentosAdminBase({
                 <Label>Colaborador *</Label>
                 <Select
                   value={form.colaborador_id}
-                  onValueChange={(value) => {
-                    setForm({ ...form, colaborador_id: value });
-                    if (onColaboradorChange) {
-                      onColaboradorChange(value, setForm);
-                    }
-                  }}
+                  onValueChange={handleColaboradorChange}
                   disabled={!form.unidade_id}
                 >
                   <SelectTrigger><SelectValue placeholder="Selecione o colaborador" /></SelectTrigger>
@@ -681,6 +667,7 @@ export function DocumentosAdminBase({
                                   {doc.tipo || "outro"}
                                 </Badge>
                               )}
+                              {acoesExtras && acoesExtras(doc)}
                             </>
                           )}
                         </td>
@@ -694,24 +681,14 @@ export function DocumentosAdminBase({
                           </td>
                         )}
                         <td className="p-4 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-blue-600"
-                              onClick={() => handlePreview(doc)}
-                            >
-                              <Eye className="size-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-blue-600"
-                              onClick={() => handleDownload(doc)}
-                            >
-                              <Download className="size-4" />
-                            </Button>
-                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-blue-600"
+                            onClick={() => handleDownload(doc)}
+                          >
+                            <FileText className="size-4 mr-1" /> {doc.storage_type === "pdf" ? "PDF" : "Imagem"}
+                          </Button>
                         </td>
                         <td className="p-4 text-right whitespace-nowrap">
                           <div className="flex justify-end gap-1">
@@ -774,7 +751,6 @@ export function DocumentosAdminBase({
                                 >
                                   <Trash2 className="size-4" />
                                 </Button>
-                                {acoesExtras && acoesExtras(doc)}
                               </>
                             )}
                           </div>
@@ -816,37 +792,6 @@ export function DocumentosAdminBase({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
-          <DialogHeader>
-            <DialogTitle>Visualização do Documento</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 min-h-[500px] bg-muted/20 rounded-lg overflow-hidden">
-            {previewUrl ? (
-              <iframe
-                src={previewUrl}
-                className="w-full h-[600px] border-0"
-                title="Visualização do documento"
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                Carregando visualização...
-              </div>
-            )}
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setPreviewOpen(false)}>Fechar</Button>
-            <Button
-              onClick={() => {
-                if (documentoParaExcluir) handleDownload(documentoParaExcluir);
-              }}
-            >
-              <Download className="size-4 mr-1" /> Baixar
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
