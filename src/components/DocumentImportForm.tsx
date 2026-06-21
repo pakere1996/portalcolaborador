@@ -27,10 +27,6 @@ interface Unidade {
   tem_adiantamento?: boolean;
 }
 
-interface DocumentImportFormProps {
-  tipoPadrao?: "contracheque" | "adiantamento" | "ponto";
-}
-
 const MESES = [
   { value: "1", label: "Janeiro" },
   { value: "2", label: "Fevereiro" },
@@ -46,18 +42,17 @@ const MESES = [
   { value: "12", label: "Dezembro" },
 ];
 
-export function DocumentImportForm({ tipoPadrao }: DocumentImportFormProps = {}) {
+export function DocumentImportForm() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
 
-  // Formulário
   const [selectedColaborador, setSelectedColaborador] = useState("");
   const [selectedMes, setSelectedMes] = useState("");
   const [selectedAno, setSelectedAno] = useState("");
-  const [tipoDocumento, setTipoDocumento] = useState<"contracheque" | "adiantamento" | "ponto">(tipoPadrao || "contracheque");
+  const [tipoDocumento, setTipoDocumento] = useState<"contracheque" | "adiantamento" | "ponto">("contracheque");
   const [file, setFile] = useState<File | null>(null);
 
   const load = async () => {
@@ -98,7 +93,7 @@ export function DocumentImportForm({ tipoPadrao }: DocumentImportFormProps = {})
     setSelectedColaborador("");
     setSelectedMes("");
     setSelectedAno("");
-    if (!tipoPadrao) setTipoDocumento("contracheque");
+    setTipoDocumento("contracheque");
     setFile(null);
   };
 
@@ -108,7 +103,6 @@ export function DocumentImportForm({ tipoPadrao }: DocumentImportFormProps = {})
     if (!selectedMes) return toast.error("Selecione o mês");
     if (!selectedAno) return toast.error("Selecione o ano");
 
-    // Validação para adiantamento
     if (tipoDocumento === "adiantamento") {
       if (!colaboradorPodeAdiantamento(selectedColaborador)) {
         return toast.error("Este colaborador não tem direito a adiantamento.");
@@ -152,42 +146,25 @@ export function DocumentImportForm({ tipoPadrao }: DocumentImportFormProps = {})
     }
   };
 
-  const tipoLabel = tipoDocumento === "contracheque" ? "Contracheque" 
-    : tipoDocumento === "adiantamento" ? "Adiantamento Quinzenal" 
-    : "Folha de Ponto";
-
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {!tipoPadrao && (
-          <div className="space-y-2">
-            <Label>Tipo de Documento</Label>
-            <Select
-              value={tipoDocumento}
-              onValueChange={(v: "contracheque" | "adiantamento" | "ponto") => {
-                setTipoDocumento(v);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="contracheque">Contracheque</SelectItem>
-                <SelectItem value="adiantamento">Adiantamento Quinzenal</SelectItem>
-                <SelectItem value="ponto">Folha de Ponto</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {tipoPadrao && (
-          <div className="space-y-2">
-            <Label>Tipo de Documento</Label>
-            <div className="p-2 bg-muted/30 rounded-md text-sm font-medium">
-              {tipoLabel}
-            </div>
-          </div>
-        )}
+        <div className="space-y-2">
+          <Label>Tipo de Documento</Label>
+          <Select
+            value={tipoDocumento}
+            onValueChange={(v: "contracheque" | "adiantamento" | "ponto") => setTipoDocumento(v)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="contracheque">Contracheque</SelectItem>
+              <SelectItem value="adiantamento">Adiantamento Quinzenal</SelectItem>
+              <SelectItem value="ponto">Folha de Ponto</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         <div className="space-y-2">
           <Label>Colaborador</Label>
