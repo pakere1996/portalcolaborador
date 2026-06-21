@@ -126,11 +126,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/bloqueios", label: "Datas Bloqueadas", icon: Ban },
   ];
 
+  // 🔥 Ajuste dos links de documentos para rotas específicas
   const employeeDocsNav: NavItem[] = [
-    { to: "/documentos", label: "Contracheques", icon: FileText, end: true },
+    { to: "/documentos/contracheque", label: "Contracheques", icon: FileText, end: true },
     { to: "/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
     { to: "/documentos/atestados", label: "Atestados", icon: FileWarning },
-    { to: "/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert }, // 🔥 NOVO
+    { to: "/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
   ];
 
   const adminDocsNav: NavItem[] = [
