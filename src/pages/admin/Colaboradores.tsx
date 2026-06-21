@@ -53,7 +53,6 @@ export default function Colaboradores() {
   const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
   const [resetPasswordDialog, setResetPasswordDialog] = useState<{ profile: Profile; senha: string; confirmar: string } | null>(null);
 
-  // 🔥 Carregar dados com useCallback para evitar recriações
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -82,7 +81,7 @@ export default function Colaboradores() {
         role: rolesMap.get(p.id)?.[0] ?? null,
       }));
 
-      // 🔥 Ordenação local: Unidade → Status (ativo primeiro) → Nome
+      // Ordenação: Unidade → Status (ativo primeiro) → Nome
       const sortedProfiles = profilesWithRoles.sort((a, b) => {
         const unidadeA = uRes.data?.find(u => u.id === a.unidade_id)?.nome || "";
         const unidadeB = uRes.data?.find(u => u.id === b.unidade_id)?.nome || "";
@@ -102,12 +101,10 @@ export default function Colaboradores() {
     }
   }, []);
 
-  // 🔥 useEffect com dependências corretas (sem unidades)
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // 🔥 Filtrar perfis (useMemo para evitar recálculos desnecessários)
   const filteredProfiles = useMemo(() => {
     return profiles.filter(p => {
       const matchesSearch = p.nome.toLowerCase().includes(search.toLowerCase()) || p.cpf.includes(search.replace(/\D/g, ""));
@@ -124,9 +121,9 @@ export default function Colaboradores() {
 
   const toUpperCaseTrim = (str: string) => str.trim().toUpperCase();
 
-  // 🔥 Validação de campos obrigatórios
+  // 🔥 VALIDAÇÃO MELHORADA
   const validateForm = (form: any) => {
-    const errors = [];
+    const errors: string[] = [];
     if (!form.nome.trim()) errors.push("Nome");
     if (!form.cpf.trim() || !isValidCPFLength(onlyDigits(form.cpf))) errors.push("CPF");
     if (!form.cargo.trim()) errors.push("Cargo");
@@ -216,6 +213,7 @@ export default function Colaboradores() {
   };
 
   const handleUpdate = async () => {
+    // 🔥 VALIDAÇÃO PARA EDIÇÃO (inclui data de nascimento e admissão)
     const errors = validateForm(editForm);
     if (errors.length > 0) {
       toast.error("Campos obrigatórios pendentes", {
@@ -231,6 +229,11 @@ export default function Colaboradores() {
       const cleanCpf = onlyDigits(editForm.cpf);
       if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
 
+      // 🔥 GARANTE QUE DATAS VAZIAS SEJAM NULL (não strings vazias)
+      const dataAdmissao = editForm.dataAdmissao || null;
+      const dataNascimento = editForm.dataNascimento || null;
+      const dataDemissao = editForm.data_demissao || null;
+
       const { error: profErr } = await supabase.from("profiles").update({
         nome: toUpperCaseTrim(editForm.nome),
         cpf: cleanCpf,
@@ -240,12 +243,12 @@ export default function Colaboradores() {
         cargo: toUpperCaseTrim(editForm.cargo),
         unidade_id: editForm.unidadeId === "none" ? null : editForm.unidadeId,
         folga_fixa_semana: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa),
-        data_nascimento: editForm.dataNascimento || null,
-        data_admissao: editForm.dataAdmissao || null,
+        data_nascimento: dataNascimento,
+        data_admissao: dataAdmissao,
         ativo: editForm.ativo,
         updated_at: new Date().toISOString(),
         regime_trabalho: editForm.regime_trabalho === "none" ? null : editForm.regime_trabalho,
-        data_demissao: editForm.data_demissao || null,
+        data_demissao: dataDemissao,
         tipo_vinculo: editForm.tipo_vinculo || "CLT",
         possui_folha_ponto: editForm.possui_folha_ponto ?? false,
       }).eq("id", editingProfile.id);
