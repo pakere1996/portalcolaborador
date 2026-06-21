@@ -156,26 +156,36 @@ export default function AdminHomeAdminPage() {
   const carregarPendentes = async () => {
     setLoading(true);
     try {
-      // 🔥 CORREÇÃO: usar o alias correto para o relacionamento
-      const { data, error } = await supabase
+      // 1. Buscar todos os atestados pendentes
+      const { data: atestados, error: atestadosError } = await supabase
         .from("atestados")
-        .select(`
-          id,
-          colaborador_id,
-          data_atestado,
-          dias_afastamento,
-          created_at,
-          profiles:profiles!colaborador_id (nome)
-        `)
+        .select("id, colaborador_id, data_atestado, dias_afastamento, created_at")
         .eq("status", "pendente")
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (atestadosError) throw atestadosError;
 
-      const pendentesFormatados = (data || []).map((item: any) => ({
+      if (!atestados || atestados.length === 0) {
+        setPendentes([]);
+        setLoading(false);
+        return;
+      }
+
+      // 2. Buscar os nomes dos colaboradores
+      const colaboradorIds = atestados.map((a) => a.colaborador_id);
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, nome")
+        .in("id", colaboradorIds);
+
+      if (profilesError) throw profilesError;
+
+      const profileMap = new Map(profiles?.map((p) => [p.id, p.nome]) || []);
+
+      const pendentesFormatados: AtestadoPendente[] = atestados.map((item) => ({
         id: item.id,
         colaborador_id: item.colaborador_id,
-        colaborador_nome: item.profiles?.nome || "Colaborador",
+        colaborador_nome: profileMap.get(item.colaborador_id) || "Colaborador",
         data_atestado: item.data_atestado,
         dias_afastamento: item.dias_afastamento,
         created_at: item.created_at,
@@ -183,8 +193,11 @@ export default function AdminHomeAdminPage() {
 
       setPendentes(pendentesFormatados);
 
+      // 3. Exibir notificação se houver pendentes
       if (pendentesFormatados.length > 0) {
+        // Abre o popout
         setShowNotification(true);
+        // Exibe toast com atalho
         toast.info(`📋 ${pendentesFormatados.length} atestado(s) pendente(s) de aprovação`, {
           duration: 6000,
           action: {
@@ -223,6 +236,7 @@ export default function AdminHomeAdminPage() {
         <p className="text-muted-foreground mt-1">Acesso rápido aos módulos de gestão.</p>
       </div>
 
+      {/* Card de Atestados Pendentes – só aparece se houver pendentes */}
       {!loading && pendentes.length > 0 && (
         <Card className="border-amber-200 bg-amber-50/50 shadow-sm">
           <CardHeader className="pb-3">
@@ -259,6 +273,7 @@ export default function AdminHomeAdminPage() {
         </Card>
       )}
 
+      {/* Módulos agrupados por categoria */}
       {Object.entries(groupedModules).map(([category, modules]) => (
         <div key={category} className="space-y-4">
           <h2 className="text-xl font-semibold border-b pb-1 text-primary">{category}</h2>
@@ -284,6 +299,7 @@ export default function AdminHomeAdminPage() {
         </div>
       )}
 
+      {/* Popout de Notificação para Atestados Pendentes */}
       <AlertDialog open={showNotification} onOpenChange={setShowNotification}>
         <AlertDialogContent className="max-w-md rounded-2xl">
           <AlertDialogHeader>
