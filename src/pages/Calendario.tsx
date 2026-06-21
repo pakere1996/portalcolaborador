@@ -73,7 +73,10 @@ export default function CalendarioPage() {
         supabase.from("prioridade_aniversario").select("*").eq("status", "ativa").gte("data", start).lte("data", end),
       ]);
 
-      console.log("Folgas carregadas:", fRes.data); // <-- Verifique no console
+      console.log("✅ Folgas carregadas:", fRes.data);
+      console.log("✅ Perfis carregados:", pRes.data);
+      console.log("✅ Karine está na lista?", pRes.data?.some(p => p.id === '89cfc22a-b060-45bc-9fd3-e40ec7747ac3'));
+      console.log("✅ Cristiane tem folga fixa?", pRes.data?.find(p => p.id === user.id)?.folga_fixa_semana);
 
       setFolgas(fRes.data ?? []);
       setManualBlocked(bRes.data ?? []);
@@ -83,6 +86,7 @@ export default function CalendarioPage() {
       setPrios(prioRes.data ?? []);
     } catch (error) {
       toast.error("Erro ao carregar dados");
+      console.error("❌ Erro no load:", error);
     } finally {
       setLoading(false);
     }
@@ -121,6 +125,7 @@ export default function CalendarioPage() {
 
   // --- Ocupantes ---
   const occupantsByDate = useMemo(() => {
+    console.log("🔄 Recalculando occupantsByDate...");
     const m = new Map<string, DayOccupant[]>();
     const nm = new Map(profiles.map(p => [p.id, p.nome]));
 
@@ -129,6 +134,12 @@ export default function CalendarioPage() {
       const iso = ymd(d);
       const wd = d.getDay();
       const fixedOnes = profiles.filter(p => p.folga_fixa_semana === wd);
+      
+      // Log específico para o dia 22/06
+      if (iso === '2026-06-22') {
+        console.log(`📅 Dia ${iso} - wd: ${wd}, fixedOnes:`, fixedOnes);
+      }
+
       fixedOnes.forEach(p => {
         const arr = m.get(iso) ?? [];
         arr.push({ userId: p.id, userName: p.nome, type: "fixed", origin: "Folga Semanal" });
@@ -306,6 +317,8 @@ export default function CalendarioPage() {
     const occupants = occupantsByDate.get(iso) || [];
     const isMine = occupants.some(occ => occ.userId === user?.id);
 
+    console.log(`📊 DayInfo para ${iso}:`, { occupants, isMine, isWeekend });
+
     const myProfile = profiles.find(p => p.id === user?.id);
     const fixedDay = myProfile?.folga_fixa_semana ?? null;
 
@@ -337,6 +350,8 @@ export default function CalendarioPage() {
     const canTradeWeekend = isWeekend && !hasMonthlyFolga;
 
     const canTrade = canTradeWeekday || canTradeWeekend;
+
+    console.log(`📊 canTrade para ${iso}:`, { canTrade, canTradeWeekday, canTradeWeekend, fixedDay, fixedDateInWeek, fixedFolgaFutura });
 
     return {
       occupants,
