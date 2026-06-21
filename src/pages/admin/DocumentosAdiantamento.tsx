@@ -9,16 +9,6 @@ export default function DocumentosAdiantamento() {
       icone={<FileText className="size-6 text-primary" />}
       descricao="Importe e gerencie adiantamentos quinzenais dos colaboradores."
       importTitle="Importar Adiantamento"
-      colunasExtras={(doc) => {
-        if (doc.quinzena) {
-          return (
-            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-              {doc.quinzena}ª Quinzena
-            </span>
-          );
-        }
-        return null;
-      }}
     />
   );
 }
