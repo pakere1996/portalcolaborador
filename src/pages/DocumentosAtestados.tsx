@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
-import { notifyAtestadoPendente } from "@/lib/notify-atestado";
 import {
   atestadoStoragePath,
   getFileKind,
@@ -25,14 +24,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -42,8 +33,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { FileText, Upload, AlertTriangle, Loader2, CalendarDays, UserCheck, Eye, Download, Filter } from "lucide-react";
+import { FileText, Upload, AlertTriangle, Loader2, CalendarDays, UserCheck, Eye, Download } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
 
 interface Atestado {
@@ -61,13 +53,6 @@ interface Atestado {
   criado_por: string | null;
 }
 
-interface PendingUpload {
-  data: string;
-  dias: string;
-  observacao: string;
-  file: File;
-}
-
 export default function DocumentosAtestadosPage() {
   const { user, profile } = useAuth();
   const [atestados, setAtestados] = useState<Atestado[]>([]);
@@ -78,13 +63,15 @@ export default function DocumentosAtestadosPage() {
   const [dias, setDias] = useState("");
   const [observacao, setObservacao] = useState("");
   const [duplicate, setDuplicate] = useState<Atestado | null>(null);
-  const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
+  const [pendingUpload, setPendingUpload] = useState<{ data: string; dias: string; observacao: string; file: File } | null>(null);
 
-  // Filtros
+  // Filtros para histórico
   const [filtroAno, setFiltroAno] = useState<string>("todos");
   const [filtroMes, setFiltroMes] = useState<string>("todos");
+  const [anos, setAnos] = useState<number[]>([]);
+  const [meses, setMeses] = useState<number[]>([]);
 
-  // Preview dialog
+  // Visualização do PDF
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedAtestado, setSelectedAtestado] = useState<Atestado | null>(null);
@@ -95,34 +82,26 @@ export default function DocumentosAtestadosPage() {
   const load = async () => {
     if (!user) return;
     setLoading(true);
-    try {
-      let query = supabase
-        .from("atestados")
-        .select("*")
-        .eq("colaborador_id", user.id);
+    const { data: items, error } = await supabase
+      .from("atestados")
+      .select("*")
+      .eq("colaborador_id", user.id)
+      .order("created_at", { ascending: false });
 
-      if (filtroAno !== "todos") {
-        query = query.eq("ano", parseInt(filtroAno));
-      }
-      if (filtroMes !== "todos") {
-        query = query.eq("mes", parseInt(filtroMes));
-      }
+    if (error) toast.error("Erro ao carregar atestados", { description: error.message });
+    setAtestados((items ?? []) as Atestado[]);
 
-      const { data: items, error } = await query
-        .order("data_atestado", { ascending: false });
-
-      if (error) throw error;
-      setAtestados(items ?? []);
-    } catch (error) {
-      toast.error("Erro ao carregar atestados", { description: (error as Error).message });
-    } finally {
-      setLoading(false);
-    }
+    // Extrai anos e meses para filtros
+    const anosSet = new Set(items?.map(a => new Date(a.data_atestado + "T00:00:00").getFullYear()) ?? []);
+    const mesesSet = new Set(items?.map(a => new Date(a.data_atestado + "T00:00:00").getMonth() + 1) ?? []);
+    setAnos(Array.from(anosSet).sort((a, b) => b - a));
+    setMeses(Array.from(mesesSet).sort((a, b) => b - a));
+    setLoading(false);
   };
 
   useEffect(() => {
     load();
-  }, [user, filtroAno, filtroMes]);
+  }, [user?.id]);
 
   useEffect(() => {
     const checkDuplicate = async () => {
@@ -130,19 +109,16 @@ export default function DocumentosAtestadosPage() {
         setDuplicate(null);
         return;
       }
-
       const { data: existing } = await supabase
         .from("atestados")
         .select("*")
         .eq("colaborador_id", user.id)
         .eq("data_atestado", data)
         .maybeSingle();
-
       setDuplicate((existing as Atestado | null) ?? null);
     };
-
     checkDuplicate();
-  }, [data, user]);
+  }, [data, user?.id]);
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0] ?? null;
@@ -150,34 +126,51 @@ export default function DocumentosAtestadosPage() {
       setFile(null);
       return;
     }
-
     const kind = getFileKind(selected);
     if (!kind) {
       toast.error("Arquivo inválido", { description: "Envie apenas PDF, JPG ou PNG." });
       setFile(null);
       return;
     }
-
     setFile(selected);
   };
 
-  // Calcula data de retorno
-  const calcularDataRetorno = (dataAtestado: string, dias: number) => {
-    if (!dataAtestado || !dias || dias <= 0) return null;
-    const dt = new Date(dataAtestado + "T00:00:00");
-    dt.setDate(dt.getDate() + dias);
-    return formatBR(dt);
+  // 🔥 VALIDAÇÃO: data não pode ser maior que hoje
+  const validarData = (dataStr: string) => {
+    if (dataStr > hojeStr) {
+      toast.error("Data do atestado não pode ser futura");
+      return false;
+    }
+    return true;
   };
 
-  const uploadAtestado = async (payload: PendingUpload) => {
+  const uploadAtestado = async (payload: { data: string; dias: string; observacao: string; file: File }) => {
     if (!user || !profile) return;
+
+    // 🔥 VALIDAÇÕES
+    if (payload.data > hojeStr) {
+      toast.error("Data do atestado não pode ser futura");
+      return;
+    }
+    if (!payload.dias || parseInt(payload.dias) <= 0) {
+      toast.error("Informe a quantidade de dias de afastamento");
+      return;
+    }
+
+    // 🔥 Verifica se a data é muito antiga (mais de 48h)
+    const dataAtestado = new Date(payload.data + "T00:00:00");
+    const diffHoras = (hoje.getTime() - dataAtestado.getTime()) / (1000 * 60 * 60);
+    if (diffHoras > 48) {
+      toast.warning("Atenção: Atestados devem ser enviados em até 48h da data de afastamento", {
+        description: "Recomendamos entrar em contato com o RH para justificar o atraso.",
+      });
+    }
 
     setBusy(true);
     try {
       const id = newDocumentId();
       const storagePath = atestadoStoragePath(user.id, payload.data, id, payload.file);
       const kind = getFileKind(payload.file);
-
       if (!kind) throw new Error("Tipo de arquivo não suportado.");
 
       const { error: uploadError } = await supabase.storage
@@ -186,7 +179,6 @@ export default function DocumentosAtestadosPage() {
           contentType: payload.file.type,
           upsert: false,
         });
-
       if (uploadError) throw uploadError;
 
       const { data: inserted, error: insertError } = await supabase
@@ -207,12 +199,13 @@ export default function DocumentosAtestadosPage() {
 
       if (insertError) throw insertError;
 
+      // Notifica admin (ignora erro se função não existir)
       try {
+        const { notifyAtestadoPendente } = await import("@/lib/notify-atestado");
         await notifyAtestadoPendente(inserted.id, profile.nome);
       } catch (notifyError) {
-        toast.warning("Atestado enviado, mas a notificação dos admins falhou", {
-          description: (notifyError as Error).message,
-        });
+        console.warn("Notificação não disponível:", notifyError);
+        // Não exibe erro para o usuário
       }
 
       toast.success("Atestado enviado para aprovação");
@@ -236,26 +229,20 @@ export default function DocumentosAtestadosPage() {
       toast.error("Preencha todos os campos obrigatórios");
       return;
     }
-
-    // 🔥 Validação: data não pode ser maior que hoje
-    if (data > hojeStr) {
-      toast.error("A data do atestado não pode ser futura.");
-      return;
-    }
+    if (!validarData(data)) return;
 
     const payload = { data, dias, observacao, file };
     if (duplicate) {
       setPendingUpload(payload);
       return;
     }
-
     await uploadAtestado(payload);
   };
 
-  const handleDownload = async (atestado: Atestado) => {
+  const handleDownload = async (doc: Atestado) => {
     const { data } = await supabase.storage
       .from("documentos")
-      .createSignedUrl(atestado.storage_path, 60);
+      .createSignedUrl(doc.storage_path, 60);
     if (data?.signedUrl) {
       window.open(data.signedUrl, "_blank");
     } else {
@@ -263,11 +250,11 @@ export default function DocumentosAtestadosPage() {
     }
   };
 
-  const handlePreview = async (atestado: Atestado) => {
-    setSelectedAtestado(atestado);
+  const handlePreview = async (doc: Atestado) => {
+    setSelectedAtestado(doc);
     const { data } = await supabase.storage
       .from("documentos")
-      .createSignedUrl(atestado.storage_path, 60);
+      .createSignedUrl(doc.storage_path, 60);
     if (data?.signedUrl) {
       setPreviewUrl(data.signedUrl);
       setPreviewOpen(true);
@@ -276,151 +263,147 @@ export default function DocumentosAtestadosPage() {
     }
   };
 
-  const limparFiltros = () => {
-    setFiltroAno("todos");
-    setFiltroMes("todos");
+  const getDataRetorno = (dataAtestado: string, dias: number) => {
+    const dt = new Date(dataAtestado + "T00:00:00");
+    dt.setDate(dt.getDate() + dias);
+    return formatBR(dt);
   };
 
-  // Extrai anos e meses disponíveis
-  const anosDisponiveis = [...new Set(atestados.map(a => new Date(a.data_atestado + "T00:00:00").getFullYear()))].sort((a, b) => b - a);
-  const mesesDisponiveis = [...new Set(atestados.map(a => new Date(a.data_atestado + "T00:00:00").getMonth() + 1))].sort((a, b) => b - a);
+  // Filtra atestados pelo histórico
+  const atestadosFiltrados = atestados.filter(a => {
+    const dataObj = new Date(a.data_atestado + "T00:00:00");
+    if (filtroAno !== "todos" && dataObj.getFullYear() !== parseInt(filtroAno)) return false;
+    if (filtroMes !== "todos" && dataObj.getMonth() + 1 !== parseInt(filtroMes)) return false;
+    return true;
+  });
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
           <FileText className="size-6 text-primary" /> Meus Atestados
         </h1>
         <p className="text-muted-foreground mt-1">
-          Envie atestados médicos e acompanhe a aprovação.
+          Envie atestados médicos e acompanhe a aprovação. Atestados devem ser enviados em até 48h da data de afastamento.
         </p>
       </div>
 
-      <Card className="border-border shadow-sm">
-        <CardHeader>
-          <CardTitle>Novo Atestado</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            <AlertTriangle className="size-4 inline mr-1 text-amber-500" />
-            Atestados devem ser enviados em até <strong>48 horas</strong> após a data de afastamento.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
+        {/* Formulário de envio */}
+        <Card className="border-border shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Upload className="size-4 text-primary" /> Novo atestado
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="data-atestado">Data do atestado *</Label>
                 <Input
                   id="data-atestado"
                   type="date"
+                  max={hojeStr}
                   value={data}
                   onChange={(e) => setData(e.target.value)}
-                  max={hojeStr}
                 />
+                <p className="text-xs text-muted-foreground">A data não pode ser futura.</p>
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="dias">Dias de afastamento *</Label>
                 <Input
                   id="dias"
                   type="number"
-                  min={0}
+                  min={1}
                   value={dias}
                   onChange={(e) => setDias(e.target.value)}
-                  required
+                  placeholder="Ex: 3"
                 />
                 {data && dias && parseInt(dias) > 0 && (
-                  <div className="text-sm text-muted-foreground">
-                    <span className="font-semibold">Data de retorno:</span>{" "}
-                    {calcularDataRetorno(data, parseInt(dias))}
-                  </div>
+                  <p className="text-xs text-green-600">
+                    Data de retorno: {getDataRetorno(data, parseInt(dias))}
+                  </p>
                 )}
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="obs">Observação opcional</Label>
-              <Textarea
-                id="obs"
-                rows={3}
-                value={observacao}
-                onChange={(e) => setObservacao(e.target.value)}
-                placeholder="Informações adicionais..."
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="file">Arquivo (PDF, JPG ou PNG) *</Label>
-              <Input
-                id="file"
-                type="file"
-                accept="application/pdf,image/jpeg,image/png"
-                onChange={onFileChange}
-              />
-              {file && (
-                <p className="text-xs text-muted-foreground">
-                  {file.name} ({(file.size / 1024).toFixed(1)} KB)
-                </p>
-              )}
-            </div>
-
-            {duplicate && (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 flex items-start gap-2">
-                <AlertTriangle className="size-4 mt-0.5 shrink-0" />
-                <span>Já existe um atestado neste dia. Você poderá confirmar o envio após este aviso.</span>
+              <div className="space-y-2">
+                <Label htmlFor="obs">Observação opcional</Label>
+                <Textarea
+                  id="obs"
+                  rows={3}
+                  value={observacao}
+                  onChange={(e) => setObservacao(e.target.value)}
+                  placeholder="Informações adicionais..."
+                />
               </div>
-            )}
 
-            <Button type="submit" className="w-full" disabled={busy}>
-              {busy ? <><Loader2 className="size-4 mr-2 animate-spin" /> Enviando...</> : <><Upload className="size-4 mr-2" /> Enviar atestado</>}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              <div className="space-y-2">
+                <Label htmlFor="file">Arquivo (PDF ou Imagem) *</Label>
+                <Input
+                  id="file"
+                  type="file"
+                  accept="application/pdf,image/jpeg,image/png"
+                  onChange={onFileChange}
+                />
+                {file && <p className="text-xs text-muted-foreground">{file.name} ({(file.size / 1024).toFixed(1)} KB)</p>}
+              </div>
 
-      <Card className="border-border shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
-          <CardTitle>Histórico de Atestados</CardTitle>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs font-bold uppercase text-muted-foreground">Ano</Label>
-              <Select value={filtroAno} onValueChange={setFiltroAno}>
-                <SelectTrigger className="w-[100px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  {anosDisponiveis.map(a => (
-                    <SelectItem key={a} value={String(a)}>{a}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {duplicate && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 flex items-start gap-2">
+                  <AlertTriangle className="size-4 mt-0.5 shrink-0" />
+                  <span>Já existe um atestado nesta data. Confirme o envio para substituir.</span>
+                </div>
+              )}
+
+              <Button className="w-full" disabled={busy}>
+                {busy ? <><Loader2 className="size-4 mr-2 animate-spin" /> Enviando...</> : <><Upload className="size-4 mr-2" /> Enviar atestado</>}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        {/* Histórico com filtros */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <h2 className="font-semibold flex items-center gap-2">
+              <CalendarDays className="size-4 text-primary" /> Histórico
+            </h2>
+            <div className="flex gap-3">
+              <div className="space-y-1">
+                <Label className="text-[10px] font-bold uppercase text-muted-foreground">Ano</Label>
+                <Select value={filtroAno} onValueChange={setFiltroAno}>
+                  <SelectTrigger className="w-[100px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    {anos.map(a => <SelectItem key={a} value={String(a)}>{a}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] font-bold uppercase text-muted-foreground">Mês</Label>
+                <Select value={filtroMes} onValueChange={setFiltroMes}>
+                  <SelectTrigger className="w-[100px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    {meses.map(m => <SelectItem key={m} value={String(m)}>{String(m).padStart(2, "0")}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-bold uppercase text-muted-foreground">Mês</Label>
-              <Select value={filtroMes} onValueChange={setFiltroMes}>
-                <SelectTrigger className="w-[100px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  {mesesDisponiveis.map(m => (
-                    <SelectItem key={m} value={String(m)}>{String(m).padStart(2, "0")}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button variant="ghost" size="sm" onClick={limparFiltros} className="mt-6 h-9">
-              Limpar
-            </Button>
           </div>
-        </CardHeader>
-        <CardContent>
+
           {loading ? (
-            <div className="flex items-center justify-center p-12">
+            <div className="flex items-center justify-center rounded-2xl border p-12 text-muted-foreground">
               <Loader2 className="size-6 animate-spin mr-2" /> Carregando...
             </div>
-          ) : atestados.length === 0 ? (
-            <div className="text-center p-8 text-muted-foreground">
+          ) : atestadosFiltrados.length === 0 ? (
+            <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
               Nenhum atestado encontrado.
             </div>
           ) : (
             <div className="space-y-3">
-              {atestados.map((a) => (
+              {atestadosFiltrados.map((a) => (
                 <div
                   key={a.id}
                   className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl border border-border bg-card hover:bg-muted/20 transition-colors"
@@ -431,16 +414,14 @@ export default function DocumentosAtestadosPage() {
                     </div>
                     <div>
                       <div className="font-medium">
-                        Atestado - {formatBR(new Date(a.data_atestado + "T00:00:00"))}
+                        Atestado {formatBR(new Date(a.data_atestado + "T00:00:00"))}
                       </div>
                       <div className="text-sm text-muted-foreground flex items-center gap-2">
-                        <span>{a.dias_afastamento} {a.dias_afastamento === 1 ? "dia" : "dias"}</span>
-                        {a.status && (
-                          <Badge className={statusClass(a.status)}>
-                            {formatAtestadoStatus(a.status)}
-                          </Badge>
-                        )}
+                        <span>{a.dias_afastamento} dia(s)</span>
+                        <span>•</span>
+                        <span>Retorno: {getDataRetorno(a.data_atestado, a.dias_afastamento)}</span>
                       </div>
+                      <Badge className={statusClass(a.status)}>{formatAtestadoStatus(a.status)}</Badge>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -465,53 +446,36 @@ export default function DocumentosAtestadosPage() {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* Preview Dialog */}
+      {/* Dialog de visualização */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Visualização do Atestado</DialogTitle>
-            <DialogDescription>
-              {selectedAtestado
-                ? `Atestado de ${formatBR(new Date(selectedAtestado.data_atestado + "T00:00:00"))}`
-                : "Atestado"}
-            </DialogDescription>
           </DialogHeader>
           <div className="flex-1 min-h-[500px] bg-muted/20 rounded-lg overflow-hidden">
             {previewUrl ? (
-              <iframe
-                src={previewUrl}
-                className="w-full h-[600px] border-0"
-                title="Visualização do atestado"
-              />
+              <iframe src={previewUrl} className="w-full h-[600px] border-0" title="Visualização do atestado" />
             ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                Carregando visualização...
-              </div>
+              <div className="flex items-center justify-center h-full text-muted-foreground">Carregando...</div>
             )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPreviewOpen(false)}>
-              Fechar
-            </Button>
-            <Button
-              onClick={() => {
-                if (selectedAtestado) handleDownload(selectedAtestado);
-              }}
-            >
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setPreviewOpen(false)}>Fechar</Button>
+            <Button onClick={() => { if (selectedAtestado) handleDownload(selectedAtestado); }}>
               <Download className="size-4 mr-1" /> Baixar
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
-      {/* AlertDialog de confirmação de duplicata */}
+      {/* Dialog de duplicata */}
       <AlertDialog open={!!pendingUpload} onOpenChange={(open) => !open && setPendingUpload(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar atestado duplicado?</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar envio duplicado?</AlertDialogTitle>
             <AlertDialogDescription>
               Já existe um atestado para esta data. Confirme apenas se este arquivo realmente precisa ser enviado novamente.
             </AlertDialogDescription>
