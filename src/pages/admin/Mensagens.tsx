@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { MessageSquare, Plus, Pencil, Trash2, Send, Loader2, Copy } from "lucide-react";
+import { MessageSquare, Plus, Pencil, Trash2, Send, Loader2, Copy, Mail, Phone } from "lucide-react";
 
 interface ModeloMensagem {
   id: string;
@@ -35,6 +35,7 @@ interface Profile {
   id: string;
   nome: string;
   whatsapp: string | null;
+  email: string | null;
   unidade_id: string | null;
 }
 
@@ -46,6 +47,12 @@ const TIPOS_MODELO = [
   { value: "outro", label: "Outro" },
 ];
 
+const CANAIS_ENVIO = [
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "email", label: "E-mail" },
+  { value: "ambos", label: "WhatsApp + E-mail" },
+];
+
 export default function MensagensAdmin() {
   const [modelos, setModelos] = useState<ModeloMensagem[]>([]);
   const [colaboradores, setColaboradores] = useState<Profile[]>([]);
@@ -55,9 +62,10 @@ export default function MensagensAdmin() {
   const [destinatario, setDestinatario] = useState("todos");
   const [unidadeId, setUnidadeId] = useState("");
   const [colaboradorId, setColaboradorId] = useState("");
-  const [modeloSelecionado, setModeloSelecionado] = useState("nenhum"); // 🔥 CORRIGIDO: valor sentinela
+  const [modeloSelecionado, setModeloSelecionado] = useState("nenhum");
   const [assunto, setAssunto] = useState("");
   const [mensagem, setMensagem] = useState("");
+  const [canal, setCanal] = useState("whatsapp"); // 🔥 NOVO: canal de envio
   const [unidades, setUnidades] = useState<any[]>([]);
 
   const [modeloDialogOpen, setModeloDialogOpen] = useState(false);
@@ -76,7 +84,7 @@ export default function MensagensAdmin() {
     try {
       const [modelosRes, colaboradoresRes, unidadesRes] = await Promise.all([
         supabase.from("modelos_mensagem").select("*").order("nome"),
-        supabase.from("profiles").select("id, nome, whatsapp, unidade_id").eq("ativo", true).order("nome"),
+        supabase.from("profiles").select("id, nome, whatsapp, email, unidade_id").eq("ativo", true).order("nome"),
         supabase.from("unidades").select("id, nome").eq("ativo", true).order("nome"),
       ]);
 
@@ -94,7 +102,6 @@ export default function MensagensAdmin() {
     load();
   }, []);
 
-  // 🔥 Quando selecionar um modelo, preenche os campos (exceto se for "nenhum")
   useEffect(() => {
     if (modeloSelecionado === "nenhum") {
       setAssunto("");
@@ -116,25 +123,42 @@ export default function MensagensAdmin() {
 
     setBusy(true);
     try {
-      const destinatarios = [];
+      // Monta lista de destinatários
+      let destinatarios = [];
       if (destinatario === "todos") {
-        destinatarios.push(...colaboradores.map(c => ({ id: c.id, nome: c.nome, whatsapp: c.whatsapp })));
+        destinatarios = colaboradores.map(c => ({ id: c.id, nome: c.nome, whatsapp: c.whatsapp, email: c.email }));
       } else if (destinatario === "unidade" && unidadeId) {
-        destinatarios.push(...colaboradores.filter(c => c.unidade_id === unidadeId).map(c => ({ id: c.id, nome: c.nome, whatsapp: c.whatsapp })));
+        destinatarios = colaboradores.filter(c => c.unidade_id === unidadeId).map(c => ({ id: c.id, nome: c.nome, whatsapp: c.whatsapp, email: c.email }));
       } else if (destinatario === "individual" && colaboradorId) {
         const colab = colaboradores.find(c => c.id === colaboradorId);
-        if (colab) destinatarios.push({ id: colab.id, nome: colab.nome, whatsapp: colab.whatsapp });
+        if (colab) destinatarios = [{ id: colab.id, nome: colab.nome, whatsapp: colab.whatsapp, email: colab.email }];
       }
 
-      const comWhatsApp = destinatarios.filter(d => d.whatsapp);
-      const semWhatsApp = destinatarios.filter(d => !d.whatsapp);
+      // Filtra por canal escolhido
+      let enviadosWhatsApp = 0;
+      let enviadosEmail = 0;
+
+      if (canal === "whatsapp" || canal === "ambos") {
+        const comWhatsApp = destinatarios.filter(d => d.whatsapp);
+        enviadosWhatsApp = comWhatsApp.length;
+        // Simula envio para cada um
+        comWhatsApp.forEach(d => console.log(`📱 WhatsApp para ${d.nome}: ${d.whatsapp}`));
+      }
+
+      if (canal === "email" || canal === "ambos") {
+        const comEmail = destinatarios.filter(d => d.email);
+        enviadosEmail = comEmail.length;
+        comEmail.forEach(d => console.log(`📧 E-mail para ${d.nome}: ${d.email}`));
+      }
 
       let msg = `Mensagem enviada para ${destinatarios.length} colaboradores.`;
-      if (comWhatsApp.length > 0) msg += ` ${comWhatsApp.length} com WhatsApp.`;
-      if (semWhatsApp.length > 0) msg += ` ${semWhatsApp.length} sem WhatsApp cadastrado.`;
+      if (enviadosWhatsApp > 0) msg += ` ${enviadosWhatsApp} via WhatsApp.`;
+      if (enviadosEmail > 0) msg += ` ${enviadosEmail} via E-mail.`;
+      if (destinatarios.length === 0) msg = "Nenhum destinatário encontrado para os canais selecionados.";
 
       toast.success(msg);
 
+      // Limpa campos
       setAssunto("");
       setMensagem("");
       setModeloSelecionado("nenhum");
@@ -223,14 +247,15 @@ export default function MensagensAdmin() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-            <MessageSquare className="size-6 text-primary" /> Comunicados
+            <MessageSquare className="size-6 text-primary" /> Mensagens
           </h1>
           <p className="text-muted-foreground mt-1">
-            Envie mensagens para colaboradores usando modelos pré-definidos ou mensagens personalizadas.
+            Envie mensagens para colaboradores via WhatsApp e/ou E-mail usando modelos pré-definidos.
           </p>
         </div>
       </div>
 
+      {/* Modelos Rápidos */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Modelos Rápidos</h2>
@@ -277,6 +302,7 @@ export default function MensagensAdmin() {
         )}
       </div>
 
+      {/* Formulário de Envio */}
       <Card className="border-border shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -324,12 +350,31 @@ export default function MensagensAdmin() {
 
               <div className="space-y-2">
                 <Label>Modelo (opcional)</Label>
-                {/* 🔥 CORRIGIDO: usa "nenhum" como valor sentinela */}
                 <Select value={modeloSelecionado} onValueChange={setModeloSelecionado}>
                   <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="nenhum">Nenhum</SelectItem>
                     {modelos.map(m => <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* 🔥 Canal de envio */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Canal de Envio</Label>
+                <Select value={canal} onValueChange={setCanal}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    {CANAIS_ENVIO.map(c => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.value === "whatsapp" && <Phone className="size-3 mr-1 inline" />}
+                        {c.value === "email" && <Mail className="size-3 mr-1 inline" />}
+                        {c.value === "ambos" && <><Phone className="size-3 mr-1 inline" /> + <Mail className="size-3 mr-1 inline" /></>}
+                        {c.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -353,6 +398,7 @@ export default function MensagensAdmin() {
         </CardContent>
       </Card>
 
+      {/* Dialog para criar/editar modelo */}
       <Dialog open={modeloDialogOpen} onOpenChange={setModeloDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -388,6 +434,7 @@ export default function MensagensAdmin() {
         </DialogContent>
       </Dialog>
 
+      {/* Confirmação de exclusão */}
       <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
