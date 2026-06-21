@@ -105,14 +105,6 @@ export default function AdminColaboradores() {
         if (error) throw error;
         toast.success("Colaborador atualizado");
       } else {
-        // Criação via admin: usar auth.admin.createUser ou inserir diretamente?
-        // Como estamos usando Supabase Auth, o ideal é criar o usuário primeiro.
-        // Para simplificar, vamos assumir que o usuário já existe e estamos apenas criando o perfil.
-        // Mas para criar um novo colaborador, normalmente se usa a função de admin do Supabase.
-        // Aqui vou apenas inserir no profiles, mas o usuário precisa existir em auth.users.
-        // Para este exemplo, vou considerar que o admin já criou o usuário via convite.
-        // Na prática, você pode usar supabase.auth.admin.createUser ou um fluxo de convite.
-        // Vou apenas alertar que o usuário precisa existir.
         toast.warning("Criação de novo colaborador requer que o usuário já exista no Auth.");
         return;
       }
@@ -153,7 +145,6 @@ export default function AdminColaboradores() {
     setCriando(false);
   };
 
-  // Verifica se a unidade selecionada tem adiantamento
   const unidadeSelecionada = unidades.find(u => u.id === formData.unidade_id);
 
   return (
@@ -170,7 +161,6 @@ export default function AdminColaboradores() {
         </Button>
       </div>
 
-      {/* Formulário */}
       {(criando || editandoId) && (
         <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -263,7 +253,6 @@ export default function AdminColaboradores() {
               </div>
             </div>
 
-            {/* Campo condicional: adiantamento individual */}
             {unidadeSelecionada?.tem_adiantamento && (
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="tem_adiantamento_individual">Tem direito a adiantamento quinzenal?</Label>
@@ -294,7 +283,6 @@ export default function AdminColaboradores() {
         </div>
       )}
 
-      {/* Lista */}
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-muted-foreground">Carregando...</div>
