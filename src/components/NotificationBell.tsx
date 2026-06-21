@@ -1,176 +1,223 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
 import { Bell } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { formatBR } from "@/lib/folga-rules";
-import { useNavigate } from "react-router-dom";
 
 interface Notification {
   id: string;
-  titulo: string;
+  tipo: "atestado_pendente" | "aviso" | "folga";
   mensagem: string;
-  link: string | null;
+  link?: string;
   lida: boolean;
   created_at: string;
 }
 
 export function NotificationBell() {
-  const { user, role } = useAuth();
-  const navigate = useNavigate();
-  const [notificacoes, setNotificacoes] = useState<Notification[]>([]);
-  const [atestadosPendentes, setAtestadosPendentes] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [atestadosPendentes, setAtestadosPendentes] = useState<any[]>([]);
 
-  const isAdmin = role === "admin" || localStorage.getItem('user_role') === 'admin';
-
-  const load = async () => {
+  // 🔥 Função para carregar atestados pendentes (sem join problemático)
+  const carregarAtestadosPendentes = async () => {
     if (!user) return;
-    setLoading(true);
+
     try {
-      // Carrega notificações do sistema
-      const { data: notifData } = await supabase
+      // 1. Buscar IDs dos atestados pendentes
+      const { data: atestadosRaw, error } = await supabase
+        .from("atestados")
+        .select("id, colaborador_id, data_atestado, dias_afastamento, created_at")
+        .eq("status", "pendente")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      let atestados = atestadosRaw ?? [];
+
+      // 2. Buscar nomes dos colaboradores separadamente
+      if (atestados.length > 0) {
+        const colaboradorIds = [...new Set(atestados.map(a => a.colaborador_id))];
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, nome")
+          .in("id", colaboradorIds);
+
+        const profMap = new Map((profs ?? []).map(p => [p.id, p.nome]));
+        atestados = atestados.map(a => ({
+          ...a,
+          profiles: { nome: profMap.get(a.colaborador_id) ?? "Colaborador" },
+        }));
+      }
+
+      setAtestadosPendentes(atestados);
+
+      // 3. Criar notificações para atestados pendentes
+      const notificacoesAtestados = atestados.map((a: any) => ({
+        id: `atestado-${a.id}`,
+        tipo: "atestado_pendente" as const,
+        mensagem: `${a.profiles.nome} - Atestado de ${formatBR(new Date(a.data_atestado + "T00:00:00"))}`,
+        link: "/admin/documentos/atestados",
+        lida: false,
+        created_at: a.created_at,
+      }));
+
+      // 4. Buscar notificações do sistema (se houver tabela)
+      const { data: notificacoesSistema } = await supabase
         .from("notificacoes")
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
-        .limit(20);
+        .limit(10);
 
-      setNotificacoes(notifData ?? []);
+      const sistema = (notificacoesSistema || []).map((n: any) => ({
+        ...n,
+        tipo: "aviso" as const,
+      }));
 
-      // 🔥 Se for admin, busca atestados pendentes
-      if (isAdmin) {
-        const { data: atestados } = await supabase
-          .from("atestados")
-          .select("id, colaborador_id, data_atestado, dias_afastamento, created_at, profiles(nome)")
-          .eq("status", "pendente")
-          .order("created_at", { ascending: false });
+      // 5. Combinar e ordenar por data
+      const todas = [...notificacoesAtestados, ...sistema]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-        if (atestados && atestados.length > 0) {
-          setAtestadosPendentes(atestados);
-        } else {
-          setAtestadosPendentes([]);
-        }
-      }
+      setNotifications(todas);
     } catch (error) {
       console.error("Erro ao carregar notificações:", error);
-    } finally {
-      setLoading(false);
     }
   };
 
+  // 🔥 Carregar notificações e atestados pendentes
   useEffect(() => {
-    load();
-    // Recarregar a cada 30 segundos
-    const interval = setInterval(load, 30000);
-    return () => clearInterval(interval);
-  }, [user, isAdmin]);
+    if (!user) return;
 
-  const marcarComoLida = async (id: string) => {
-    await supabase.from("notificacoes").update({ lida: true }).eq("id", id);
-    setNotificacoes(prev => prev.map(n => n.id === id ? { ...n, lida: true } : n));
+    const load = async () => {
+      setLoading(true);
+      await carregarAtestadosPendentes();
+      setLoading(false);
+    };
+
+    load();
+
+    // 🔥 Intervalo com cleanup para evitar múltiplas instâncias
+    const intervalId = setInterval(() => {
+      if (!loading) {
+        carregarAtestadosPendentes();
+      }
+    }, 30000); // 30 segundos
+
+    return () => clearInterval(intervalId);
+  }, [user]);
+
+  const contarNaoLidas = () => {
+    return notifications.filter(n => !n.lida).length;
   };
 
-  const totalNaoLidas = notificacoes.filter(n => !n.lida).length + (atestadosPendentes.length > 0 ? 1 : 0);
+  const marcarComoLida = (id: string) => {
+    setNotifications(prev =>
+      prev.map(n => (n.id === id ? { ...n, lida: true } : n))
+    );
+  };
+
+  const handleLinkClick = (link?: string) => {
+    if (link) {
+      window.location.href = link;
+    }
+  };
+
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen) {
+      // Marca todas como lidas ao abrir
+      setNotifications(prev => prev.map(n => ({ ...n, lida: true })));
+    }
+  };
+
+  const totalNaoLidas = contarNaoLidas();
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
+        <Button variant="ghost" size="icon" className="relative size-10 rounded-full">
           <Bell className="size-5" />
           {totalNaoLidas > 0 && (
-            <span className="absolute -top-1 -right-1 size-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+            <span className="absolute -top-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
               {totalNaoLidas > 9 ? "9+" : totalNaoLidas}
             </span>
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 max-h-[400px] overflow-y-auto p-0" align="end">
+      <PopoverContent className="w-80 p-0" align="end">
         <div className="p-3 border-b border-border">
           <span className="font-semibold">Notificações</span>
-        </div>
-        <div className="p-2 space-y-2">
-          {loading ? (
-            <div className="text-center p-4 text-muted-foreground text-sm">Carregando...</div>
-          ) : (
-            <>
-              {/* 🔥 Atestados pendentes para admin */}
-              {isAdmin && atestadosPendentes.length > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-amber-600 font-semibold text-sm">📋 Atestados Pendentes</span>
-                    <Badge className="bg-amber-500 text-white">{atestadosPendentes.length}</Badge>
-                  </div>
-                  <div className="space-y-1">
-                    {atestadosPendentes.slice(0, 3).map((a) => (
-                      <div key={a.id} className="text-xs text-amber-800">
-                        <span className="font-medium">{a.profiles?.nome || "Colaborador"}</span>
-                        {" - "}
-                        {formatBR(new Date(a.data_atestado + "T00:00:00"))}
-                        {" ("}{a.dias_afastamento} dia{a.dias_afastamento > 1 ? "s" : ""}{")"}
-                      </div>
-                    ))}
-                    {atestadosPendentes.length > 3 && (
-                      <div className="text-xs text-amber-600 font-medium">
-                        + {atestadosPendentes.length - 3} outros atestados
-                      </div>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full mt-2 text-amber-700 border-amber-300 hover:bg-amber-100 h-7 text-xs"
-                      onClick={() => {
-                        setOpen(false);
-                        navigate("/admin/documentos/atestados");
-                      }}
-                    >
-                      Ver todos os atestados
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Notificações do sistema */}
-              {notificacoes.length === 0 && atestadosPendentes.length === 0 ? (
-                <div className="text-center p-4 text-muted-foreground text-sm">
-                  Nenhuma notificação
-                </div>
-              ) : (
-                notificacoes.map((n) => (
-                  <div
-                    key={n.id}
-                    className={`p-2 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors ${!n.lida ? "bg-primary/5" : ""}`}
-                    onClick={() => {
-                      if (!n.lida) marcarComoLida(n.id);
-                      if (n.link) {
-                        setOpen(false);
-                        navigate(n.link);
-                      }
-                    }}
-                  >
-                    <div className="flex items-start gap-2">
-                      <div className={`size-2 rounded-full mt-1.5 shrink-0 ${!n.lida ? "bg-blue-500" : "bg-transparent"}`} />
-                      <div>
-                        <div className="text-sm font-medium">{n.titulo}</div>
-                        <div className="text-xs text-muted-foreground">{n.mensagem}</div>
-                        <div className="text-[10px] text-muted-foreground mt-0.5">
-                          {new Date(n.created_at).toLocaleDateString("pt-BR")}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </>
+          {totalNaoLidas > 0 && (
+            <span className="ml-2 text-xs text-muted-foreground">
+              ({totalNaoLidas} não lida{totalNaoLidas > 1 ? 's' : ''})
+            </span>
           )}
         </div>
+        <div className="max-h-80 overflow-y-auto">
+          {loading && notifications.length === 0 ? (
+            <div className="flex items-center justify-center p-8 text-muted-foreground">
+              <span className="animate-pulse">Carregando...</span>
+            </div>
+          ) : notifications.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-8 text-muted-foreground">
+              <Bell className="size-8 mb-2 opacity-20" />
+              <span className="text-sm">Nenhuma notificação</span>
+            </div>
+          ) : (
+            notifications.map((notif) => (
+              <div
+                key={notif.id}
+                className={cn(
+                  "p-3 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 transition-colors",
+                  !notif.lida && "bg-blue-50/50"
+                )}
+                onClick={() => {
+                  marcarComoLida(notif.id);
+                  if (notif.link) {
+                    handleLinkClick(notif.link);
+                  }
+                }}
+              >
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{notif.mensagem}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatBR(new Date(notif.created_at))}
+                    </p>
+                  </div>
+                  {!notif.lida && (
+                    <div className="size-2 rounded-full bg-blue-500 shrink-0 mt-1" />
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        {notifications.length > 0 && (
+          <div className="p-2 border-t border-border text-center">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-xs text-muted-foreground"
+              onClick={() => {
+                // Marca todas como lidas
+                setNotifications(prev => prev.map(n => ({ ...n, lida: true })));
+              }}
+            >
+              Marcar todas como lidas
+            </Button>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );
