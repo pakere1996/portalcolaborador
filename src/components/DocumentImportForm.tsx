@@ -359,7 +359,7 @@ export function DocumentImportForm() {
     }
   };
 
-  // 🔥 Função para extrair página do PDF – CORRIGIDA
+  // 🔥 Função para extrair página do PDF – CORRIGIDA DEFINITIVAMENTE
   const extractPageFromPdf = async (file: File, pageNumber: number): Promise<Blob> => {
     const arrayBuffer = await file.arrayBuffer();
     const pdfDoc = await PDFDocument.load(arrayBuffer);
@@ -367,8 +367,9 @@ export function DocumentImportForm() {
     const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageNumber - 1]);
     newPdf.addPage(copiedPage);
     const pdfBytes = await newPdf.save();
-    // 🔥 CORREÇÃO: usar .buffer para compatibilidade com Blob
-    return new Blob([pdfBytes.buffer], { type: "application/pdf" });
+    // 🔥 CORREÇÃO FINAL: converter para Uint8Array antes de passar para o Blob
+    const uint8Array = new Uint8Array(pdfBytes);
+    return new Blob([uint8Array], { type: "application/pdf" });
   };
 
   const handleAprovarTudo = async () => {
