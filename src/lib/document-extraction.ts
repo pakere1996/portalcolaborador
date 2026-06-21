@@ -1,15 +1,64 @@
-// src/lib/document-extraction.ts
-// Este arquivo é um placeholder para funções de extração de dados de documentos
-// Caso não seja utilizado, pode ser removido.
+import type { ProfileForMatching } from "./document-parsers";
+import type { ExtractedDocumentData } from "./extractions";
 
-export const splitTextLines = (text: string): string[] => text.split('\n');
+export async function extractFolhaPonto(
+  text: string,
+  profiles: ProfileForMatching[]
+): Promise<ExtractedDocumentData> {
+  console.log("[extractFolhaPonto] Raw PDF text:", text);
+  console.log("[extractFolhaPonto] Lines:", splitTextLines(text));
 
-export const extractFolhaPontoName = (text: string): string | null => null;
-export const extractCPFWithKeywords = (text: string): string | null => null;
-export const extractPeriodoPonto = (text: string): { mes: number; ano: number } | null => null;
-export const extractCNPJ = (text: string): string | null => null;
-export const extractCargo = (text: string): string | null => null;
-export const extractDataAdmissao = (text: string): string | null => null;
-export const buildExtractedData = (data: any): any => data;
-export const extractNameNearKeywords = (text: string): string | null => null;
-export const extractPeriodoContracheque = (text: string): { mes: number; ano: number } | null => null;
+  const nome = extractFolhaPontoName(text);
+  const cpf = extractCPFWithKeywords(text);
+  const periodo = extractPeriodoPonto(text);
+  const cnpj = extractCNPJ(text);
+  const cargo = extractCargo(text);
+  const dataAdmissao = extractDataAdmissao(text, periodo);
+
+  return buildExtractedData(
+    nome,
+    cpf,
+    cnpj,
+    periodo?.mes ?? null,
+    periodo?.ano ?? null,
+    cargo,
+    dataAdmissao,
+    profiles
+  );
+}
+
+export async function extractContracheque(
+  text: string,
+  profiles: ProfileForMatching[]
+): Promise<ExtractedDocumentData> {
+  console.log("[extractContracheque] Raw PDF text:", text);
+  console.log("[extractContracheque] Lines:", splitTextLines(text));
+
+  const nome = extractNameNearKeywords(text, [
+    "nome",
+    "nome do colaborador",
+    "nome do funcionário",
+    "nome do funcionario",
+    "funcionário",
+    "funcionario",
+    "colaborador",
+    "empregado",
+    "trabalhador",
+  ]);
+  const cpf = extractCPFWithKeywords(text);
+  const periodo = extractPeriodoContracheque(text);
+  const cnpj = extractCNPJ(text);
+  const cargo = extractCargo(text);
+  const dataAdmissao = extractDataAdmissao(text, periodo);
+
+  return buildExtractedData(
+    nome,
+    cpf,
+    cnpj,
+    periodo?.mes ?? null,
+    periodo?.ano ?? null,
+    cargo,
+    dataAdmissao,
+    profiles
+  );
+}
