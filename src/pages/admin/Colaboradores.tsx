@@ -30,7 +30,7 @@ const blankEditForm = {
   ativo: true,
   senha: "",
   regime_trabalho: "none",
-  data_demissao: "",
+  dataDemissao: "",
   tipo_vinculo: "CLT",
   possui_folha_ponto: false,
 };
@@ -121,7 +121,7 @@ export default function Colaboradores() {
 
   const toUpperCaseTrim = (str: string) => str.trim().toUpperCase();
 
-  // 🔥 VALIDAÇÃO MELHORADA – verifica se o campo tem valor (não apenas string vazia)
+  // Validação dos campos obrigatórios
   const validateForm = (form: any) => {
     const errors: string[] = [];
     if (!form.nome?.trim()) errors.push("Nome");
@@ -171,7 +171,7 @@ export default function Colaboradores() {
         unidade_id: newForm.unidadeId === "none" ? null : newForm.unidadeId,
         ativo: true,
         regime_trabalho: newForm.regime_trabalho === "none" ? null : newForm.regime_trabalho,
-        data_demissao: newForm.data_demissao || null,
+        data_demissao: newForm.dataDemissao || null,
         tipo_vinculo: newForm.tipo_vinculo || "CLT",
         possui_folha_ponto: newForm.possui_folha_ponto !== undefined ? newForm.possui_folha_ponto : possuiFolhaPontoDefault,
       }).eq("id", authUser.userId);
@@ -206,7 +206,7 @@ export default function Colaboradores() {
       ativo: p.ativo,
       senha: "",
       regime_trabalho: p.regime_trabalho ?? "none",
-      data_demissao: p.data_demissao ?? "",
+      dataDemissao: p.data_demissao ?? "",
       tipo_vinculo: p.tipo_vinculo ?? "CLT",
       possui_folha_ponto: p.possui_folha_ponto ?? false,
     });
@@ -230,7 +230,7 @@ export default function Colaboradores() {
 
       const dataAdmissao = editForm.dataAdmissao || null;
       const dataNascimento = editForm.dataNascimento || null;
-      const dataDemissao = editForm.data_demissao || null;
+      const dataDemissao = editForm.dataDemissao || null;
 
       const { error: profErr } = await supabase.from("profiles").update({
         nome: toUpperCaseTrim(editForm.nome),
