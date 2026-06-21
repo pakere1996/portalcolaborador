@@ -11,12 +11,27 @@ import {
   newDocumentId,
   statusClass,
 } from "@/lib/documentos-regulatorios";
-import { DocumentPreview } from "@/components/DocumentPreview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,12 +43,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { FileText, Upload, AlertTriangle, Loader2, CalendarDays, UserCheck } from "lucide-react";
+import { FileText, Upload, AlertTriangle, Loader2, CalendarDays, UserCheck, Eye, Download, Filter } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
 
 interface Atestado {
   id: string;
-  colaborador_id: string; // 🔥 CORRIGIDO: de user_id para colaborador_id
+  colaborador_id: string;
   data_atestado: string;
   dias_afastamento: number;
   observacao: string | null;
@@ -65,24 +80,49 @@ export default function DocumentosAtestadosPage() {
   const [duplicate, setDuplicate] = useState<Atestado | null>(null);
   const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
 
+  // Filtros
+  const [filtroAno, setFiltroAno] = useState<string>("todos");
+  const [filtroMes, setFiltroMes] = useState<string>("todos");
+
+  // Preview dialog
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selectedAtestado, setSelectedAtestado] = useState<Atestado | null>(null);
+
+  const hoje = new Date();
+  const hojeStr = hoje.toISOString().split('T')[0];
+
   const load = async () => {
     if (!user) return;
     setLoading(true);
-    // 🔥 CORRIGIDO: usar colaborador_id em vez de user_id
-    const { data: items, error } = await supabase
-      .from("atestados")
-      .select("*")
-      .eq("colaborador_id", user.id)
-      .order("created_at", { ascending: false });
+    try {
+      let query = supabase
+        .from("atestados")
+        .select("*")
+        .eq("colaborador_id", user.id);
 
-    if (error) toast.error("Erro ao carregar atestados", { description: error.message });
-    setAtestados((items ?? []) as Atestado[]);
-    setLoading(false);
+      if (filtroAno !== "todos") {
+        query = query.eq("ano", parseInt(filtroAno));
+      }
+      if (filtroMes !== "todos") {
+        query = query.eq("mes", parseInt(filtroMes));
+      }
+
+      const { data: items, error } = await query
+        .order("data_atestado", { ascending: false });
+
+      if (error) throw error;
+      setAtestados(items ?? []);
+    } catch (error) {
+      toast.error("Erro ao carregar atestados", { description: (error as Error).message });
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     load();
-  }, [user?.id]);
+  }, [user, filtroAno, filtroMes]);
 
   useEffect(() => {
     const checkDuplicate = async () => {
@@ -102,7 +142,7 @@ export default function DocumentosAtestadosPage() {
     };
 
     checkDuplicate();
-  }, [data, user?.id]);
+  }, [data, user]);
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0] ?? null;
@@ -119,6 +159,14 @@ export default function DocumentosAtestadosPage() {
     }
 
     setFile(selected);
+  };
+
+  // Calcula data de retorno
+  const calcularDataRetorno = (dataAtestado: string, dias: number) => {
+    if (!dataAtestado || !dias || dias <= 0) return null;
+    const dt = new Date(dataAtestado + "T00:00:00");
+    dt.setDate(dt.getDate() + dias);
+    return formatBR(dt);
   };
 
   const uploadAtestado = async (payload: PendingUpload) => {
@@ -141,7 +189,6 @@ export default function DocumentosAtestadosPage() {
 
       if (uploadError) throw uploadError;
 
-      // 🔥 CORRIGIDO: usar colaborador_id em vez de user_id
       const { data: inserted, error: insertError } = await supabase
         .from("atestados")
         .insert({
@@ -185,7 +232,16 @@ export default function DocumentosAtestadosPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (!file || !data || !dias) return toast.error("Preencha todos os campos obrigatórios");
+    if (!file || !data || !dias) {
+      toast.error("Preencha todos os campos obrigatórios");
+      return;
+    }
+
+    // 🔥 Validação: data não pode ser maior que hoje
+    if (data > hojeStr) {
+      toast.error("A data do atestado não pode ser futura.");
+      return;
+    }
 
     const payload = { data, dias, observacao, file };
     if (duplicate) {
@@ -196,8 +252,41 @@ export default function DocumentosAtestadosPage() {
     await uploadAtestado(payload);
   };
 
+  const handleDownload = async (atestado: Atestado) => {
+    const { data } = await supabase.storage
+      .from("documentos")
+      .createSignedUrl(atestado.storage_path, 60);
+    if (data?.signedUrl) {
+      window.open(data.signedUrl, "_blank");
+    } else {
+      toast.error("Erro ao gerar link de download");
+    }
+  };
+
+  const handlePreview = async (atestado: Atestado) => {
+    setSelectedAtestado(atestado);
+    const { data } = await supabase.storage
+      .from("documentos")
+      .createSignedUrl(atestado.storage_path, 60);
+    if (data?.signedUrl) {
+      setPreviewUrl(data.signedUrl);
+      setPreviewOpen(true);
+    } else {
+      toast.error("Erro ao gerar link de visualização");
+    }
+  };
+
+  const limparFiltros = () => {
+    setFiltroAno("todos");
+    setFiltroMes("todos");
+  };
+
+  // Extrai anos e meses disponíveis
+  const anosDisponiveis = [...new Set(atestados.map(a => new Date(a.data_atestado + "T00:00:00").getFullYear()))].sort((a, b) => b - a);
+  const mesesDisponiveis = [...new Set(atestados.map(a => new Date(a.data_atestado + "T00:00:00").getMonth() + 1))].sort((a, b) => b - a);
+
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
           <FileText className="size-6 text-primary" /> Meus Atestados
@@ -207,106 +296,218 @@ export default function DocumentosAtestadosPage() {
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
-        <form onSubmit={handleSubmit} className="bg-card border border-border rounded-2xl p-5 space-y-4">
-          <div>
-            <h2 className="font-semibold flex items-center gap-2">
-              <Upload className="size-4 text-primary" /> Novo atestado
-            </h2>
-            <p className="text-sm text-muted-foreground mt-1">PDF, JPG ou PNG.</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="data-atestado">Data do atestado</Label>
-            <Input id="data-atestado" type="date" value={data} onChange={(e) => setData(e.target.value)} />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="dias">Dias de afastamento</Label>
-            <Input id="dias" type="number" min={0} value={dias} onChange={(e) => setDias(e.target.value)} />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="obs">Observação opcional</Label>
-            <Textarea id="obs" rows={4} value={observacao} onChange={(e) => setObservacao(e.target.value)} placeholder="Informações adicionais..." />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="file">Arquivo</Label>
-            <Input id="file" type="file" accept="application/pdf,image/jpeg,image/png" onChange={onFileChange} />
-          </div>
-
-          {duplicate && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 flex items-start gap-2">
-              <AlertTriangle className="size-4 mt-0.5 shrink-0" />
-              <span>Já existe um atestado neste dia. Você poderá confirmar o envio após este aviso.</span>
+      <Card className="border-border shadow-sm">
+        <CardHeader>
+          <CardTitle>Novo Atestado</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            <AlertTriangle className="size-4 inline mr-1 text-amber-500" />
+            Atestados devem ser enviados em até <strong>48 horas</strong> após a data de afastamento.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="data-atestado">Data do atestado *</Label>
+                <Input
+                  id="data-atestado"
+                  type="date"
+                  value={data}
+                  onChange={(e) => setData(e.target.value)}
+                  max={hojeStr}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="dias">Dias de afastamento *</Label>
+                <Input
+                  id="dias"
+                  type="number"
+                  min={0}
+                  value={dias}
+                  onChange={(e) => setDias(e.target.value)}
+                  required
+                />
+                {data && dias && parseInt(dias) > 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    <span className="font-semibold">Data de retorno:</span>{" "}
+                    {calcularDataRetorno(data, parseInt(dias))}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
 
-          <Button className="w-full" disabled={busy}>
-            {busy ? <><Loader2 className="size-4 mr-2 animate-spin" /> Enviando...</> : <><Upload className="size-4 mr-2" /> Enviar atestado</>}
-          </Button>
-        </form>
-
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h2 className="font-semibold flex items-center gap-2">
-                <CalendarDays className="size-4 text-primary" /> Histórico
-              </h2>
-              <p className="text-sm text-muted-foreground">Somente seus próprios atestados aparecem aqui.</p>
+            <div className="space-y-2">
+              <Label htmlFor="obs">Observação opcional</Label>
+              <Textarea
+                id="obs"
+                rows={3}
+                value={observacao}
+                onChange={(e) => setObservacao(e.target.value)}
+                placeholder="Informações adicionais..."
+              />
             </div>
-            <Badge className={statusClass("pendente")}>Pendente</Badge>
-          </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="file">Arquivo (PDF, JPG ou PNG) *</Label>
+              <Input
+                id="file"
+                type="file"
+                accept="application/pdf,image/jpeg,image/png"
+                onChange={onFileChange}
+              />
+              {file && (
+                <p className="text-xs text-muted-foreground">
+                  {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                </p>
+              )}
+            </div>
+
+            {duplicate && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 flex items-start gap-2">
+                <AlertTriangle className="size-4 mt-0.5 shrink-0" />
+                <span>Já existe um atestado neste dia. Você poderá confirmar o envio após este aviso.</span>
+              </div>
+            )}
+
+            <Button type="submit" className="w-full" disabled={busy}>
+              {busy ? <><Loader2 className="size-4 mr-2 animate-spin" /> Enviando...</> : <><Upload className="size-4 mr-2" /> Enviar atestado</>}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border shadow-sm">
+        <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
+          <CardTitle>Histórico de Atestados</CardTitle>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Ano</Label>
+              <Select value={filtroAno} onValueChange={setFiltroAno}>
+                <SelectTrigger className="w-[100px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  {anosDisponiveis.map(a => (
+                    <SelectItem key={a} value={String(a)}>{a}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Mês</Label>
+              <Select value={filtroMes} onValueChange={setFiltroMes}>
+                <SelectTrigger className="w-[100px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  {mesesDisponiveis.map(m => (
+                    <SelectItem key={m} value={String(m)}>{String(m).padStart(2, "0")}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button variant="ghost" size="sm" onClick={limparFiltros} className="mt-6 h-9">
+              Limpar
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
           {loading ? (
-            <div className="flex items-center justify-center rounded-2xl border p-12 text-muted-foreground">
+            <div className="flex items-center justify-center p-12">
               <Loader2 className="size-6 animate-spin mr-2" /> Carregando...
             </div>
           ) : atestados.length === 0 ? (
-            <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
-              Nenhum atestado enviado.
+            <div className="text-center p-8 text-muted-foreground">
+              Nenhum atestado encontrado.
             </div>
           ) : (
-            <div className="grid gap-4">
+            <div className="space-y-3">
               {atestados.map((a) => (
-                <div key={a.id} className="rounded-2xl border bg-card p-4 space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="font-semibold">Atestado de {formatBR(new Date(a.data_atestado + "T00:00:00"))}</div>
+                <div
+                  key={a.id}
+                  className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl border border-border bg-card hover:bg-muted/20 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                      <FileText className="size-5" />
+                    </div>
+                    <div>
+                      <div className="font-medium">
+                        Atestado - {formatBR(new Date(a.data_atestado + "T00:00:00"))}
+                      </div>
                       <div className="text-sm text-muted-foreground flex items-center gap-2">
-                        <UserCheck className="size-3" /> {a.dias_afastamento} {a.dias_afastamento === 1 ? "dia" : "dias"} de afastamento
+                        <span>{a.dias_afastamento} {a.dias_afastamento === 1 ? "dia" : "dias"}</span>
+                        {a.status && (
+                          <Badge className={statusClass(a.status)}>
+                            {formatAtestadoStatus(a.status)}
+                          </Badge>
+                        )}
                       </div>
                     </div>
-                    <Badge className={statusClass(a.status)}>{formatAtestadoStatus(a.status)}</Badge>
                   </div>
-
-                  {a.observacao && (
-                    <div className="rounded-xl bg-muted/40 p-3 text-sm">
-                      <span className="font-semibold">Sua observação:</span> {a.observacao}
-                    </div>
-                  )}
-
-                  {a.status === "rejeitado" && a.observacao_admin && (
-                    <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">
-                      <span className="font-semibold">Motivo da rejeição:</span> {a.observacao_admin}
-                    </div>
-                  )}
-
-                  {a.status === "aprovado" && (
-                    <div className="rounded-xl border border-green-300 bg-green-50 p-3 text-sm text-green-700">
-                      Atestado aprovado.
-                    </div>
-                  )}
-
-                  <DocumentPreview path={a.storage_path} kind={a.storage_type} />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      onClick={() => handlePreview(a)}
+                    >
+                      <Eye className="size-4 mr-1" /> Visualizar
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-primary hover:text-primary/80 hover:bg-primary/5"
+                      onClick={() => handleDownload(a)}
+                    >
+                      <Download className="size-4 mr-1" /> Baixar
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
+      {/* Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Visualização do Atestado</DialogTitle>
+            <DialogDescription>
+              {selectedAtestado
+                ? `Atestado de ${formatBR(new Date(selectedAtestado.data_atestado + "T00:00:00"))}`
+                : "Atestado"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 min-h-[500px] bg-muted/20 rounded-lg overflow-hidden">
+            {previewUrl ? (
+              <iframe
+                src={previewUrl}
+                className="w-full h-[600px] border-0"
+                title="Visualização do atestado"
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                Carregando visualização...
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewOpen(false)}>
+              Fechar
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedAtestado) handleDownload(selectedAtestado);
+              }}
+            >
+              <Download className="size-4 mr-1" /> Baixar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* AlertDialog de confirmação de duplicata */}
       <AlertDialog open={!!pendingUpload} onOpenChange={(open) => !open && setPendingUpload(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
