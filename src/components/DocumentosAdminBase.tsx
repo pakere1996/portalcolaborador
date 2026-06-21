@@ -65,6 +65,9 @@ interface DocumentosAdminBaseProps {
   editCamposExtras?: (editForm: any, setEditForm: any) => React.ReactNode;
   validarForm?: (form: any) => string | null;
   beforeInsert?: (form: any, path: string, kind: string) => Promise<any> | any;
+  // 🔥 NOVAS PROPS
+  onColaboradorChange?: (colaboradorId: string, setForm: any) => void;
+  acoesExtras?: (doc: DocumentoAdmin) => React.ReactNode;
 }
 
 export function DocumentosAdminBase({
@@ -82,6 +85,8 @@ export function DocumentosAdminBase({
   editCamposExtras,
   validarForm,
   beforeInsert,
+  onColaboradorChange,
+  acoesExtras,
 }: DocumentosAdminBaseProps) {
   const [aba, setAba] = useState<"importar" | "historico">("importar");
   const [documentos, setDocumentos] = useState<DocumentoAdmin[]>([]);
@@ -381,7 +386,9 @@ export function DocumentosAdminBase({
                 <Label>Unidade *</Label>
                 <Select
                   value={form.unidade_id}
-                  onValueChange={(value) => setForm({ ...form, unidade_id: value, colaborador_id: "" })}
+                  onValueChange={(value) => {
+                    setForm({ ...form, unidade_id: value, colaborador_id: "" });
+                  }}
                 >
                   <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
                   <SelectContent>
@@ -394,7 +401,13 @@ export function DocumentosAdminBase({
                 <Label>Colaborador *</Label>
                 <Select
                   value={form.colaborador_id}
-                  onValueChange={(value) => setForm({ ...form, colaborador_id: value })}
+                  onValueChange={(value) => {
+                    setForm({ ...form, colaborador_id: value });
+                    // 🔥 CHAMA onColaboradorChange SE EXISTIR
+                    if (onColaboradorChange) {
+                      onColaboradorChange(value, setForm);
+                    }
+                  }}
                   disabled={!form.unidade_id}
                 >
                   <SelectTrigger><SelectValue placeholder="Selecione o colaborador" /></SelectTrigger>
@@ -447,7 +460,7 @@ export function DocumentosAdminBase({
               </div>
 
               <div className="space-y-2">
-                <Label>Observações do Colaborador</Label>
+                <Label>Observações</Label>
                 <Textarea
                   rows={3}
                   value={form.observacao}
@@ -535,6 +548,7 @@ export function DocumentosAdminBase({
                     <th className="text-center p-4 font-bold uppercase text-[10px] text-muted-foreground">
                       {tipo === "atestados" ? "Status" : "Tipo"}
                     </th>
+                    {colunasExtras && <th className="text-center p-4 font-bold uppercase text-[10px] text-muted-foreground">Detalhes</th>}
                     <th className="text-center p-4 font-bold uppercase text-[10px] text-muted-foreground">Arquivo</th>
                     <th className="text-right p-4 font-bold uppercase text-[10px] text-muted-foreground">Ações</th>
                   </tr>
@@ -573,7 +587,7 @@ export function DocumentosAdminBase({
                               value={editForm.observacao}
                               onChange={(e) => setEditForm({ ...editForm, observacao: e.target.value })}
                               className="w-auto"
-                              placeholder="Observações do Colaborador"
+                              placeholder="Observações"
                             />
                           ) : (
                             <span className="text-xs truncate max-w-[150px] block">
@@ -610,7 +624,7 @@ export function DocumentosAdminBase({
                                     rows={2}
                                     value={editForm.observacao_admin || ""}
                                     onChange={(e) => setEditForm({ ...editForm, observacao_admin: e.target.value })}
-                                    placeholder="Retorno ao Colaborador"
+                                    placeholder="Motivo da rejeição ou observação..."
                                     className="w-full"
                                   />
                                 </>
@@ -658,6 +672,15 @@ export function DocumentosAdminBase({
                             </>
                           )}
                         </td>
+                        {colunasExtras && (
+                          <td className="p-4 text-center">
+                            {isEditing ? (
+                              editCamposExtras ? editCamposExtras(editForm, setEditForm) : null
+                            ) : (
+                              colunasExtras(doc)
+                            )}
+                          </td>
+                        )}
                         <td className="p-4 text-center">
                           <Button
                             variant="ghost"
@@ -729,6 +752,8 @@ export function DocumentosAdminBase({
                                 >
                                   <Trash2 className="size-4" />
                                 </Button>
+                                {/* 🔥 AÇÕES EXTRAS (como aprovar/rejeitar) */}
+                                {acoesExtras && acoesExtras(doc)}
                               </>
                             )}
                           </div>
