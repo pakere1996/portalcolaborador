@@ -424,12 +424,11 @@ export default function CalendarioPage() {
                   {dayInfo.occupants.map((occ, idx) => {
                     const isMe = occ.userId === user?.id;
                     const showTrade = !isMe &&
-                      dayInfo.canTrade &&
-                      selectedDay.status !== 'blocked' &&
-                      selectedDay.status !== 'taken' &&
-                      selectedDay.status !== 'past' &&
-                      selectedDay.status !== 'mine' &&
-                      selectedDay.status !== 'fixed';
+                     dayInfo.canTrade &&
+                     selectedDay.status !== 'blocked' &&
+                     selectedDay.status !== 'past' &&
+                     selectedDay.status !== 'mine' &&
+                     selectedDay.status !== 'fixed';
 
                     return (
                       <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200">
