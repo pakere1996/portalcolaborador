@@ -23,7 +23,7 @@ import {
   MessageSquare,
   Bell,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/NotificationBell";
 import { AvisosPopout } from "@/components/AvisosPopout";
@@ -43,38 +43,83 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const path = location.pathname;
   const [open, setOpen] = useState(false);
 
-  const [folgasOpen, setFolgasOpen] = useState(true);
+  // 🔥 Todos os menus iniciam fechados
+  const [folgasOpen, setFolgasOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
   const [cadastroOpen, setCadastroOpen] = useState(false);
   const [comunicacaoOpen, setComunicacaoOpen] = useState(false);
 
+  // 🔥 Função para abrir um menu específico e fechar os outros
+  const toggleMenu = useCallback(
+    (menu: "folgas" | "docs" | "cadastro" | "comunicacao") => {
+      const setters = {
+        folgas: setFolgasOpen,
+        docs: setDocsOpen,
+        cadastro: setCadastroOpen,
+        comunicacao: setComunicacaoOpen,
+      };
+
+      // Fecha todos
+      Object.values(setters).forEach((setter) => setter(false));
+
+      // Abre o menu clicado (toggle: se já estava aberto, fecha; senão, abre)
+      const currentState = {
+        folgas: folgasOpen,
+        docs: docsOpen,
+        cadastro: cadastroOpen,
+        comunicacao: comunicacaoOpen,
+      }[menu];
+
+      setters[menu](!currentState);
+    },
+    [folgasOpen, docsOpen, cadastroOpen, comunicacaoOpen]
+  );
+
   const getIsAdmin = () => {
-    const savedRole = localStorage.getItem('user_role');
-    if (savedRole) return savedRole === 'admin';
-    return role === 'admin';
+    const savedRole = localStorage.getItem("user_role");
+    if (savedRole) return savedRole === "admin";
+    return role === "admin";
   };
 
   const isAdmin = getIsAdmin();
   const homePath = isAdmin ? "/admin/home" : "/home";
 
+  // Fecha menu mobile ao mudar de rota
   useEffect(() => {
     setOpen(false);
   }, [path]);
 
+  // 🔥 Abre automaticamente o menu correspondente à rota atual, fechando os outros
   useEffect(() => {
-    if (path.includes("/documentos")) setDocsOpen(true);
-    if (
-      path.startsWith("/admin/colaboradores") ||
-      path.startsWith("/admin/cargos") ||
-      path.startsWith("/admin/unidades")
-    ) {
-      setCadastroOpen(true);
-    }
-    if (path.startsWith("/admin/mensagens") || path.startsWith("/admin/avisos")) {
-      setComunicacaoOpen(true);
-    }
+    const shouldOpen = {
+      cadastro:
+        path.startsWith("/admin/colaboradores") ||
+        path.startsWith("/admin/cargos") ||
+        path.startsWith("/admin/unidades"),
+      docs: path.includes("/documentos"),
+      comunicacao:
+        path.startsWith("/admin/mensagens") ||
+        path.startsWith("/admin/avisos"),
+      folgas:
+        path.includes("/calendario") ||
+        path.includes("/trocas") ||
+        path.includes("/historico") ||
+        (path.startsWith("/admin") &&
+          !path.includes("/documentos") &&
+          !path.includes("/colaboradores") &&
+          !path.includes("/mensagens") &&
+          !path.includes("/avisos") &&
+          !path.includes("/home")),
+    };
+
+    // Fecha todos, depois abre os que devem estar abertos
+    setFolgasOpen(shouldOpen.folgas);
+    setDocsOpen(shouldOpen.docs);
+    setCadastroOpen(shouldOpen.cadastro);
+    setComunicacaoOpen(shouldOpen.comunicacao);
   }, [path]);
 
+  // Navegação de colaborador
   const employeeFolgaNav: NavItem[] = [
     { to: "/calendario", label: "Calendário", icon: Calendar },
     { to: "/trocas", label: "Trocas", icon: ArrowLeftRight },
@@ -109,7 +154,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/unidades", label: "Unidades", icon: Building2 },
   ];
 
-  // 🔥 Seção Comunicação – com "Mensagens" no lugar de "Comunicados"
   const adminComunicacaoNav: NavItem[] = [
     { to: "/admin/mensagens", label: "Mensagens", icon: MessageSquare },
     { to: "/admin/avisos", label: "Quadro de Avisos", icon: Bell },
@@ -158,6 +202,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-180px)]">
+          {/* Início – sempre visível */}
           <NavLink
             to={homePath}
             className={({ isActive }) => getLinkClass(isActive, true)}
@@ -169,12 +214,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {isAdmin ? (
             <div className="space-y-1">
               <button
-                onClick={() => setCadastroOpen(!cadastroOpen)}
+                onClick={() => toggleMenu("cadastro")}
                 className={cn(
                   "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                  path.includes("/admin/colaboradores") ||
-                    path.includes("/admin/cargos") ||
-                    path.includes("/admin/unidades")
+                  cadastroOpen || path.includes("/admin/colaboradores") || path.includes("/admin/cargos") || path.includes("/admin/unidades")
                     ? "text-primary bg-primary/5"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
@@ -217,17 +260,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <div className="space-y-1">
             <button
-              onClick={() => setFolgasOpen(!folgasOpen)}
+              onClick={() => toggleMenu("folgas")}
               className={cn(
                 "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                path.includes("/calendario") ||
-                  path.includes("/trocas") ||
-                  path.includes("/historico") ||
-                  (path.startsWith("/admin") &&
-                    !path.includes("/documentos") &&
-                    !path.includes("/colaboradores") &&
-                    !path.includes("/mensagens") &&
-                    !path.includes("/avisos"))
+                folgasOpen || path.includes("/calendario") || path.includes("/trocas") || path.includes("/historico") || (path.startsWith("/admin") && !path.includes("/documentos") && !path.includes("/colaboradores") && !path.includes("/mensagens") && !path.includes("/avisos") && !path.includes("/home"))
                   ? "text-primary bg-primary/5"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
               )}
@@ -261,10 +297,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <div className="space-y-1">
             <button
-              onClick={() => setDocsOpen(!docsOpen)}
+              onClick={() => toggleMenu("docs")}
               className={cn(
                 "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                path.includes("/documentos")
+                docsOpen || path.includes("/documentos")
                   ? "text-primary bg-primary/5"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
               )}
@@ -300,10 +336,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {isAdmin && (
             <div className="space-y-1">
               <button
-                onClick={() => setComunicacaoOpen(!comunicacaoOpen)}
+                onClick={() => toggleMenu("comunicacao")}
                 className={cn(
                   "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                  path.includes("/admin/mensagens") || path.includes("/admin/avisos")
+                  comunicacaoOpen || path.includes("/admin/mensagens") || path.includes("/admin/avisos")
                     ? "text-primary bg-primary/5"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
