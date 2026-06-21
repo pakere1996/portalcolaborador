@@ -1,9 +1,12 @@
 import * as pdfjsLib from "pdfjs-dist";
-// Importa o worker diretamente do pacote
-import workerSrc from "pdfjs-dist/build/pdf.worker.mjs?url";
+// Para evitar o erro do worker, podemos configurar o worker via importação direta
+// e usar o worker local.
 
-// Configuração do worker usando a versão local
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+// Definir o worker source usando CDN ou local.
+// O ideal é usar o CDN que corresponde à versão instalada.
+// Vamos pegar a versão do pacote para usar no CDN.
+const version = "4.0.379"; // ou a versão que estiver no package.json
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.js`;
 
 export interface PageText {
   pageNumber: number;
@@ -36,17 +39,10 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
     const viewport = page.getViewport({ scale: 1.5 });
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
-    
     if (!context) throw new Error("Canvas context not available");
-    
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-    
-    await page.render({
-      canvasContext: context,
-      viewport: viewport,
-    }).promise;
-    
+    await page.render({ canvasContext: context, viewport }).promise;
     return canvas.toDataURL("image/png");
   } catch (error) {
     console.error("Erro ao renderizar página do PDF:", error);
