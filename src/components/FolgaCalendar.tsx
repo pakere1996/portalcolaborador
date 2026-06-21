@@ -26,9 +26,7 @@ import {
   ChevronRight as ChevronRightIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  TooltipProvider,
-} from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
@@ -80,8 +78,8 @@ const useMediaQuery = (query: string) => {
     const media = window.matchMedia(query);
     if (media.matches !== matches) setMatches(media.matches);
     const listener = () => setMatches(media.matches);
-    media.addEventListener('change', listener);
-    return () => media.removeEventListener('change', listener);
+    media.addEventListener("change", listener);
+    return () => media.removeEventListener("change", listener);
   }, [matches, query]);
   return matches;
 };
@@ -108,29 +106,31 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     currentMonthKey,
   } = props;
 
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isMobile = useMediaQuery("(max-width: 768px)");
   const hoje = new Date();
   const hojeStr = ymd(hoje);
 
   // Verifica se o usuário já tem uma folga de final de semana neste mês (extra não conta)
   const hasMonthlyFolga = useMemo(() => {
     if (!myUserId || !currentMonthKey) return false;
-    return allFolgas.some(f =>
-      f.user_id === myUserId &&
-      monthKey(parseYMD(f.data)) === currentMonthKey &&
-      (f.tipo === 'sabado' || f.tipo === 'domingo') &&
-      f.extra !== true
+    return allFolgas.some(
+      (f) =>
+        f.user_id === myUserId &&
+        monthKey(parseYMD(f.data)) === currentMonthKey &&
+        (f.tipo === "sabado" || f.tipo === "domingo") &&
+        f.extra !== true
     );
   }, [allFolgas, myUserId, currentMonthKey]);
 
   // Busca a folga mensal do usuário no mês atual (não extra)
   const userFolgaData = useMemo(() => {
     if (!myUserId || !currentMonthKey) return null;
-    const folga = allFolgas.find(f =>
-      f.user_id === myUserId &&
-      monthKey(parseYMD(f.data)) === currentMonthKey &&
-      (f.tipo === 'sabado' || f.tipo === 'domingo') &&
-      f.extra !== true
+    const folga = allFolgas.find(
+      (f) =>
+        f.user_id === myUserId &&
+        monthKey(parseYMD(f.data)) === currentMonthKey &&
+        (f.tipo === "sabado" || f.tipo === "domingo") &&
+        f.extra !== true
     );
     return folga?.data || null;
   }, [allFolgas, myUserId, currentMonthKey]);
@@ -145,7 +145,9 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     const lead = first.getDay();
     const days = getMonthDays(year, month0);
 
-    const bdayMap = birthdayByDate || new Map<string, { userId: string; userName?: string; status?: string }>();
+    const bdayMap =
+      birthdayByDate ||
+      new Map<string, { userId: string; userName?: string; status?: string }>();
     const result: DayInfo[] = [];
 
     for (let i = 0; i < lead; i++) result.push({ kind: "blank" });
@@ -216,40 +218,57 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     pending: "bg-violet-600 text-white border-violet-700 shadow-md",
   };
 
+  // Renderização mobile
   const renderMobileCalendar = () => {
     const days = getMonthDays(year, month0);
-    const monthName = new Date(year, month0).toLocaleString('pt-BR', { month: 'long' });
+    const monthName = new Date(year, month0).toLocaleString("pt-BR", {
+      month: "long",
+    });
     const yearStr = year;
 
     return (
       <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
         <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="size-8 rounded-full" onClick={onPrev}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 rounded-full"
+              onClick={onPrev}
+            >
               <ChevronLeft className="size-4" />
             </Button>
             <span className="font-bold text-sm capitalize">
               {monthName} {yearStr}
             </span>
-            <Button variant="ghost" size="icon" className="size-8 rounded-full" onClick={onNext}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 rounded-full"
+              onClick={onNext}
+            >
               <ChevronRight className="size-4" />
             </Button>
           </div>
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            {days.filter(d => d.getDay() === 0 || d.getDay() === 6).length} dias úteis
+            {days.filter((d) => d.getDay() === 0 || d.getDay() === 6).length} dias
+            úteis
           </span>
         </div>
 
         <div className="divide-y divide-slate-100 max-h-[70vh] overflow-y-auto">
           {cells.map((c) => {
             if (c.kind === "blank") return null;
-            const hasMyFolga = c.occupants.some(occ => occ.userId === myUserId);
-            const isBlocked = c.status === "blocked" || c.status === "taken" || c.status === "birthday";
+            const hasMyFolga = c.occupants.some(
+              (occ) => occ.userId === myUserId
+            );
+            const isBlocked =
+              c.status === "blocked" ||
+              c.status === "taken" ||
+              c.status === "birthday";
             const isWeekend = c.date.getDay() === 0 || c.date.getDay() === 6;
             const diaSemana = DIAS_SEMANA_ABR[c.date.getDay()];
             const isPast = c.status === "past";
-
-            const shouldHideEmptyMessage = isWeekend && hasMonthlyFolga && !hasMyFolga;
             const isUserFolgaPassada = isWeekend && hasMyFolga && isPast;
 
             return (
@@ -261,25 +280,37 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                 )}
                 onClick={() => {
                   if (isUserFolgaPassada) {
-                    toast.warning("Sua folga deste mês já foi utilizada e não pode ser alterada.");
+                    toast.warning(
+                      "Sua folga deste mês já foi utilizada e não pode ser alterada."
+                    );
                     return;
                   }
-                  onSelectDay?.(c.iso, { status: c.status, reason: c.tooltip });
+                  onSelectDay?.(c.iso, {
+                    status: c.status,
+                    reason: c.tooltip,
+                  });
                 }}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-medium text-slate-500 w-8">{diaSemana}</span>
-                      <span className={cn(
-                        "text-sm font-bold",
-                        isWeekend ? "text-slate-900" : "text-slate-400",
-                        isPast && "text-slate-300"
-                      )}>
+                      <span className="text-xs font-medium text-slate-500 w-8">
+                        {diaSemana}
+                      </span>
+                      <span
+                        className={cn(
+                          "text-sm font-bold",
+                          isWeekend ? "text-slate-900" : "text-slate-400",
+                          isPast && "text-slate-300"
+                        )}
+                      >
                         {c.date.getDate()}
                       </span>
                       {isBlocked && (
-                        <Badge variant="outline" className="text-[9px] bg-rose-50 text-rose-600 border-rose-200 px-1.5 py-0 h-5">
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] bg-rose-50 text-rose-600 border-rose-200 px-1.5 py-0 h-5"
+                        >
                           Bloqueado
                         </Badge>
                       )}
@@ -290,28 +321,40 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                       )}
                     </div>
                     {c.occupants.length > 0 ? (
-                      <div className="flex flex-wrap gap-1 mt-1 ml-8">
-                        {c.occupants.map((occ, idx) => {
-                          const nome = occ.userName?.split(' ')[0] || "Colaborador";
-                          return (
-                            <span
-                              key={idx}
-                              className={cn(
-                                "text-[10px] px-1.5 py-0.5 rounded font-medium truncate max-w-[120px]",
-                                occ.type === 'fixed' ? "bg-blue-50 text-blue-600" :
-                                occ.type === 'monthly' ? "bg-amber-50 text-amber-600" :
-                                "bg-orange-50 text-orange-600"
-                              )}
-                              title={occ.userName}
-                            >
-                              {nome}
-                            </span>
-                          );
-                        })}
-                      </div>
+                      isAdmin ? (
+                        <div className="flex flex-wrap gap-1 mt-1 ml-8">
+                          {c.occupants.map((occ, idx) => {
+                            const nome = occ.userName?.split(" ")[0] || "Colaborador";
+                            return (
+                              <span
+                                key={idx}
+                                className={cn(
+                                  "text-[10px] px-1.5 py-0.5 rounded font-medium truncate max-w-[120px]",
+                                  occ.type === "fixed"
+                                    ? "bg-blue-50 text-blue-600"
+                                    : occ.type === "monthly"
+                                    ? "bg-amber-50 text-amber-600"
+                                    : "bg-orange-50 text-orange-600"
+                                )}
+                                title={occ.userName}
+                              >
+                                {nome}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        // Para usuário comum: apenas "Ocupado"
+                        <div className="mt-1 ml-8 text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full w-fit">
+                          Ocupado
+                        </div>
+                      )
                     ) : (
-                      !shouldHideEmptyMessage && (
-                        <span className="text-[10px] text-slate-400 ml-8">Nenhum colaborador</span>
+                      // Não exibe nada para usuário comum; para admin mostra "Nenhum colaborador"
+                      isAdmin && (
+                        <span className="text-[10px] text-slate-400 ml-8">
+                          Nenhum colaborador
+                        </span>
                       )
                     )}
                     {hasMyFolga && (
@@ -341,7 +384,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
       <div className="bg-white border border-slate-200 rounded-[2rem] p-6 md:p-10 shadow-sm">
         <div className="flex items-center justify-between mb-10">
           <h2 className="text-3xl font-bold text-slate-900 tracking-tight">
-            {MONTH_NAMES[month0]} <span className="text-slate-300 font-medium">{year}</span>
+            {MONTH_NAMES[month0]}{" "}
+            <span className="text-slate-300 font-medium">{year}</span>
           </h2>
           <div className="flex items-center gap-3">
             <Button
@@ -387,10 +431,10 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
               c.status === "taken" ||
               c.status === "birthday";
 
-            const hasMyFolga = c.occupants.some(occ => occ.userId === myUserId);
+            const hasMyFolga = c.occupants.some(
+              (occ) => occ.userId === myUserId
+            );
             const isPast = c.status === "past";
-
-            const shouldHideEmptyMessage = isWeekend && hasMonthlyFolga && !hasMyFolga;
             const isUserFolgaPassada = isWeekend && hasMyFolga && isPast;
 
             return (
@@ -404,10 +448,15 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                 )}
                 onClick={() => {
                   if (isUserFolgaPassada) {
-                    toast.warning("Sua folga deste mês já foi utilizada e não pode ser alterada.");
+                    toast.warning(
+                      "Sua folga deste mês já foi utilizada e não pode ser alterada."
+                    );
                     return;
                   }
-                  onSelectDay?.(c.iso, { status: c.status, reason: c.tooltip });
+                  onSelectDay?.(c.iso, {
+                    status: c.status,
+                    reason: c.tooltip,
+                  });
                 }}
               >
                 <div className="flex justify-between items-start mb-3">
@@ -429,14 +478,16 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                       {c.date.getDate()}
                     </span>
                     {isAdmin && isWeekend && (
-                      <span className={cn(
-                        "text-[9px] font-black mt-0.5 px-1.5 py-0.5 rounded-md border",
-                        c.occupancy >= c.limit
-                          ? "bg-rose-100 text-rose-700 border-rose-200"
-                          : c.occupancy >= c.limit * 0.7
-                          ? "bg-amber-100 text-amber-700 border-amber-200"
-                          : "bg-emerald-100 text-emerald-700 border-emerald-200"
-                      )}>
+                      <span
+                        className={cn(
+                          "text-[9px] font-black mt-0.5 px-1.5 py-0.5 rounded-md border",
+                          c.occupancy >= c.limit
+                            ? "bg-rose-100 text-rose-700 border-rose-200"
+                            : c.occupancy >= c.limit * 0.7
+                            ? "bg-amber-100 text-amber-700 border-amber-200"
+                            : "bg-emerald-100 text-emerald-700 border-emerald-200"
+                        )}
+                      >
                         {c.occupancy}/{c.limit}
                       </span>
                     )}
@@ -445,7 +496,9 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     {c.status === "available" && (
                       <LockOpen className="size-3.5 text-emerald-500 drop-shadow-[0_0_3px_rgba(16,185,129,0.3)]" />
                     )}
-                    {(c.status === "mine" || c.status === "swapped" || hasMyFolga) && (
+                    {(c.status === "mine" ||
+                      c.status === "swapped" ||
+                      hasMyFolga) && (
                       <CheckCircle2 className="size-4 text-amber-600 drop-shadow-[0_0_3px_rgba(217,119,6,0.3)]" />
                     )}
                     {c.status === "pending" && (
@@ -458,7 +511,8 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                   </div>
                 </div>
 
-                {isAdmin && c.occupants.length > 0 && (
+                {/* Renderização de ocupantes */}
+                {isAdmin && c.occupants.length > 0 ? (
                   <div className="flex flex-col gap-1.5 overflow-hidden">
                     {c.occupants.slice(0, 4).map((occ, idx) => (
                       <div
@@ -477,39 +531,49 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                       </div>
                     )}
                   </div>
-                )}
+                ) : !isAdmin && c.occupants.length > 0 ? (
+                  // Para usuário comum: exibe "Ocupado" no canto inferior
+                  <div className="mt-auto text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full w-fit">
+                    Ocupado
+                  </div>
+                ) : null}
 
-                {!isAdmin && (
-                  <div className="mt-auto flex flex-col gap-1">
-                    {hasMyFolga && (
-                      <div className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
-                        {c.label || "Minha Folga"}
-                        {isPast && isWeekend && " (Utilizada)"}
-                      </div>
-                    )}
-                    {!hasMyFolga && c.label && c.status !== "past" && (
-                      <div
-                        className={cn(
-                          "text-[10px] font-bold rounded-full px-2 py-0.5 w-fit",
-                          c.status === "fixed"
-                            ? tagColors.fixed
-                            : c.status === "pending"
-                            ? tagColors.pending
-                            : "bg-slate-100 text-slate-500 border-slate-200"
-                        )}
-                      >
-                        {c.label}
-                      </div>
-                    )}
-                    {!hasMyFolga && c.status === "available" && !isBlocked && !hasMonthlyFolga && (
-                      <div className="opacity-0 group-hover:opacity-100 transition-all transform translate-y-1 group-hover:translate-y-0">
-                        <span className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">
-                          Selecionar
-                        </span>
-                      </div>
-                    )}
+                {!isAdmin && hasMyFolga && (
+                  <div className="mt-auto text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
+                    {c.label || "Minha Folga"}
+                    {isPast && isWeekend && " (Utilizada)"}
                   </div>
                 )}
+
+                {!isAdmin &&
+                  !hasMyFolga &&
+                  c.label &&
+                  c.status !== "past" && (
+                    <div
+                      className={cn(
+                        "text-[10px] font-bold rounded-full px-2 py-0.5 w-fit",
+                        c.status === "fixed"
+                          ? tagColors.fixed
+                          : c.status === "pending"
+                          ? tagColors.pending
+                          : "bg-slate-100 text-slate-500 border-slate-200"
+                      )}
+                    >
+                      {c.label}
+                    </div>
+                  )}
+
+                {!isAdmin &&
+                  !hasMyFolga &&
+                  c.status === "available" &&
+                  !isBlocked &&
+                  !hasMonthlyFolga && (
+                    <div className="opacity-0 group-hover:opacity-100 transition-all transform translate-y-1 group-hover:translate-y-0 mt-auto">
+                      <span className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">
+                        Selecionar
+                      </span>
+                    </div>
+                  )}
               </div>
             );
           })}
