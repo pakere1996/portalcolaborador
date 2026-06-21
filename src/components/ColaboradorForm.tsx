@@ -83,7 +83,7 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
             onChange={(e) => handleFormChange('cpf', e.target.value)} 
             placeholder="000.000.000-00"
             maxLength={14}
-            disabled={busy} // 🔥 AGORA PERMITE EDITAR CPF SEMPRE
+            disabled={busy}
           />
         </div>
         <div className="space-y-2">
@@ -198,23 +198,24 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
           </Select>
         </div>
 
+        {/* 🔥 CORRIGIDO: campos de data agora usam 'dataNascimento' e 'dataAdmissao' */}
         <div className="space-y-2">
-          <Label htmlFor="data_nascimento">Data de Nascimento *</Label>
+          <Label htmlFor="dataNascimento">Data de Nascimento *</Label>
           <Input 
-            id="data_nascimento" 
+            id="dataNascimento" 
             type="date"
-            value={form.data_nascimento || ""} 
-            onChange={(e) => handleFormChange('data_nascimento', e.target.value)} 
+            value={form.dataNascimento || ""} 
+            onChange={(e) => handleFormChange('dataNascimento', e.target.value)} 
             disabled={busy}
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="data_admissao">Data de Admissão *</Label>
+          <Label htmlFor="dataAdmissao">Data de Admissão *</Label>
           <Input 
-            id="data_admissao" 
+            id="dataAdmissao" 
             type="date"
-            value={form.data_admissao || ""} 
-            onChange={(e) => handleFormChange('data_admissao', e.target.value)} 
+            value={form.dataAdmissao || ""} 
+            onChange={(e) => handleFormChange('dataAdmissao', e.target.value)} 
             disabled={busy}
           />
         </div>
@@ -241,13 +242,13 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="data_demissao">Data de Demissão</Label>
+          <Label htmlFor="dataDemissao">Data de Demissão</Label>
           <Input 
-            id="data_demissao" 
+            id="dataDemissao" 
             type="date"
-            value={form.data_demissao || ""} 
-            onChange={(e) => handleFormChange('data_demissao', e.target.value)} 
-            min={form.data_admissao || undefined}
+            value={form.dataDemissao || ""} 
+            onChange={(e) => handleFormChange('dataDemissao', e.target.value)} 
+            min={form.dataAdmissao || undefined}
             disabled={busy}
           />
           <p className="text-xs text-muted-foreground">Preencha apenas se o colaborador já foi desligado.</p>
