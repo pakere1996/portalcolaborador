@@ -53,10 +53,9 @@ export function DocumentImportForm() {
   const [selectedColaborador, setSelectedColaborador] = useState("");
   const [selectedMes, setSelectedMes] = useState("");
   const [selectedAno, setSelectedAno] = useState("");
-  const [selectedSubtipo, setSelectedSubtipo] = useState<"mensal" | "adiantamento">("mensal");
+  const [tipoDocumento, setTipoDocumento] = useState<"contracheque" | "adiantamento" | "ponto">("contracheque");
   const [selectedQuinzena, setSelectedQuinzena] = useState<1 | 2 | null>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [tipoDocumento, setTipoDocumento] = useState<"contracheque" | "ponto">("contracheque");
 
   const load = async () => {
     setLoading(true);
@@ -96,7 +95,7 @@ export function DocumentImportForm() {
     setSelectedColaborador("");
     setSelectedMes("");
     setSelectedAno("");
-    setSelectedSubtipo("mensal");
+    setTipoDocumento("contracheque");
     setSelectedQuinzena(null);
     setFile(null);
   };
@@ -108,7 +107,7 @@ export function DocumentImportForm() {
     if (!selectedAno) return toast.error("Selecione o ano");
 
     // Validação para adiantamento
-    if (tipoDocumento === "contracheque" && selectedSubtipo === "adiantamento") {
+    if (tipoDocumento === "adiantamento") {
       if (!selectedQuinzena) return toast.error("Selecione a quinzena");
       if (!colaboradorPodeAdiantamento(selectedColaborador)) {
         return toast.error("Este colaborador não tem direito a adiantamento.");
@@ -119,7 +118,7 @@ export function DocumentImportForm() {
     try {
       const fileExt = file.name.split('.').pop();
       const mesStr = String(selectedMes).padStart(2, "0");
-      const quinzenaStr = selectedSubtipo === "adiantamento" ? `_${selectedQuinzena}` : "";
+      const quinzenaStr = tipoDocumento === "adiantamento" ? `_${selectedQuinzena}` : "";
       const fileName = `${selectedColaborador}/${selectedAno}/${mesStr}/${tipoDocumento}${quinzenaStr}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
@@ -127,10 +126,6 @@ export function DocumentImportForm() {
         .upload(fileName, file, { upsert: true });
 
       if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from("documentos")
-        .getPublicUrl(fileName);
 
       const insertData: any = {
         colaborador_id: selectedColaborador,
@@ -142,10 +137,9 @@ export function DocumentImportForm() {
         status: "disponivel",
       };
 
-      // Adicionar subtipo/quinzena apenas para contracheque
-      if (tipoDocumento === "contracheque") {
-        insertData.subtipo = selectedSubtipo;
-        insertData.quinzena = selectedSubtipo === "adiantamento" ? selectedQuinzena : null;
+      // Adicionar quinzena apenas para adiantamento
+      if (tipoDocumento === "adiantamento" && selectedQuinzena) {
+        insertData.quinzena = selectedQuinzena;
       }
 
       const { error: insertError } = await supabase
@@ -170,9 +164,9 @@ export function DocumentImportForm() {
           <Label>Tipo de Documento</Label>
           <Select
             value={tipoDocumento}
-            onValueChange={(v: "contracheque" | "ponto") => {
+            onValueChange={(v: "contracheque" | "adiantamento" | "ponto") => {
               setTipoDocumento(v);
-              if (v === "ponto") setSelectedSubtipo("mensal");
+              if (v !== "adiantamento") setSelectedQuinzena(null);
             }}
           >
             <SelectTrigger>
@@ -180,6 +174,7 @@ export function DocumentImportForm() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="contracheque">Contracheque</SelectItem>
+              <SelectItem value="adiantamento">Adiantamento Quinzenal</SelectItem>
               <SelectItem value="ponto">Folha de Ponto</SelectItem>
             </SelectContent>
           </Select>
@@ -230,42 +225,19 @@ export function DocumentImportForm() {
           </Select>
         </div>
 
-        {tipoDocumento === "contracheque" && (
-          <>
-            <div className="space-y-2">
-              <Label>Subtipo</Label>
-              <Select
-                value={selectedSubtipo}
-                onValueChange={(v: "mensal" | "adiantamento") => {
-                  setSelectedSubtipo(v);
-                  if (v === "mensal") setSelectedQuinzena(null);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="mensal">Mensal</SelectItem>
-                  <SelectItem value="adiantamento">Adiantamento Quinzenal</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {selectedSubtipo === "adiantamento" && (
-              <div className="space-y-2">
-                <Label>Quinzena</Label>
-                <Select value={selectedQuinzena?.toString() || ""} onValueChange={(v) => setSelectedQuinzena(Number(v) as 1 | 2)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1ª Quinzena</SelectItem>
-                    <SelectItem value="2">2ª Quinzena</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </>
+        {tipoDocumento === "adiantamento" && (
+          <div className="space-y-2">
+            <Label>Quinzena</Label>
+            <Select value={selectedQuinzena?.toString() || ""} onValueChange={(v) => setSelectedQuinzena(Number(v) as 1 | 2)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1ª Quinzena</SelectItem>
+                <SelectItem value="2">2ª Quinzena</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         )}
 
         <div className="space-y-2 md:col-span-2">
