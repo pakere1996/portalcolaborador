@@ -43,13 +43,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const path = location.pathname;
   const [open, setOpen] = useState(false);
 
-  // 🔥 Todos os menus iniciam fechados
   const [folgasOpen, setFolgasOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
   const [cadastroOpen, setCadastroOpen] = useState(false);
   const [comunicacaoOpen, setComunicacaoOpen] = useState(false);
 
-  // 🔥 Função para abrir um menu específico e fechar os outros
   const toggleMenu = useCallback(
     (menu: "folgas" | "docs" | "cadastro" | "comunicacao") => {
       const setters = {
@@ -59,37 +57,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         comunicacao: setComunicacaoOpen,
       };
 
-      // Fecha todos
       Object.values(setters).forEach((setter) => setter(false));
-
-      // Abre o menu clicado (toggle: se já estava aberto, fecha; senão, abre)
       const currentState = {
         folgas: folgasOpen,
         docs: docsOpen,
         cadastro: cadastroOpen,
         comunicacao: comunicacaoOpen,
       }[menu];
-
       setters[menu](!currentState);
     },
     [folgasOpen, docsOpen, cadastroOpen, comunicacaoOpen]
   );
 
   const getIsAdmin = () => {
-    const savedRole = localStorage.getItem("user_role");
-    if (savedRole) return savedRole === "admin";
-    return role === "admin";
+    const savedRole = localStorage.getItem('user_role');
+    if (savedRole) return savedRole === 'admin';
+    return role === 'admin';
   };
 
   const isAdmin = getIsAdmin();
   const homePath = isAdmin ? "/admin/home" : "/home";
 
-  // Fecha menu mobile ao mudar de rota
   useEffect(() => {
     setOpen(false);
   }, [path]);
 
-  // 🔥 Abre automaticamente o menu correspondente à rota atual, fechando os outros
   useEffect(() => {
     const shouldOpen = {
       cadastro:
@@ -112,14 +104,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           !path.includes("/home")),
     };
 
-    // Fecha todos, depois abre os que devem estar abertos
     setFolgasOpen(shouldOpen.folgas);
     setDocsOpen(shouldOpen.docs);
     setCadastroOpen(shouldOpen.cadastro);
     setComunicacaoOpen(shouldOpen.comunicacao);
   }, [path]);
 
-  // Navegação de colaborador
+  // Navegação do colaborador
   const employeeFolgaNav: NavItem[] = [
     { to: "/calendario", label: "Calendário", icon: Calendar },
     { to: "/trocas", label: "Trocas", icon: ArrowLeftRight },
@@ -139,7 +130,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/documentos", label: "Contracheques", icon: FileText, end: true },
     { to: "/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
     { to: "/documentos/atestados", label: "Atestados", icon: FileWarning },
-    { to: "/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
+    { to: "/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert }, // 🔥 NOVO
   ];
 
   const adminDocsNav: NavItem[] = [
@@ -203,7 +194,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-180px)]">
-          {/* Início – sempre visível */}
           <NavLink
             to={homePath}
             className={({ isActive }) => getLinkClass(isActive, true)}
@@ -227,11 +217,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Users className="size-4" />
                   <span>Cadastro</span>
                 </div>
-                {cadastroOpen ? (
-                  <ChevronDown className="size-3" />
-                ) : (
-                  <ChevronRight className="size-3" />
-                )}
+                {cadastroOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
               </button>
 
               {cadastroOpen && (
@@ -273,11 +259,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Calendar className="size-4" />
                 <span>Folgas</span>
               </div>
-              {folgasOpen ? (
-                <ChevronDown className="size-3" />
-              ) : (
-                <ChevronRight className="size-3" />
-              )}
+              {folgasOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
             </button>
 
             {folgasOpen && (
@@ -310,11 +292,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <FileText className="size-4" />
                 <span>Documentos</span>
               </div>
-              {docsOpen ? (
-                <ChevronDown className="size-3" />
-              ) : (
-                <ChevronRight className="size-3" />
-              )}
+              {docsOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
             </button>
 
             {docsOpen && (
@@ -349,11 +327,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <MessageSquare className="size-4" />
                   <span>Comunicação</span>
                 </div>
-                {comunicacaoOpen ? (
-                  <ChevronDown className="size-3" />
-                ) : (
-                  <ChevronRight className="size-3" />
-                )}
+                {comunicacaoOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
               </button>
 
               {comunicacaoOpen && (
