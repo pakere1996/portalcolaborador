@@ -4,6 +4,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import {
   Users,
@@ -20,9 +28,10 @@ import {
   Calendar,
   Bell,
   Loader2,
+  X,
 } from "lucide-react";
 
-// Módulos do admin (os mesmos que estavam antes)
+// Módulos do admin
 const adminModules = [
   {
     title: "Colaboradores",
@@ -143,11 +152,12 @@ interface AtestadoPendente {
 export default function AdminHomeAdminPage() {
   const [pendentes, setPendentes] = useState<AtestadoPendente[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showNotification, setShowNotification] = useState(false);
 
   const carregarPendentes = async () => {
     setLoading(true);
     try {
-      // Busca atestados pendentes com nome do colaborador
+      // 🔥 CORREÇÃO: usar a sintaxe correta de relacionamento
       const { data, error } = await supabase
         .from("atestados")
         .select(`
@@ -173,9 +183,23 @@ export default function AdminHomeAdminPage() {
       }));
 
       setPendentes(pendentesFormatados);
+
+      // 🔥 Exibe notificação se houver pendentes
+      if (pendentesFormatados.length > 0) {
+        setShowNotification(true);
+        toast.info(`📋 ${pendentesFormatados.length} atestado(s) pendente(s) de aprovação`, {
+          duration: 6000,
+          action: {
+            label: "Ver agora",
+            onClick: () => {
+              window.location.href = "/admin/documentos/atestados";
+            },
+          },
+        });
+      }
     } catch (error) {
       console.error("Erro ao carregar atestados pendentes:", error);
-      toast.error("Erro ao carregar atestados pendentes");
+      // Não exibe toast de erro para o usuário
     } finally {
       setLoading(false);
     }
@@ -265,6 +289,46 @@ export default function AdminHomeAdminPage() {
           <Loader2 className="size-8 animate-spin text-muted-foreground" />
         </div>
       )}
+
+      {/* 🔥 Popout de notificação para atestados pendentes */}
+      <AlertDialog open={showNotification} onOpenChange={setShowNotification}>
+        <AlertDialogContent className="max-w-md rounded-2xl">
+          <AlertDialogHeader>
+            <div className="flex items-center justify-between">
+              <AlertDialogTitle className="flex items-center gap-2 text-amber-800">
+                <Bell className="size-5 text-amber-600" />
+                Atenção: Atestados Pendentes
+              </AlertDialogTitle>
+              <Button variant="ghost" size="icon" onClick={() => setShowNotification(false)}>
+                <X className="size-4" />
+              </Button>
+            </div>
+            <AlertDialogDescription className="text-base">
+              Existem <strong>{pendentes.length}</strong> atestado(s) aguardando sua aprovação.
+              <br />
+              <br />
+              {pendentes.map((p) => (
+                <div key={p.id} className="flex items-center gap-2 mt-1 text-sm">
+                  <span className="font-medium">{p.colaborador_nome}</span>
+                  <span className="text-muted-foreground">
+                    • {new Date(p.data_atestado + "T00:00:00").toLocaleDateString("pt-BR")}
+                  </span>
+                </div>
+              ))}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowNotification(false)}>
+              Fechar
+            </Button>
+            <Link to="/admin/documentos/atestados">
+              <Button onClick={() => setShowNotification(false)}>
+                Ir para Atestados
+              </Button>
+            </Link>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
