@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Bell, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { Bell, CheckCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useAtestadosPendentes } from "@/lib/atestados-pendentes-context";
@@ -25,11 +25,10 @@ interface Notificacao {
 export function NotificationBell() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { totalPendentes, carregarPendentes } = useAtestadosPendentes();
+  const { totalPendentes } = useAtestadosPendentes();
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // 🔥 Carrega notificações do usuário (mantém separado)
   const carregarNotificacoes = async () => {
     if (!user) return;
     setLoading(true);
@@ -52,11 +51,6 @@ export function NotificationBell() {
 
   useEffect(() => {
     carregarNotificacoes();
-    // 🔥 Recarrega atestados pendentes a cada 30 segundos (via context)
-    const interval = setInterval(() => {
-      carregarPendentes();
-    }, 30000);
-    return () => clearInterval(interval);
   }, [user]);
 
   const marcarComoLida = async (id: string) => {
