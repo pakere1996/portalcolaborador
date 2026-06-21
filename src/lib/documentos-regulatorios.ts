@@ -20,17 +20,25 @@ export function formatAtestadoStatus(status: string): string {
 }
 
 export function formatDisciplinarTipo(tipo: string): string {
-  return tipo === "suspensao" ? "Suspensão" : "Advertência";
+  const map: Record<string, string> = {
+    advertencia: "Advertência",
+    suspensao: "Suspensão",
+    justa_causa: "Justa Causa",
+    outro: "Outro",
+  };
+  return map[tipo] || tipo;
 }
 
 export function statusClass(status: string): string {
-  if (status === "aprovado" || status === "vinculado") return "bg-green-100 text-green-700 border-green-200";
+  if (status === "aprovado" || status === "vinculado" || status === "disponivel") {
+    return "bg-green-100 text-green-700 border-green-200";
+  }
   if (status === "rejeitado") return "bg-red-100 text-red-700 border-red-200";
   return "bg-orange-100 text-orange-700 border-orange-200";
 }
 
 export function newDocumentId(): string {
-  return crypto.randomUUID();
+  return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
 }
 
 export function atestadoStoragePath(colaboradorId: string, data: string, id: string, file: File): string {
