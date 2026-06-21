@@ -1,9 +1,10 @@
 import * as pdfjsLib from "pdfjs-dist";
 
-// Usa o worker do próprio pacote (evita problemas de CDN)
-import workerUrl from "pdfjs-dist/build/pdf.worker?url";
-
-// Configura o worker com o arquivo local
+// Configura o worker com arquivo local
+const workerUrl = new URL(
+  "pdfjs-dist/build/pdf.worker.min.js",
+  import.meta.url
+).toString();
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
 export interface PageText {
@@ -46,6 +47,7 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
     const page = await pdf.getPage(pageNumber);
     const viewport = page.getViewport({ scale: 1.5 });
     
+    // Cria um canvas e obtém o contexto
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     if (!context) throw new Error("Canvas context não disponível");
@@ -53,9 +55,9 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     
-    // 🔥 CORREÇÃO: usar 'canvas' em vez de 'canvasContext' para compatibilidade com a versão do pdf.js
+    // 🔥 CORREÇÃO: Usar 'canvas' em vez de 'canvasContext' (API mais recente)
     await page.render({
-      canvasContext: context,
+      canvas: canvas,        // <-- propriedade 'canvas' (não 'canvasContext')
       viewport: viewport,
     }).promise;
     
