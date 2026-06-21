@@ -48,7 +48,6 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
     const page = await pdf.getPage(pageNumber);
     const viewport = page.getViewport({ scale: 1.5 });
 
-    // Cria um canvas e obtém o contexto
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     if (!context) throw new Error("Canvas context não disponível");
@@ -56,11 +55,12 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
     canvas.width = viewport.width;
     canvas.height = viewport.height;
 
-    // 🔥 CORREÇÃO: Usar a API correta com 'canvas' (não 'canvasContext')
+    // 🔥 CORREÇÃO: Usar 'as any' para compatibilidade entre versões
     await page.render({
-      canvasContext: context,  // Suportado em versões mais antigas
+      canvas: canvas,
+      canvasContext: context,
       viewport: viewport,
-    }).promise;
+    } as any).promise;
 
     const dataUrl = canvas.toDataURL("image/png");
     console.log("✅ Imagem renderizada com sucesso");
@@ -71,11 +71,6 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
   }
 };
 
-/**
- * Extrai uma única página de um PDF (a partir de bytes) e retorna como Blob de um novo PDF.
- * Usado para baixar apenas a página correspondente a um colaborador específico,
- * sem precisar separar o arquivo no momento da importação.
- */
 export const extractSinglePageAsBlob = async (
   pdfBytes: ArrayBuffer,
   pageNumber: number
@@ -91,7 +86,10 @@ export const extractSinglePageAsBlob = async (
 
     const newPdfBytes = await newPdf.save();
     console.log("✅ Página extraída com sucesso");
-    return new Blob([newPdfBytes], { type: "application/pdf" });
+
+    // 🔥 Garante que o Blob seja criado corretamente
+    const blob = new Blob([newPdfBytes.buffer.slice(newPdfBytes.byteOffset, newPdfBytes.byteOffset + newPdfBytes.byteLength)], { type: "application/pdf" });
+    return blob;
   } catch (error) {
     console.error("❌ Erro ao extrair página individual do PDF:", error);
     throw new Error(`Falha ao extrair página do PDF: ${(error as Error).message}`);
