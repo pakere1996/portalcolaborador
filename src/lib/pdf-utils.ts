@@ -1,8 +1,8 @@
 import * as pdfjsLib from "pdfjs-dist";
 import { PDFDocument } from "pdf-lib";
 
-// 🔥 Usa CDN com versão 4.0.269 (mais estável)
-pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.269/pdf.worker.min.js";
+// 🔥 CONFIGURA O WORKER PARA USAR O ARQUIVO LOCAL (copiado para public)
+pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
 export interface PageText {
   pageNumber: number;
