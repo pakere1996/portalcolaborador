@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -34,9 +34,11 @@ export function AvisosPopout() {
   const [loading, setLoading] = useState(true);
   const [avisoAtual, setAvisoAtual] = useState<Aviso | null>(null);
   const [avisosLidos, setAvisosLidos] = useState<Set<string>>(new Set());
+  const hasFetched = useRef(false);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id || hasFetched.current) return;
+    hasFetched.current = true;
 
     const carregarAvisos = async () => {
       setLoading(true);
@@ -71,7 +73,7 @@ export function AvisosPopout() {
     };
 
     carregarAvisos();
-  }, [user]);
+  }, [user?.id]);
 
   const marcarComoLido = (avisoId: string) => {
     const lidos = JSON.parse(localStorage.getItem('avisos_lidos') || '[]');
