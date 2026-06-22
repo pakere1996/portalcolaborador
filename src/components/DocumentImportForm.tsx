@@ -423,7 +423,6 @@ export function DocumentImportForm() {
       const arrayBuffer = await file.arrayBuffer();
       const sourcePdf = await PDFDocument.load(arrayBuffer);
       
-      // Verifica se o número da página é válido
       if (pageNumber < 1 || pageNumber > sourcePdf.getPageCount()) {
         throw new Error(`Página ${pageNumber} inválida. O PDF tem ${sourcePdf.getPageCount()} páginas.`);
       }
@@ -450,7 +449,7 @@ export function DocumentImportForm() {
     }
   };
 
-  // 🔥 HANDLE APROVAR TUDO – com DELETE em lote e uploads paralelizados
+  // 🔥 HANDLE APROVAR TUDO – com substituição segura (cria novo, depois deleta antigo)
   const handleAprovarTudo = async () => {
     const pendentes = pageResults.filter(r => !r.resolvido && !r.ignorado);
     if (pendentes.length > 0) {
@@ -463,23 +462,9 @@ export function DocumentImportForm() {
       const aprovadoEm = new Date().toISOString();
       let salvos = 0;
       let substituidos = 0;
+      let erros = 0;
 
-      // 🔥 1. DELETAR EM LOTE – coletar todos os IDs a substituir
-      const idsParaSubstituir = pageResults
-        .filter(r => r.duplicadoId && r.acaoSeDuplicado === "substituir")
-        .map(r => r.duplicadoId);
-
-      if (idsParaSubstituir.length > 0) {
-        const { error: deleteError } = await supabase
-          .from("documentos")
-          .delete()
-          .in("id", idsParaSubstituir);
-        if (deleteError) throw deleteError;
-        substituidos = idsParaSubstituir.length;
-        console.log(`🗑️ ${substituidos} documento(s) substituído(s) deletados em lote`);
-      }
-
-      // 2. Filtrar apenas os resultados que precisam ser salvos
+      // Filtrar apenas os resultados que precisam ser salvos
       const resultsParaSalvar = pageResults.filter(
         r => !r.ignorado && r.matchedProfile && r.mes && r.ano
       );
@@ -489,25 +474,25 @@ export function DocumentImportForm() {
         return;
       }
 
-      // 3. Processar em chunks de 3 para não sobrecarregar a API
+      // Processar em chunks de 3 para não sobrecarregar a API
       const chunkSize = 3;
       for (let i = 0; i < resultsParaSalvar.length; i += chunkSize) {
         const chunk = resultsParaSalvar.slice(i, i + chunkSize);
         await Promise.all(
           chunk.map(async (result) => {
-            // Pular se já foi substituído (deletado) ou se for duplicado com ação "manter_antigo"
-            if (result.duplicadoId && result.acaoSeDuplicado === "substituir") {
-              // Já foi deletado, não precisa fazer nada
-              return;
-            }
+            // Se for duplicado com "manter_antigo", pula
             if (result.duplicadoId && result.acaoSeDuplicado === "manter_antigo") {
-              // Ignorado, não salvar
               return;
             }
 
+            // Verifica se é uma substituição
+            const isSubstituicao = !!(result.duplicadoId && result.acaoSeDuplicado === "substituir");
+            const oldId = isSubstituicao ? result.duplicadoId : null;
+
+            // 1. Gerar caminho do novo arquivo
             const storagePath = `documentos/${documentType}/${result.matchedProfile!.id}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}_${Date.now()}.pdf`;
-            
-            // 🔥 EXTRAI APENAS A PÁGINA DO COLABORADOR
+
+            // 2. Tentar extrair a página
             let pagePdfBlob: Blob;
             try {
               pagePdfBlob = await extractPageFromPdf(selectedFile!, result.pageNumber);
@@ -516,10 +501,11 @@ export function DocumentImportForm() {
               toast.error(`Erro ao processar página ${result.pageNumber}`, {
                 description: (extractError as Error).message,
               });
+              erros++;
               return;
             }
 
-            // Faz o upload do blob da página extraída
+            // 3. Upload do novo arquivo
             const { error: uploadError } = await supabase.storage
               .from("documentos")
               .upload(storagePath, pagePdfBlob, { 
@@ -528,12 +514,14 @@ export function DocumentImportForm() {
               });
 
             if (uploadError) {
-              if (!uploadError.message.includes("already exists")) {
-                throw uploadError;
-              }
-              // Se já existe, podemos continuar ou sobrescrever
+              toast.error(`Erro ao fazer upload da página ${result.pageNumber}`, {
+                description: uploadError.message,
+              });
+              erros++;
+              return;
             }
 
+            // 4. Inserir o novo documento no banco
             const { error: insertError } = await supabase.from("documentos").insert({
               colaborador_id: result.matchedProfile!.id,
               tipo: documentType,
@@ -545,9 +533,36 @@ export function DocumentImportForm() {
               unidade_id: result.unidadeId,
               aprovado_em: aprovadoEm,
             });
-            if (insertError) throw insertError;
+
+            if (insertError) {
+              // Se falhar no insert, tenta deletar o arquivo do storage para não acumular lixo
+              await supabase.storage.from("documentos").remove([storagePath]).catch(() => {});
+              toast.error(`Erro ao salvar documento da página ${result.pageNumber}`, {
+                description: insertError.message,
+              });
+              erros++;
+              return;
+            }
 
             salvos++;
+
+            // 5. Só agora, se foi uma substituição e o novo foi criado, deletamos o antigo
+            if (isSubstituicao && oldId) {
+              const { error: deleteError } = await supabase
+                .from("documentos")
+                .delete()
+                .eq("id", oldId);
+              if (deleteError) {
+                // Se não conseguiu deletar o antigo, o novo já existe.
+                // Registramos o erro, mas não revertemos a operação.
+                console.warn(`⚠️ Não foi possível deletar o documento antigo ${oldId}:`, deleteError);
+                toast.warning("Documento novo criado, mas não foi possível excluir o antigo.");
+              } else {
+                substituidos++;
+              }
+            }
+
+            // Marcar como aprovado na UI
             setPageResults(prev => prev.map(r =>
               r.pageNumber === result.pageNumber
                 ? { ...r, aprovado: true, aprovadoEm }
@@ -559,6 +574,7 @@ export function DocumentImportForm() {
 
       let msg = `${salvos} documento(s) salvo(s) com sucesso!`;
       if (substituidos > 0) msg += ` ${substituidos} substituído(s).`;
+      if (erros > 0) msg += ` ${erros} erro(s) durante o processamento.`;
       toast.success(msg);
 
       setTimeout(() => {
