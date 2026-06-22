@@ -1,11 +1,8 @@
 import * as pdfjsLib from "pdfjs-dist";
 import { PDFDocument } from "pdf-lib";
 
-// 🔥 Importa o worker como um asset estático usando o recurso `?url` do Vite
-import workerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
-
-// 🔥 Configura o worker com o caminho resolvido pelo Vite
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+// 🔥 Usa CDN com versão 4.0.269 (mais estável)
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.269/pdf.worker.min.js";
 
 export interface PageText {
   pageNumber: number;
