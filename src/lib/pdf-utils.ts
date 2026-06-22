@@ -1,8 +1,8 @@
 import * as pdfjsLib from "pdfjs-dist";
 import { PDFDocument } from "pdf-lib";
 
-// 🔥 CONFIGURA O WORKER PARA USAR CDN (EVITA PROBLEMAS DE IMPORTAÇÃO DINÂMICA NO VITE)
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// 🔥 CONFIGURA O WORKER COM UMA VERSÃO FIXA E CONFIÁVEL DO CDN
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.269/pdf.worker.min.js';
 
 export interface PageText {
   pageNumber: number;
