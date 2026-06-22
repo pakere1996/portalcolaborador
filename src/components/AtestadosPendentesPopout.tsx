@@ -1,6 +1,4 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth-context";
 import {
   Dialog,
   DialogContent,
@@ -12,101 +10,25 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
-import { FileWarning, AlertCircle } from "lucide-react";
+import { FileWarning } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
-
-interface AtestadoPendente {
-  id: string;
-  colaborador_id: string;
-  colaborador_nome: string;
-  data_atestado: string;
-  dias_afastamento: number;
-  created_at: string;
-}
+import { useAtestadosPendentes } from "@/lib/atestados-pendentes-context";
 
 export function AtestadosPendentesPopout() {
-  const { user, role } = useAuth();
-  const [atestados, setAtestados] = useState<AtestadoPendente[]>([]);
+  const { pendentes, totalPendentes, loading, showNotification, setShowNotification } = useAtestadosPendentes();
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [alreadyNotified, setAlreadyNotified] = useState(false);
 
-  const isAdmin = role === "admin" || localStorage.getItem('user_role') === "admin";
-
+  // Abre o popout automaticamente quando houver pendentes e ainda não tiver notificado
   useEffect(() => {
-    // Se não for admin, não carrega
-    if (!isAdmin || !user) return;
+    if (totalPendentes > 0 && !alreadyNotified && !loading) {
+      setOpen(true);
+      setAlreadyNotified(true);
+    }
+  }, [totalPendentes, alreadyNotified, loading]);
 
-    const carregarAtestadosPendentes = async () => {
-      setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from("atestados")
-          .select(`
-            id,
-            colaborador_id,
-            data_atestado,
-            dias_afastamento,
-            created_at,
-            profiles!colaborador_id (nome)
-          `)
-          .eq("status", "pendente")
-          .order("created_at", { ascending: false });
-
-        if (error) throw error;
-
-        const pendentes = (data || []).map((item: any) => ({
-          id: item.id,
-          colaborador_id: item.colaborador_id,
-          colaborador_nome: item.profiles?.nome || "Colaborador",
-          data_atestado: item.data_atestado,
-          dias_afastamento: item.dias_afastamento,
-          created_at: item.created_at,
-        }));
-
-        setAtestados(pendentes);
-
-        // Se houver pendentes e o popout ainda não foi mostrado, exibe
-        if (pendentes.length > 0 && !alreadyNotified) {
-          setOpen(true);
-          setAlreadyNotified(true);
-        }
-      } catch (error) {
-        console.error("Erro ao carregar atestados pendentes:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    carregarAtestadosPendentes();
-
-    // Inscreve para novas mudanças
-    const channel = supabase
-      .channel("atestados-pendentes-popout")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "atestados",
-          filter: "status=eq.pendente",
-        },
-        () => {
-          carregarAtestadosPendentes();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user, isAdmin, alreadyNotified]);
-
-  // Se não for admin, não renderiza nada
-  if (!isAdmin) return null;
-
-  // Se não houver atestados pendentes, não abre o popout
-  if (atestados.length === 0) return null;
+  // Se não houver pendentes, não renderiza o popout
+  if (totalPendentes === 0) return null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -117,12 +39,12 @@ export function AtestadosPendentesPopout() {
             <DialogTitle className="text-xl font-bold">📋 Atestados Pendentes</DialogTitle>
           </div>
           <DialogDescription className="text-sm text-muted-foreground">
-            Existem {atestados.length} atestado(s) aguardando sua aprovação.
+            Existem {totalPendentes} atestado(s) aguardando sua aprovação.
           </DialogDescription>
         </DialogHeader>
 
         <div className="py-4 space-y-3">
-          {atestados.slice(0, 5).map((atestado) => (
+          {pendentes.slice(0, 5).map((atestado) => (
             <div
               key={atestado.id}
               className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between"
@@ -140,9 +62,9 @@ export function AtestadosPendentesPopout() {
               </Badge>
             </div>
           ))}
-          {atestados.length > 5 && (
+          {pendentes.length > 5 && (
             <div className="text-center text-xs text-muted-foreground">
-              + {atestados.length - 5} outros atestados pendentes
+              + {pendentes.length - 5} outros atestados pendentes
             </div>
           )}
         </div>
