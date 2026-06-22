@@ -19,7 +19,7 @@ import HomeAdmin from "./pages/admin/HomeAdmin";
 import Colaboradores from "./pages/admin/Colaboradores";
 import Cargos from "./pages/admin/Cargos";
 import Unidades from "./pages/admin/Unidades";
-import FolgasDashboard from "./pages/admin/Dashboard";
+import FolgasDashboard from "./pages/admin/FolgasHub";
 import Solicitacoes from "./pages/admin/Solicitacoes";
 import Aprovacoes from "./pages/admin/Aprovacoes";
 import TrocasAdmin from "./pages/admin/Trocas";
