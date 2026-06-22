@@ -26,6 +26,7 @@ import {
   ShieldAlert,
   Calendar,
   Bell,
+  MessageSquare,
   Loader2,
   X,
 } from "lucide-react";
