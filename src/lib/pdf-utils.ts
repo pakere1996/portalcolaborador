@@ -1,23 +1,17 @@
 import * as pdfjsLib from "pdfjs-dist";
 import { PDFDocument } from "pdf-lib";
 
-// 🔥 Configuração do worker - ESTRATÉGIA ROBUSTA
-// Tenta primeiro carregar via CDN (sempre funciona e não depende do bundler)
-// Se falhar, tenta o caminho local via import.meta.url
-try {
-  // Opção 1: CDN (recomendado para desenvolvimento e produção)
+// 🔥 Configuração do worker usando import com ?url (funciona no Vite)
+// @ts-ignore - O Vite resolve o ?url
+import workerUrl from "pdfjs-dist/build/pdf.worker.min.js?url";
+
+// Configura o worker com a URL gerada pelo Vite
+pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+
+// Fallback caso o import falhe (opcional)
+if (!workerUrl) {
+  console.warn("⚠️ Fallback: usando CDN para worker do PDF.js");
   pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-} catch (e) {
-  // Opção 2: fallback para o caminho local (pode ser usado em alguns bundlers)
-  try {
-    const workerUrl = new URL(
-      "pdfjs-dist/build/pdf.worker.min.js",
-      import.meta.url
-    ).toString();
-    pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
-  } catch (e2) {
-    console.warn("⚠️ Não foi possível configurar o worker do PDF.js. Verifique se o arquivo pdf.worker.min.js está disponível.", e2);
-  }
 }
 
 export interface PageText {
@@ -67,8 +61,6 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
     canvas.width = viewport.width;
     canvas.height = viewport.height;
 
-    // 🔥 CORREÇÃO: Usar apenas 'canvasContext' (campo padrão em versões recentes)
-    // O campo 'canvas' é obsoleto, mas mantido para compatibilidade.
     await page.render({
       canvasContext: context,
       viewport: viewport,
