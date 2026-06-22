@@ -1,11 +1,10 @@
 import * as pdfjsLib from "pdfjs-dist";
 import { PDFDocument } from "pdf-lib";
 
-// 🔥 IMPORTA O WORKER COMO UM ASSET ESTÁTICO DO VITE
-// O Vite copia o arquivo para os assets e retorna o caminho correito
+// 🔥 Importa o worker como um asset estático usando o recurso `?url` do Vite
 import workerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 
-// 🔥 CONFIGURA O WORKER COM O CAMINHO RESOLVIDO PELO VITE
+// 🔥 Configura o worker com o caminho resolvido pelo Vite
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
 export interface PageText {
