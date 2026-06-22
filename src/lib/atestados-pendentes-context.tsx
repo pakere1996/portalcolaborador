@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 
@@ -20,59 +20,63 @@ interface AtestadosPendentesContextType {
   carregarPendentes: () => Promise<void>;
 }
 
-const AtestadosPendentesContext = createContext<AtestadosPendentesContextType>({
-  pendentes: [],
-  totalPendentes: 0,
-  loading: true,
-  showNotification: false,
-  setShowNotification: () => {},
-  carregarPendentes: async () => {},
-});
+const AtestadosPendentesContext = createContext<AtestadosPendentesContextType | undefined>(undefined);
 
 export function AtestadosPendentesProvider({ children }: { children: ReactNode }) {
-  const { role, user } = useAuth();
+  const { user, role } = useAuth();
   const [pendentes, setPendentes] = useState<AtestadoPendente[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNotification, setShowNotification] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const isMounted = useRef(true);
 
   const isAdmin = role === "admin" || localStorage.getItem("user_role") === "admin";
 
   const carregarPendentes = useCallback(async () => {
-    // Se não for admin, não faz nada
-    if (!isAdmin || !user) {
+    if (!isMounted.current) return;
+    if (!isAdmin) {
       setPendentes([]);
       setLoading(false);
       setInitialLoadDone(true);
       return;
     }
 
-    // Se já carregou inicialmente e está tentando carregar de novo, não mostra loading
-    const shouldShowLoading = !initialLoadDone;
-    if (shouldShowLoading) {
-      setLoading(true);
+    // Se já carregou uma vez e não é uma atualização forçada, não recarrega
+    if (initialLoadDone && !loading) {
+      return;
     }
 
+    setLoading(true);
     try {
-      const { data: atestados, error } = await supabase
+      const { data: atestados, error: atestadosError } = await supabase
         .from("atestados")
-        .select(`
-          id,
-          colaborador_id,
-          data_atestado,
-          dias_afastamento,
-          created_at,
-          profiles!colaborador_id (nome)
-        `)
+        .select("id, colaborador_id, data_atestado, dias_afastamento, created_at")
         .eq("status", "pendente")
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (atestadosError) throw atestadosError;
 
-      const pendentesFormatados: AtestadoPendente[] = (atestados || []).map((item: any) => ({
+      if (!atestados || atestados.length === 0) {
+        setPendentes([]);
+        setLoading(false);
+        setInitialLoadDone(true);
+        return;
+      }
+
+      const colaboradorIds = [...new Set(atestados.map((a) => a.colaborador_id))];
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, nome")
+        .in("id", colaboradorIds);
+
+      if (profilesError) throw profilesError;
+
+      const profileMap = new Map(profiles?.map((p) => [p.id, p.nome]) ?? []);
+
+      const pendentesFormatados: AtestadoPendente[] = atestados.map((item) => ({
         id: item.id,
         colaborador_id: item.colaborador_id,
-        colaborador_nome: item.profiles?.nome || "Colaborador",
+        colaborador_nome: profileMap.get(item.colaborador_id) ?? "Colaborador",
         data_atestado: item.data_atestado,
         dias_afastamento: item.dias_afastamento,
         created_at: item.created_at,
@@ -83,25 +87,36 @@ export function AtestadosPendentesProvider({ children }: { children: ReactNode }
       console.error("[Atestados] Erro ao carregar:", error);
       setPendentes([]);
     } finally {
-      setLoading(false);
-      setInitialLoadDone(true);
+      if (isMounted.current) {
+        setLoading(false);
+        setInitialLoadDone(true);
+      }
     }
-  }, [isAdmin, user, initialLoadDone]);
+  }, [isAdmin, initialLoadDone, loading]);
 
-  // Carrega na montagem e a cada 30 segundos
+  // Carregamento inicial
   useEffect(() => {
-    if (!user) return;
+    isMounted.current = true;
+    if (user) {
+      carregarPendentes();
+    } else {
+      setLoading(false);
+    }
 
-    // Primeira carga
-    carregarPendentes();
+    return () => {
+      isMounted.current = false;
+    };
+  }, [user, carregarPendentes]);
 
-    // Intervalo
+  // Atualização periódica apenas se for admin
+  useEffect(() => {
+    if (!isAdmin || !user) return;
     const interval = setInterval(() => {
       carregarPendentes();
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [user, carregarPendentes]);
+  }, [isAdmin, user, carregarPendentes]);
 
   const totalPendentes = pendentes.length;
 
@@ -110,7 +125,7 @@ export function AtestadosPendentesProvider({ children }: { children: ReactNode }
       value={{
         pendentes,
         totalPendentes,
-        loading: loading && !initialLoadDone, // Só mostra loading na primeira vez
+        loading,
         showNotification,
         setShowNotification,
         carregarPendentes,
@@ -122,5 +137,9 @@ export function AtestadosPendentesProvider({ children }: { children: ReactNode }
 }
 
 export function useAtestadosPendentes() {
-  return useContext(AtestadosPendentesContext);
+  const context = useContext(AtestadosPendentesContext);
+  if (context === undefined) {
+    throw new Error("useAtestadosPendentes deve ser usado dentro de um AtestadosPendentesProvider");
+  }
+  return context;
 }
