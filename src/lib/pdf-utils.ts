@@ -1,12 +1,24 @@
 import * as pdfjsLib from "pdfjs-dist";
 import { PDFDocument } from "pdf-lib";
 
-// Configura o worker com arquivo local
-const workerUrl = new URL(
-  "pdfjs-dist/build/pdf.worker.min.js",
-  import.meta.url
-).toString();
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+// 🔥 Configuração do worker - ESTRATÉGIA ROBUSTA
+// Tenta primeiro carregar via CDN (sempre funciona e não depende do bundler)
+// Se falhar, tenta o caminho local via import.meta.url
+try {
+  // Opção 1: CDN (recomendado para desenvolvimento e produção)
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+} catch (e) {
+  // Opção 2: fallback para o caminho local (pode ser usado em alguns bundlers)
+  try {
+    const workerUrl = new URL(
+      "pdfjs-dist/build/pdf.worker.min.js",
+      import.meta.url
+    ).toString();
+    pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+  } catch (e2) {
+    console.warn("⚠️ Não foi possível configurar o worker do PDF.js. Verifique se o arquivo pdf.worker.min.js está disponível.", e2);
+  }
+}
 
 export interface PageText {
   pageNumber: number;
@@ -55,12 +67,12 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
     canvas.width = viewport.width;
     canvas.height = viewport.height;
 
-    // 🔥 CORREÇÃO: usar ambos os campos para compatibilidade com diferentes versões do pdf.js
+    // 🔥 CORREÇÃO: Usar apenas 'canvasContext' (campo padrão em versões recentes)
+    // O campo 'canvas' é obsoleto, mas mantido para compatibilidade.
     await page.render({
-      canvas: canvas,
       canvasContext: context,
       viewport: viewport,
-    } as any).promise;
+    }).promise;
 
     const dataUrl = canvas.toDataURL("image/png");
     console.log("✅ Imagem renderizada com sucesso");
@@ -87,7 +99,6 @@ export const extractSinglePageAsBlob = async (
     const newPdfBytes = await newPdf.save();
     console.log("✅ Página extraída com sucesso");
     
-    // 🔥 CORREÇÃO: converter para Uint8Array antes de criar o Blob
     const uint8Array = new Uint8Array(newPdfBytes);
     return new Blob([uint8Array], { type: "application/pdf" });
   } catch (error) {
