@@ -1,8 +1,7 @@
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Star, Loader2, StarOff } from "lucide-react";
+import { Star, Loader2 } from "lucide-react";
 import { useFavoritos } from "@/lib/useFavoritos";
-import { Button } from "@/components/ui/button";
 import {
   Users,
   Briefcase,
@@ -39,7 +38,7 @@ const iconMap: Record<string, any> = {
 };
 
 export function FavoritosGrid() {
-  const { favoritos, loading, removerFavorito } = useFavoritos();
+  const { favoritos, loading } = useFavoritos();
 
   if (loading) {
     return (
@@ -89,28 +88,18 @@ export function FavoritosGrid() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {favoritos.map((item) => {
             const IconComponent = iconMap[item.icone] || Star;
             return (
-              <div key={item.id} className="relative group">
-                <Link
-                  to={item.rota}
-                  className="block p-4 bg-card border border-border rounded-xl hover:shadow-md hover:border-primary/50 transition-all duration-200 text-center h-full"
-                >
-                  <IconComponent className="size-6 mx-auto text-primary mb-2" />
-                  <span className="text-sm font-medium line-clamp-2">{item.label}</span>
-                </Link>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute -top-2 -right-2 size-6 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 hover:text-red-500"
-                  onClick={() => removerFavorito(item.rota)}
-                  title="Remover dos favoritos"
-                >
-                  <StarOff className="size-3" />
-                </Button>
-              </div>
+              <Link
+                key={item.id}
+                to={item.rota}
+                className="block p-4 bg-card border border-border rounded-xl hover:shadow-md hover:border-primary/50 transition-all duration-200 text-center"
+              >
+                <IconComponent className="size-6 mx-auto text-primary mb-2" />
+                <span className="text-sm font-medium break-words line-clamp-2">{item.label}</span>
+              </Link>
             );
           })}
         </div>
