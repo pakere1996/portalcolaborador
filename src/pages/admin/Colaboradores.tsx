@@ -1,3 +1,5 @@
+import { FavoritarBotao } from "@/components/FavoritarBotao";
+
 <div className="flex items-center justify-between">
   <div>
     <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
