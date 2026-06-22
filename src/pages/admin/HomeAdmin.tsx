@@ -47,13 +47,13 @@ export default function AdminHomeAdminPage() {
         <p className="text-muted-foreground mt-1">Visão geral e atalhos rápidos.</p>
       </div>
 
-      {/* Grid de 2 colunas: Aniversariantes + Favoritos */}
+      {/* Grid: Aniversariantes + Favoritos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <AniversariantesWidget showMessageButton={true} maxItems={6} />
+        <AniversariantesWidget />
         <FavoritosGrid />
       </div>
 
-      {/* Card de Pendências (se houver) */}
+      {/* 🔥 Card de Pendências com Skeleton */}
       {loadingAtestados ? (
         <Card className="border-border shadow-sm">
           <CardHeader>
