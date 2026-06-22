@@ -1,7 +1,7 @@
 import * as pdfjsLib from "pdfjs-dist";
 import { PDFDocument } from "pdf-lib";
 
-// 🔥 CONFIGURAÇÃO DO WORKER – usa CDN para garantir disponibilidade
+// 🔥 CONFIGURA O WORKER PARA USAR CDN (EVITA PROBLEMAS DE IMPORTAÇÃO DINÂMICA NO VITE)
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 export interface PageText {
@@ -52,7 +52,6 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
     canvas.height = viewport.height;
 
     await page.render({
-      canvas: canvas,
       canvasContext: context,
       viewport: viewport,
     } as any).promise;
