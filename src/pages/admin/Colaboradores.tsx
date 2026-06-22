@@ -1,350 +1,506 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useAuth } from "@/lib/auth-context";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Users, Plus, Trash2, Edit, Save, X, Building, CheckCircle, XCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Plus, Users, Pencil, Trash2, Search, Key, Loader2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { formatCPF, onlyDigits, isValidCPFLength } from "@/lib/cpf";
+import { Badge } from "@/components/ui/badge"; // 🔥 IMPORT CORRIGIDO
+import { ColaboradorFormDialog } from "@/components/ColaboradorFormDialog";
 import { Tables } from "@/integrations/supabase/types";
+import { adminApi } from "@/lib/admin-api";
 
-type Profile = Tables<'profiles'>;
-type Unidade = Tables<'unidades'>;
+type Profile = Tables<'profiles'> & { role?: string | null };
+type Unidade = Tables<'unidades'> & { possui_relogio_ponto?: boolean };
+type Cargo = Tables<'cargos'>;
 
-export default function AdminColaboradores() {
-  const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [colaboradores, setColaboradores] = useState<Profile[]>([]);
+const blankEditForm = {
+  nome: "", cpf: "", matricula: "", email: "", whatsapp: "",
+  cargo: "", unidadeId: "none", folgaFixa: "none",
+  dataAdmissao: "", dataNascimento: "", perfil_acesso: "colaborador",
+  ativo: true,
+  senha: "",
+  regime_trabalho: "none",
+  dataDemissao: "",
+  tipo_vinculo: "CLT",
+  possui_folha_ponto: false,
+};
+
+export default function Colaboradores() {
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
-  const [editandoId, setEditandoId] = useState<string | null>(null);
-  const [criando, setCriando] = useState(false);
-  const [formData, setFormData] = useState<Partial<Profile>>({
-    nome: "",
-    cpf: "",
-    cargo: "Funcionário",
-    ativo: true,
-    folga_fixa_semana: null,
-    unidade_id: null,
-    tem_adiantamento_individual: false,
-  });
+  const [cargos, setCargos] = useState<Cargo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filtroUnidade, setFiltroUnidade] = useState("all");
+  const [filtroStatus, setFiltroStatus] = useState("all");
+  const [filtroCargo, setFiltroCargo] = useState("all");
 
-  const load = async () => {
+  const [openNewDialog, setOpenNewDialog] = useState(false);
+  const [newForm, setNewForm] = useState(blankEditForm);
+  const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
+  const [editForm, setEditForm] = useState(blankEditForm);
+  const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
+  const [resetPasswordDialog, setResetPasswordDialog] = useState<{ profile: Profile; senha: string; confirmar: string } | null>(null);
+
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [colRes, uniRes] = await Promise.all([
+      const [pRes, uRes, cRes] = await Promise.all([
         supabase.from("profiles").select("*").order("nome"),
-        supabase.from("unidades").select("*").order("nome"),
+        supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
+        supabase.from("cargos").select("*").eq("ativo", true).order("nome"),
       ]);
-      setColaboradores(colRes.data ?? []);
-      setUnidades(uniRes.data ?? []);
-    } catch (error) {
-      toast.error("Erro ao carregar dados");
-      console.error(error);
+
+      if (pRes.error) throw pRes.error;
+      if (uRes.error) throw uRes.error;
+      if (cRes.error) throw cRes.error;
+
+      const profileIds = (pRes.data ?? []).map(p => p.id);
+      let rolesMap = new Map<string, string[]>();
+      if (profileIds.length > 0) {
+        const { data: rolesData } = await supabase.from("user_roles").select("user_id, role").in("user_id", profileIds);
+        rolesData?.forEach(r => {
+          if (!rolesMap.has(r.user_id)) rolesMap.set(r.user_id, []);
+          rolesMap.get(r.user_id)!.push(r.role);
+        });
+      }
+
+      const profilesWithRoles = (pRes.data ?? []).map(p => ({
+        ...p,
+        role: rolesMap.get(p.id)?.[0] ?? null,
+      }));
+
+      const sortedProfiles = profilesWithRoles.sort((a, b) => {
+        const unidadeA = uRes.data?.find(u => u.id === a.unidade_id)?.nome || "";
+        const unidadeB = uRes.data?.find(u => u.id === b.unidade_id)?.nome || "";
+        if (unidadeA !== unidadeB) return unidadeA.localeCompare(unidadeB);
+        if (a.ativo !== b.ativo) return a.ativo ? -1 : 1;
+        return a.nome.localeCompare(b.nome);
+      });
+
+      setProfiles(sortedProfiles);
+      setUnidades(uRes.data ?? []);
+      setCargos(cRes.data ?? []);
+    } catch (e) {
+      console.error("Erro ao carregar dados:", e);
+      toast.error("Erro ao carregar dados", { description: (e as Error).message });
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    load();
   }, []);
 
-  const resetForm = () => {
-    setFormData({
-      nome: "",
-      cpf: "",
-      cargo: "Funcionário",
-      ativo: true,
-      folga_fixa_semana: null,
-      unidade_id: null,
-      tem_adiantamento_individual: false,
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const filteredProfiles = useMemo(() => {
+    return profiles.filter(p => {
+      const matchesSearch = p.nome.toLowerCase().includes(search.toLowerCase()) || p.cpf.includes(search.replace(/\D/g, ""));
+      const matchesUnidade = filtroUnidade === "all" || p.unidade_id === filtroUnidade;
+      const matchesStatus = filtroStatus === "all" || (filtroStatus === "ativo" ? p.ativo : !p.ativo);
+      const matchesCargo = filtroCargo === "all" || p.cargo === filtroCargo;
+      return matchesSearch && matchesUnidade && matchesStatus && matchesCargo;
     });
-    setEditandoId(null);
-    setCriando(false);
+  }, [profiles, search, filtroUnidade, filtroStatus, filtroCargo]);
+
+  const uniqueCargos = useMemo(() => {
+    return [...new Set(profiles.map(p => p.cargo).filter(Boolean))];
+  }, [profiles]);
+
+  const toUpperCaseTrim = (str: string) => str.trim().toUpperCase();
+
+  const validateForm = (form: any) => {
+    const errors: string[] = [];
+    if (!form.nome?.trim()) errors.push("Nome");
+    if (!form.cpf?.trim() || !isValidCPFLength(onlyDigits(form.cpf))) errors.push("CPF");
+    if (!form.cargo?.trim()) errors.push("Cargo");
+    if (!form.unidadeId || form.unidadeId === "none") errors.push("Unidade");
+    if (!form.dataAdmissao) errors.push("Data de Admissão");
+    if (!form.dataNascimento) errors.push("Data de Nascimento");
+    return errors;
   };
 
-  const handleSave = async () => {
-    if (!formData.nome?.trim()) {
-      toast.error("Nome é obrigatório");
-      return;
-    }
-    if (!formData.cpf?.trim()) {
-      toast.error("CPF é obrigatório");
-      return;
-    }
-    if (!formData.unidade_id) {
-      toast.error("Selecione uma unidade");
+  const handleCreate = async () => {
+    const errors = validateForm(newForm);
+    if (errors.length > 0) {
+      toast.error("Campos obrigatórios pendentes", {
+        description: `Preencha: ${errors.join(", ")}`,
+        duration: 5000,
+      });
       return;
     }
 
+    setBusy(true);
     try {
-      if (editandoId) {
-        const { error } = await supabase
-          .from("profiles")
-          .update({
-            nome: formData.nome,
-            cpf: formData.cpf,
-            cargo: formData.cargo || "Funcionário",
-            ativo: formData.ativo,
-            folga_fixa_semana: formData.folga_fixa_semana || null,
-            unidade_id: formData.unidade_id,
-            tem_adiantamento_individual: formData.tem_adiantamento_individual || false,
-          })
-          .eq("id", editandoId);
-        if (error) throw error;
-        toast.success("Colaborador atualizado");
-      } else {
-        toast.warning("Criação de novo colaborador requer que o usuário já exista no Auth.");
-        return;
+      const cleanCpf = onlyDigits(newForm.cpf);
+      if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
+
+      const { data: authUser, error: authErr } = await adminApi.createUser({
+        nome: toUpperCaseTrim(newForm.nome),
+        cpf: cleanCpf,
+        email: newForm.email.trim().toLowerCase() || `${cleanCpf}@pakere.com.br`,
+        senha: newForm.senha || cleanCpf.slice(-6),
+        cargo: toUpperCaseTrim(newForm.cargo),
+        dataAdmissao: newForm.dataAdmissao || null,
+        dataNascimento: newForm.dataNascimento || null,
+        folgaFixaSemana: newForm.folgaFixa === "none" ? null : Number(newForm.folgaFixa),
+        role: newForm.perfil_acesso,
+      });
+
+      if (authErr) throw authErr;
+
+      const unidadeSelecionada = unidades.find(u => u.id === newForm.unidadeId);
+      const possuiFolhaPontoDefault = unidadeSelecionada?.possui_relogio_ponto || false;
+
+      const { error: profErr } = await supabase.from("profiles").update({
+        matricula: toUpperCaseTrim(newForm.matricula) || null,
+        whatsapp: newForm.whatsapp.trim() || null,
+        unidade_id: newForm.unidadeId === "none" ? null : newForm.unidadeId,
+        ativo: true,
+        regime_trabalho: newForm.regime_trabalho === "none" ? null : newForm.regime_trabalho,
+        data_demissao: newForm.dataDemissao || null,
+        tipo_vinculo: newForm.tipo_vinculo || "CLT",
+        possui_folha_ponto: newForm.possui_folha_ponto !== undefined ? newForm.possui_folha_ponto : possuiFolhaPontoDefault,
+      }).eq("id", authUser.userId);
+
+      if (profErr) throw profErr;
+
+      toast.success("Colaborador criado com sucesso!");
+      setOpenNewDialog(false);
+      setNewForm(blankEditForm);
+      loadData();
+    } catch (e) {
+      toast.error("Erro ao criar colaborador", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openEdit = (p: Profile) => {
+    setEditingProfile(p);
+    setEditForm({
+      nome: p.nome,
+      cpf: formatCPF(p.cpf),
+      matricula: p.matricula ?? "",
+      email: p.email_contato ?? "",
+      whatsapp: p.whatsapp ?? "",
+      cargo: p.cargo,
+      unidadeId: p.unidade_id ?? "none",
+      folgaFixa: p.folga_fixa_semana?.toString() ?? "none",
+      dataNascimento: p.data_nascimento ?? "",
+      dataAdmissao: p.data_admissao ?? "",
+      perfil_acesso: p.role ?? "colaborador",
+      ativo: p.ativo,
+      senha: "",
+      regime_trabalho: p.regime_trabalho ?? "none",
+      dataDemissao: (p as any).data_demissao ?? "",
+      tipo_vinculo: (p as any).tipo_vinculo ?? "CLT",
+      possui_folha_ponto: (p as any).possui_folha_ponto ?? false,
+    });
+  };
+
+  const handleUpdate = async () => {
+    const errors = validateForm(editForm);
+    if (errors.length > 0) {
+      toast.error("Campos obrigatórios pendentes", {
+        description: `Preencha: ${errors.join(", ")}`,
+        duration: 5000,
+      });
+      return;
+    }
+
+    if (!editingProfile) return;
+    setBusy(true);
+    try {
+      const cleanCpf = onlyDigits(editForm.cpf);
+      if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
+
+      const dataAdmissao = editForm.dataAdmissao || null;
+      const dataNascimento = editForm.dataNascimento || null;
+      const dataDemissao = editForm.dataDemissao || null;
+
+      const { error: profErr } = await supabase.from("profiles").update({
+        nome: toUpperCaseTrim(editForm.nome),
+        cpf: cleanCpf,
+        matricula: toUpperCaseTrim(editForm.matricula) || null,
+        email_contato: editForm.email.trim().toLowerCase() || null,
+        whatsapp: editForm.whatsapp.trim() || null,
+        cargo: toUpperCaseTrim(editForm.cargo),
+        unidade_id: editForm.unidadeId === "none" ? null : editForm.unidadeId,
+        folga_fixa_semana: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa),
+        data_nascimento: dataNascimento,
+        data_admissao: dataAdmissao,
+        ativo: editForm.ativo,
+        updated_at: new Date().toISOString(),
+        regime_trabalho: editForm.regime_trabalho === "none" ? null : editForm.regime_trabalho,
+        data_demissao: dataDemissao,
+        tipo_vinculo: editForm.tipo_vinculo || "CLT",
+        possui_folha_ponto: editForm.possui_folha_ponto ?? false,
+      }).eq("id", editingProfile.id);
+
+      if (profErr) throw profErr;
+
+      const currentRole = editingProfile.role;
+      const newRole = editForm.perfil_acesso;
+      if (currentRole !== newRole) {
+        if (currentRole) {
+          await supabase.from("user_roles").delete().eq("user_id", editingProfile.id).eq("role", currentRole);
+        }
+        await supabase.from("user_roles").upsert({ user_id: editingProfile.id, role: newRole }, { onConflict: "user_id,role" });
       }
-      resetForm();
-      load();
-    } catch (error) {
-      toast.error("Erro ao salvar", { description: (error as Error).message });
-      console.error(error);
+
+      toast.success("Colaborador atualizado!");
+      setEditingProfile(null);
+      loadData();
+    } catch (e) {
+      toast.error("Erro ao atualizar", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Tem certeza que deseja desativar este colaborador?")) return;
+  const doDelete = async () => {
+    if (!confirmDelete) return;
+    setBusy(true);
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ ativo: false })
-        .eq("id", id);
-      if (error) throw error;
-      toast.success("Colaborador desativado");
-      load();
-    } catch (error) {
-      toast.error("Erro ao desativar", { description: (error as Error).message });
+      await adminApi.deleteUser(confirmDelete.id);
+      toast.success("Colaborador excluído.");
+      setConfirmDelete(null);
+      loadData();
+    } catch (e) {
+      toast.error("Erro ao excluir", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
     }
   };
 
-  const startEdit = (col: Profile) => {
-    setEditandoId(col.id);
-    setFormData({
-      nome: col.nome,
-      cpf: col.cpf,
-      cargo: col.cargo || "Funcionário",
-      ativo: col.ativo,
-      folga_fixa_semana: col.folga_fixa_semana,
-      unidade_id: col.unidade_id,
-      tem_adiantamento_individual: col.tem_adiantamento_individual || false,
-    });
-    setCriando(false);
+  const openResetPassword = (p: Profile) => {
+    setResetPasswordDialog({ profile: p, senha: "", confirmar: "" });
   };
 
-  const unidadeSelecionada = unidades.find(u => u.id === formData.unidade_id);
+  const doResetPassword = async () => {
+    if (!resetPasswordDialog) return;
+    if (resetPasswordDialog.senha !== resetPasswordDialog.confirmar) return toast.error("As senhas não conferem");
+    if (resetPasswordDialog.senha.length < 6) return toast.error("Senha deve ter pelo menos 6 caracteres");
+    setBusy(true);
+    try {
+      await adminApi.resetPassword(resetPasswordDialog.profile.id, resetPasswordDialog.senha);
+      toast.success("Senha redefinida com sucesso!");
+      setResetPasswordDialog(null);
+    } catch (e) {
+      toast.error("Erro ao redefinir senha", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between flex-wrap gap-4">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
             <Users className="size-6 text-primary" /> Colaboradores
           </h1>
-          <p className="text-muted-foreground mt-1">Gerencie os colaboradores e suas permissões.</p>
+          <p className="text-muted-foreground mt-1">Gerencie a equipe, cargos e acessos ao sistema.</p>
         </div>
-        <Button onClick={() => { resetForm(); setCriando(true); }}>
-          <Plus className="size-4 mr-2" /> Novo Colaborador
-        </Button>
+        <Dialog open={openNewDialog} onOpenChange={setOpenNewDialog}>
+          <DialogTrigger asChild>
+            <Button className="rounded-full px-6"><Plus className="size-4 mr-2" /> Novo Colaborador</Button>
+          </DialogTrigger>
+          <ColaboradorFormDialog
+            open={openNewDialog}
+            onOpenChange={setOpenNewDialog}
+            form={newForm}
+            setForm={setNewForm}
+            unidades={unidades}
+            cargos={cargos}
+            busy={busy}
+            isEdit={false}
+            onSave={handleCreate}
+          />
+        </Dialog>
       </div>
 
-      {(criando || editandoId) && (
-        <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">
-              {editandoId ? "Editar Colaborador" : "Novo Colaborador"}
-            </h2>
-            <Button variant="ghost" size="icon" onClick={resetForm}>
-              <X className="size-4" />
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="nome">Nome *</Label>
-              <Input
-                id="nome"
-                value={formData.nome || ""}
-                onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="cpf">CPF *</Label>
-              <Input
-                id="cpf"
-                value={formData.cpf || ""}
-                onChange={(e) => setFormData({ ...formData, cpf: e.target.value })}
-                placeholder="000.000.000-00"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="cargo">Cargo</Label>
-              <Input
-                id="cargo"
-                value={formData.cargo || ""}
-                onChange={(e) => setFormData({ ...formData, cargo: e.target.value })}
-                placeholder="Funcionário"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="unidade">Unidade *</Label>
-              <Select
-                value={formData.unidade_id || ""}
-                onValueChange={(value) => setFormData({ ...formData, unidade_id: value, tem_adiantamento_individual: false })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  {unidades.map(u => (
-                    <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="folga_fixa_semana">Dia da folga fixa (semanal)</Label>
-              <Select
-                value={formData.folga_fixa_semana?.toString() || ""}
-                onValueChange={(value) => setFormData({ ...formData, folga_fixa_semana: value ? parseInt(value) : null })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Nenhum</SelectItem>
-                  <SelectItem value="1">Segunda-feira</SelectItem>
-                  <SelectItem value="2">Terça-feira</SelectItem>
-                  <SelectItem value="3">Quarta-feira</SelectItem>
-                  <SelectItem value="4">Quinta-feira</SelectItem>
-                  <SelectItem value="5">Sexta-feira</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="ativo">Status</Label>
-              <div className="flex items-center gap-3 pt-1">
-                <Switch
-                  id="ativo"
-                  checked={formData.ativo !== false}
-                  onCheckedChange={(checked) => setFormData({ ...formData, ativo: checked })}
-                />
-                <span className="text-sm text-muted-foreground">
-                  {formData.ativo !== false ? "Ativo" : "Inativo"}
-                </span>
-              </div>
-            </div>
-
-            {unidadeSelecionada?.tem_adiantamento && (
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="tem_adiantamento_individual">Tem direito a adiantamento quinzenal?</Label>
-                <div className="flex items-center gap-3 pt-1">
-                  <Switch
-                    id="tem_adiantamento_individual"
-                    checked={formData.tem_adiantamento_individual || false}
-                    onCheckedChange={(checked) => setFormData({ ...formData, tem_adiantamento_individual: checked })}
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    {formData.tem_adiantamento_individual ? "Sim" : "Não"}
-                  </span>
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  A unidade <b>{unidadeSelecionada?.nome}</b> oferece adiantamento no dia {unidadeSelecionada?.dia_adiantamento}.
-                  Habilite se este colaborador tem direito.
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex gap-3">
-            <Button onClick={handleSave}>
-              <Save className="size-4 mr-2" /> {editandoId ? "Atualizar" : "Criar"}
-            </Button>
-            <Button variant="ghost" onClick={resetForm}>Cancelar</Button>
+      <div className="bg-card border border-border rounded-2xl p-4 flex flex-wrap gap-4 items-end">
+        <div className="space-y-2 flex-1 min-w-[200px]">
+          <Label className="text-xs font-bold uppercase text-muted-foreground">Buscar</Label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              placeholder="Nome ou CPF..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+            />
           </div>
         </div>
-      )}
+        <div className="space-y-2">
+          <Label className="text-xs font-bold uppercase text-muted-foreground">Unidade</Label>
+          <select value={filtroUnidade} onChange={(e) => setFiltroUnidade(e.target.value)} className="bg-input border border-border rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary w-[200px]">
+            <option value="all">Todas</option>
+            {unidades.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs font-bold uppercase text-muted-foreground">Status</Label>
+          <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} className="bg-input border border-border rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary w-[160px]">
+            <option value="all">Todos</option>
+            <option value="ativo">Ativos</option>
+            <option value="inativo">Inativos</option>
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs font-bold uppercase text-muted-foreground">Cargo</Label>
+          <select value={filtroCargo} onChange={(e) => setFiltroCargo(e.target.value)} className="bg-input border border-border rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary w-[200px]">
+            <option value="all">Todos</option>
+            {uniqueCargos.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+      </div>
 
-      <div className="bg-card border border-border rounded-2xl overflow-hidden">
+      <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
         {loading ? (
-          <div className="p-8 text-center text-muted-foreground">Carregando...</div>
-        ) : colaboradores.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground">Nenhum colaborador cadastrado.</div>
+          <div className="p-12 text-center text-muted-foreground">
+            <Loader2 className="size-8 animate-spin mx-auto mb-2 text-primary" />
+            Carregando colaboradores...
+          </div>
+        ) : filteredProfiles.length === 0 ? (
+          <div className="p-12 text-center text-muted-foreground">Nenhum colaborador encontrado.</div>
         ) : (
-          <div className="divide-y divide-border">
-            {colaboradores.map((col) => {
-              const unidade = unidades.find(u => u.id === col.unidade_id);
-              return (
-                <div key={col.id} className="p-4 flex flex-wrap items-center justify-between gap-4 hover:bg-muted/10">
-                  <div className="flex items-center gap-4 flex-1 min-w-[200px]">
-                    <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                      <Users className="size-5 text-primary" />
-                    </div>
-                    <div>
-                      <div className="font-semibold flex items-center gap-2">
-                        {col.nome}
-                        {col.ativo ? (
-                          <CheckCircle className="size-4 text-emerald-500" />
-                        ) : (
-                          <XCircle className="size-4 text-rose-500" />
-                        )}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-muted-foreground border-b border-border">
+                <tr>
+                  <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Colaborador</th>
+                  <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">CPF</th>
+                  <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">Cargo</th>
+                  <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden xl:table-cell">Unidade</th>
+                  <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Vínculo</th>
+                  <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
+                  <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Perfil</th>
+                  <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Folha Ponto</th>
+                  <th className="text-right p-4 font-bold uppercase tracking-wider text-[10px]">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredProfiles.map((p) => (
+                  <tr key={p.id} className={p.ativo ? "" : "opacity-50"}>
+                    <td className="p-4 font-medium">{p.nome}</td>
+                    <td className="p-4 hidden md:table-cell font-mono text-xs">{formatCPF(p.cpf)}</td>
+                    <td className="p-4 hidden lg:table-cell text-muted-foreground">{p.cargo}</td>
+                    <td className="p-4 hidden xl:table-cell text-muted-foreground">
+                      {unidades.find(u => u.id === p.unidade_id)?.nome ?? "—"}
+                    </td>
+                    <td className="p-4 text-center">
+                      <Badge className={(p as any).tipo_vinculo === "Socio" ? "bg-purple-100 text-purple-700 border-purple-200" : "bg-blue-100 text-blue-700 border-blue-200"}>
+                        {(p as any).tipo_vinculo === "Socio" ? "Sócio" : "CLT"}
+                      </Badge>
+                    </td>
+                    <td className="p-4 text-center">
+                      <Switch checked={p.ativo} onCheckedChange={async (checked) => {
+                        await supabase.from("profiles").update({ ativo: checked, updated_at: new Date().toISOString() }).eq("id", p.id);
+                        loadData();
+                      }} disabled={busy} />
+                    </td>
+                    <td className="p-4 text-center">
+                      <Badge className={p.role === "admin" ? "bg-primary/10 text-primary border-primary/20" : "bg-muted text-muted-foreground border-border"}>
+                        {p.role === "admin" ? "Admin" : "Colaborador"}
+                      </Badge>
+                    </td>
+                    <td className="p-4 text-center">
+                      {(p as any).possui_folha_ponto ? (
+                        <Badge className="bg-green-100 text-green-700 border-green-200">Sim</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">Não</Badge>
+                      )}
+                    </td>
+                    <td className="p-4 text-right whitespace-nowrap">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={() => openEdit(p)}>
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="size-8" title="Redefinir Senha" onClick={() => openResetPassword(p)}>
+                          <Key className="size-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="size-8 text-destructive hover:bg-destructive/10" title="Excluir" onClick={() => setConfirmDelete(p)}>
+                          <Trash2 className="size-4" />
+                        </Button>
                       </div>
-                      <div className="text-sm text-muted-foreground flex items-center gap-3 flex-wrap">
-                        <span>{col.cpf}</span>
-                        <span>•</span>
-                        <span>{col.cargo || "Funcionário"}</span>
-                        {unidade && <span>• {unidade.nome}</span>}
-                        {col.tem_adiantamento_individual && (
-                          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
-                            Adiantamento
-                          </Badge>
-                        )}
-                        {col.folga_fixa_semana !== null && (
-                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                            Folga: {["Seg", "Ter", "Qua", "Qui", "Sex"][col.folga_fixa_semana - 1]}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="ghost" size="icon" onClick={() => startEdit(col)}>
-                      <Edit className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive hover:bg-destructive/10"
-                      onClick={() => handleDelete(col.id)}
-                      disabled={!col.ativo}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
+
+      <ColaboradorFormDialog
+        open={!!editingProfile}
+        onOpenChange={(open) => { if (!open) setEditingProfile(null); }}
+        form={editForm}
+        setForm={setEditForm}
+        unidades={unidades}
+        cargos={cargos}
+        busy={busy}
+        isEdit={true}
+        onSave={handleUpdate}
+      />
+
+      <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {confirmDelete?.nome}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação é irreversível. O usuário será removido do Auth e o perfil será excluído.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={doDelete} className="bg-red-600 text-white hover:bg-red-700" disabled={busy}>
+              {busy ? "Excluindo..." : "Excluir Permanentemente"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!resetPasswordDialog} onOpenChange={(o) => !o && setResetPasswordDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Redefinir senha de {resetPasswordDialog?.profile.nome}</AlertDialogTitle>
+            <AlertDialogDescription>
+              A nova senha será aplicada imediatamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="nova-senha">Nova Senha</Label>
+              <Input id="nova-senha" type="password" value={resetPasswordDialog?.senha} onChange={(e) => setResetPasswordDialog({ ...resetPasswordDialog!, senha: e.target.value })} placeholder="Mínimo 6 caracteres" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmar-senha">Confirmar Senha</Label>
+              <Input id="confirmar-senha" type="password" value={resetPasswordDialog?.confirmar} onChange={(e) => setResetPasswordDialog({ ...resetPasswordDialog!, confirmar: e.target.value })} placeholder="Repita a senha" />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={doResetPassword} className="bg-primary text-white hover:bg-primary/90" disabled={busy}>
+              {busy ? "Salvando..." : "Redefinir Senha"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
