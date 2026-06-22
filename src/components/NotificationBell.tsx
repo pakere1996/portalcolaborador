@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ export function NotificationBell() {
   const { totalPendentes, carregarPendentes } = useAtestadosPendentes();
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
   const [loading, setLoading] = useState(false);
+  const hasFetched = useRef(false);
 
   const carregarNotificacoes = async () => {
     if (!user) return;
@@ -50,12 +51,17 @@ export function NotificationBell() {
   };
 
   useEffect(() => {
+    if (!user?.id || hasFetched.current) return;
+    hasFetched.current = true;
+
     carregarNotificacoes();
+
     const interval = setInterval(() => {
       carregarPendentes();
     }, 30000);
+
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user?.id]);
 
   const marcarComoLida = async (id: string) => {
     const { error } = await supabase
