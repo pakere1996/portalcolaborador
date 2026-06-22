@@ -17,7 +17,7 @@ interface AtestadosPendentesContextType {
   loading: boolean;
   showNotification: boolean;
   setShowNotification: (show: boolean) => void;
-  reload: () => Promise<void>;
+  carregarPendentes: () => Promise<void>;
 }
 
 const AtestadosPendentesContext = createContext<AtestadosPendentesContextType>({
@@ -26,19 +26,18 @@ const AtestadosPendentesContext = createContext<AtestadosPendentesContextType>({
   loading: true,
   showNotification: false,
   setShowNotification: () => {},
-  reload: async () => {},
+  carregarPendentes: async () => {},
 });
 
 export function AtestadosPendentesProvider({ children }: { children: ReactNode }) {
-  const { role, user } = useAuth();
+  const { role } = useAuth();
   const [pendentes, setPendentes] = useState<AtestadoPendente[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNotification, setShowNotification] = useState(false);
 
   const isAdmin = role === "admin" || localStorage.getItem("user_role") === "admin";
 
-  const load = useCallback(async () => {
-    // Se não for admin, não carrega nada
+  const carregarPendentes = useCallback(async () => {
     if (!isAdmin) {
       setPendentes([]);
       setLoading(false);
@@ -88,26 +87,23 @@ export function AtestadosPendentesProvider({ children }: { children: ReactNode }
     }
   }, [isAdmin]);
 
-  // Carregamento inicial e recarga a cada 30 segundos
   useEffect(() => {
-    load();
-    const interval = setInterval(load, 30000);
+    carregarPendentes();
+    const interval = setInterval(carregarPendentes, 30000);
     return () => clearInterval(interval);
-  }, [load]);
+  }, [carregarPendentes]);
 
   const totalPendentes = pendentes.length;
 
   return (
-    <AtestadosPendentesContext.Provider
-      value={{
-        pendentes,
-        totalPendentes,
-        loading,
-        showNotification,
-        setShowNotification,
-        reload: load,
-      }}
-    >
+    <AtestadosPendentesContext.Provider value={{
+      pendentes,
+      totalPendentes,
+      loading,
+      showNotification,
+      setShowNotification,
+      carregarPendentes,
+    }}>
       {children}
     </AtestadosPendentesContext.Provider>
   );
