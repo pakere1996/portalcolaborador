@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 
@@ -30,61 +30,56 @@ const AtestadosPendentesContext = createContext<AtestadosPendentesContextType>({
 });
 
 export function AtestadosPendentesProvider({ children }: { children: ReactNode }) {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const [pendentes, setPendentes] = useState<AtestadoPendente[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNotification, setShowNotification] = useState(false);
+  const hasLoaded = useRef(false);
+  const isMounted = useRef(true);
 
   const isAdmin = role === "admin" || localStorage.getItem("user_role") === "admin";
 
   const carregarPendentes = useCallback(async () => {
-    console.log("[Atestados] Iniciando carregamento...");
-    
+    // Se o componente foi desmontado, não faz nada
+    if (!isMounted.current) return;
+
+    // Se não for admin, define loading como false e sai
     if (!isAdmin) {
-      console.log("[Atestados] Usuário não é admin, definindo loading false");
       setPendentes([]);
       setLoading(false);
+      hasLoaded.current = true;
       return;
     }
 
+    // Evita múltiplas chamadas simultâneas
+    if (loading && hasLoaded.current) return;
+
     setLoading(true);
     try {
-      console.log("[Atestados] Buscando atestados pendentes no Supabase...");
       const { data: atestados, error: atestadosError } = await supabase
         .from("atestados")
         .select("id, colaborador_id, data_atestado, dias_afastamento, created_at")
         .eq("status", "pendente")
         .order("created_at", { ascending: false });
 
-      if (atestadosError) {
-        console.error("[Atestados] Erro na consulta de atestados:", atestadosError);
-        throw atestadosError;
-      }
-
-      console.log(`[Atestados] Encontrados ${atestados?.length || 0} atestados pendentes`);
+      if (atestadosError) throw atestadosError;
 
       if (!atestados || atestados.length === 0) {
-        console.log("[Atestados] Nenhum atestado pendente, definindo lista vazia");
         setPendentes([]);
         setLoading(false);
+        hasLoaded.current = true;
         return;
       }
 
       const colaboradorIds = [...new Set(atestados.map((a) => a.colaborador_id))];
-      console.log(`[Atestados] Buscando perfis para ${colaboradorIds.length} colaboradores`);
-      
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
         .select("id, nome")
         .in("id", colaboradorIds);
 
-      if (profilesError) {
-        console.error("[Atestados] Erro ao buscar perfis:", profilesError);
-        throw profilesError;
-      }
+      if (profilesError) throw profilesError;
 
       const profileMap = new Map(profiles?.map((p) => [p.id, p.nome]) ?? []);
-      console.log(`[Atestados] Mapeamento de nomes criado, ${profileMap.size} perfis encontrados`);
 
       const pendentesFormatados: AtestadoPendente[] = atestados.map((item) => ({
         id: item.id,
@@ -96,42 +91,58 @@ export function AtestadosPendentesProvider({ children }: { children: ReactNode }
       }));
 
       setPendentes(pendentesFormatados);
-      console.log(`[Atestados] ${pendentesFormatados.length} atestados formatados e salvos`);
     } catch (error) {
-      console.error("[Atestados] Erro geral no carregamento:", error);
+      console.error("[Atestados] Erro ao carregar:", error);
       setPendentes([]);
     } finally {
-      console.log("[Atestados] Finalizando carregamento, setLoading(false)");
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+        hasLoaded.current = true;
+      }
     }
-  }, [isAdmin]);
+  }, [isAdmin, loading]);
 
+  // Efeito para carregar na montagem e a cada 30s
   useEffect(() => {
-    console.log("[Atestados] useEffect montado, chamando carregarPendentes");
+    isMounted.current = true;
+    hasLoaded.current = false;
+
+    // Só carrega se o usuário estiver autenticado
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    // Carrega imediatamente
     carregarPendentes();
 
-    const interval = setInterval(() => {
-      console.log("[Atestados] Intervalo de 30s: recarregando...");
-      carregarPendentes();
-    }, 30000);
+    // Intervalo apenas se for admin
+    let interval: NodeJS.Timeout | null = null;
+    if (isAdmin) {
+      interval = setInterval(() => {
+        carregarPendentes();
+      }, 30000);
+    }
 
     return () => {
-      console.log("[Atestados] Desmontando, limpando intervalo");
-      clearInterval(interval);
+      isMounted.current = false;
+      if (interval) clearInterval(interval);
     };
-  }, []); // ⬅️ Array vazio para rodar apenas na montagem
+  }, [user, isAdmin, carregarPendentes]);
 
   const totalPendentes = pendentes.length;
 
   return (
-    <AtestadosPendentesContext.Provider value={{
-      pendentes,
-      totalPendentes,
-      loading,
-      showNotification,
-      setShowNotification,
-      carregarPendentes,
-    }}>
+    <AtestadosPendentesContext.Provider
+      value={{
+        pendentes,
+        totalPendentes,
+        loading,
+        showNotification,
+        setShowNotification,
+        carregarPendentes,
+      }}
+    >
       {children}
     </AtestadosPendentesContext.Provider>
   );
