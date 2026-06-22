@@ -1,18 +1,10 @@
 import * as pdfjsLib from "pdfjs-dist";
 import { PDFDocument } from "pdf-lib";
 
-// 🔥 Configuração do worker usando import com ?url (funciona no Vite)
-// @ts-ignore - O Vite resolve o ?url
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.js?url";
-
-// Configura o worker com a URL gerada pelo Vite
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
-
-// Fallback caso o import falhe (opcional)
-if (!workerUrl) {
-  console.warn("⚠️ Fallback: usando CDN para worker do PDF.js");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-}
+// 🔥 Configuração do worker VIA CDN - SEM importações locais
+// Usa a mesma versão do pacote instalado para garantir compatibilidade
+const version = pdfjsLib.version || "4.0.379"; // fallback
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.js`;
 
 export interface PageText {
   pageNumber: number;
@@ -61,6 +53,7 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
     canvas.width = viewport.width;
     canvas.height = viewport.height;
 
+    // Renderiza com canvasContext (campo padrão em versões recentes)
     await page.render({
       canvasContext: context,
       viewport: viewport,
