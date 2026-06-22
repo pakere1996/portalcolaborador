@@ -20,6 +20,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -30,7 +31,7 @@ import { toast } from "sonner";
 interface Documento {
   id: string;
   colaborador_id: string;
-  tipo: string; // "contracheque" ou "ponto"
+  tipo: string;
   mes: number;
   ano: number;
   storage_path: string;
@@ -94,6 +95,10 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
 
   const [selectedDoc, setSelectedDoc] = useState<Documento | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+
+  // 🔥 Estado para pré-visualização
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const [excluirDialogOpen, setExcluirDialogOpen] = useState(false);
   const [documentoParaExcluir, setDocumentoParaExcluir] = useState<Documento | null>(null);
@@ -182,12 +187,15 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
     }
   }, []);
 
-  const handleVisualizar = useCallback(async (doc: Documento) => {
+  // 🔥 Função de pré-visualização (igual à do colaborador)
+  const handlePreview = useCallback(async (doc: Documento) => {
+    setSelectedDoc(doc);
     const { data } = await supabase.storage
       .from("documentos")
       .createSignedUrl(doc.storage_path, 60);
     if (data?.signedUrl) {
-      window.open(data.signedUrl, "_blank");
+      setPreviewUrl(data.signedUrl);
+      setPreviewOpen(true);
     } else {
       toast.error("Erro ao gerar link de visualização");
     }
@@ -263,6 +271,12 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
       setExcluindo(false);
     }
   }, [documentoParaExcluir, load]);
+
+  const getTipoLabel = (tipo: string) => {
+    if (tipo === "contracheque") return "Contracheque";
+    if (tipo === "ponto") return "Folha de Ponto";
+    return tipo;
+  };
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -415,6 +429,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                         )}
                       </div>
                       <div className="flex gap-1 shrink-0">
+                        {/* 🔥 Botão Visualizar */}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -422,7 +437,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                           title="Visualizar"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleVisualizar(doc);
+                            handlePreview(doc);
                           }}
                         >
                           <Eye className="size-4" />
@@ -555,12 +570,13 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                         </td>
                         <td className="p-4 text-right whitespace-nowrap">
                           <div className="flex justify-end gap-1">
+                            {/* 🔥 Botão Visualizar */}
                             <Button
                               variant="ghost"
                               size="icon"
                               className="size-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50"
                               title="Visualizar"
-                              onClick={() => handleVisualizar(doc)}
+                              onClick={() => handlePreview(doc)}
                             >
                               <Eye className="size-4" />
                             </Button>
@@ -602,6 +618,45 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
           )}
         </div>
       )}
+
+      {/* 🔥 Dialog de visualização (igual ao do colaborador) */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Visualização do Documento</DialogTitle>
+            <DialogDescription>
+              {selectedDoc
+                ? `${getTipoLabel(selectedDoc.tipo)} - ${String(selectedDoc.mes).padStart(2, "0")}/${selectedDoc.ano}`
+                : "Documento"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 min-h-[500px] bg-muted/20 rounded-lg overflow-hidden">
+            {previewUrl ? (
+              <iframe
+                src={previewUrl}
+                className="w-full h-[600px] border-0"
+                title="Visualização do documento"
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                Carregando visualização...
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewOpen(false)}>
+              Fechar
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedDoc) handleDownload(selectedDoc);
+              }}
+            >
+              <Download className="size-4 mr-1" /> Baixar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isDetailOpen} onOpenChange={(o) => !o && setIsDetailOpen(false)}>
         <DialogContent className="max-w-md rounded-2xl">
@@ -656,8 +711,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                   size="sm"
                   className="flex-1"
                   onClick={() => {
-                    handleVisualizar(selectedDoc);
-                    setIsDetailOpen(false);
+                    if (selectedDoc) handlePreview(selectedDoc);
                   }}
                 >
                   <Eye className="size-4 mr-1" /> Visualizar
@@ -667,7 +721,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                   size="sm"
                   className="flex-1"
                   onClick={() => {
-                    handleDownload(selectedDoc);
+                    if (selectedDoc) handleDownload(selectedDoc);
                     setIsDetailOpen(false);
                   }}
                 >
