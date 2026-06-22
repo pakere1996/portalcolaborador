@@ -1,11 +1,11 @@
-<div className="flex items-center justify-between">
+<div className="flex items-center justify-between flex-wrap gap-3">
   <div>
     <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-      <Users className="size-6 text-primary" /> Colaboradores
+      <Ícone className="size-6 text-primary" /> Título da Página
     </h1>
-    <p className="text-muted-foreground mt-1">Gerencie perfis, cargos e status de colaboradores.</p>
+    <p className="text-muted-foreground mt-1">Descrição da página.</p>
   </div>
-  <FavoritarBotao rota="/admin/colaboradores" label="Colaboradores" icone="Users" />
+  <FavoritarBotao rota="/rota-da-pagina" label="Nome do Favorito" icone="NomeDoIcone" />
 </div>
 
 import { FavoritarBotao } from "@/components/FavoritarBotao";
