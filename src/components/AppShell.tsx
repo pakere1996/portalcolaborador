@@ -20,7 +20,7 @@ import {
   Briefcase,
   Building2,
   ShieldAlert,
-  MessageSquare,
+  Megaphone,
   Bell,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
