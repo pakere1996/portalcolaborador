@@ -7,9 +7,8 @@ export default function DocumentosContracheque() {
       tipo="contracheque"
       titulo="Contracheques"
       icone={<FileText className="size-6 text-primary" />}
-      descricao="Importe e gerencie contracheques mensais dos colaboradores."
+      descricao="Importe e gerencie contracheques dos colaboradores."
       importTitle="Importar Contracheque"
-      // Coluna extra para exibir a quinzena (não se aplica a contracheque, mas mantido para consistência)
     />
   );
 }
