@@ -53,7 +53,7 @@ export default function AdminHomeAdminPage() {
         <FavoritosGrid />
       </div>
 
-      {/* 🔥 Card de Pendências com Skeleton */}
+      {/* 🔥 Card de Pendências com Skeleton e estado vazio */}
       {loadingAtestados ? (
         <Card className="border-border shadow-sm">
           <CardHeader>
@@ -102,7 +102,21 @@ export default function AdminHomeAdminPage() {
             </div>
           </CardContent>
         </Card>
-      ) : null}
+      ) : (
+        <Card className="border-border shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Bell className="size-5 text-muted-foreground" />
+              Pendências
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center text-muted-foreground py-6">
+              Nenhuma pendência no momento.
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* AlertDialog – notificação em tela */}
       <AlertDialog open={showNotification} onOpenChange={setShowNotification}>
