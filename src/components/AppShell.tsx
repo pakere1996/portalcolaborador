@@ -7,9 +7,12 @@ import {
   ClipboardList,
   LogOut,
   Menu,
+  Shield,
   UserCheck,
   Users,
   X,
+  ChevronDown,
+  ChevronRight,
   Settings,
   FileText,
   FileWarning,
@@ -21,7 +24,7 @@ import {
   Megaphone,
   Bell,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/NotificationBell";
 import { AvisosPopout } from "@/components/AvisosPopout";
@@ -41,6 +44,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const path = location.pathname;
   const [open, setOpen] = useState(false);
 
+  // Estados de expansão dos menus (admin)
+  const [folgasOpen, setFolgasOpen] = useState(false);
+  const [docsOpen, setDocsOpen] = useState(false);
+  const [cadastroOpen, setCadastroOpen] = useState(false);
+  const [comunicacaoOpen, setComunicacaoOpen] = useState(false);
+
+  const toggleMenu = useCallback(
+    (menu: "folgas" | "docs" | "cadastro" | "comunicacao") => {
+      const setters = {
+        folgas: setFolgasOpen,
+        docs: setDocsOpen,
+        cadastro: setCadastroOpen,
+        comunicacao: setComunicacaoOpen,
+      };
+      // Fecha todos os outros
+      Object.values(setters).forEach((setter) => setter(false));
+      // Abre/fecha o clicado
+      const currentState = {
+        folgas: folgasOpen,
+        docs: docsOpen,
+        cadastro: cadastroOpen,
+        comunicacao: comunicacaoOpen,
+      }[menu];
+      setters[menu](!currentState);
+    },
+    [folgasOpen, docsOpen, cadastroOpen, comunicacaoOpen]
+  );
+
   const getIsAdmin = () => {
     const savedRole = localStorage.getItem('user_role');
     if (savedRole) return savedRole === 'admin';
@@ -48,36 +79,42 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   const isAdmin = getIsAdmin();
+  const homePath = isAdmin ? "/admin/home" : "/home";
 
+  // Fecha o menu mobile ao mudar de página
   useEffect(() => {
     setOpen(false);
   }, [path]);
 
-  const getLinkClass = (isActive: boolean, isHome = false) =>
-    cn(
-      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
-      isActive
-        ? isHome
-          ? "bg-red-600 text-white font-bold hover:bg-red-700"
-          : "bg-primary/15 text-primary font-medium"
-        : "text-muted-foreground hover:text-foreground hover:bg-accent"
-    );
+  // Abre automaticamente o submenu correto baseado na URL
+  useEffect(() => {
+    const shouldOpen = {
+      cadastro:
+        path.startsWith("/admin/colaboradores") ||
+        path.startsWith("/admin/cargos") ||
+        path.startsWith("/admin/unidades") ||
+        path === "/admin/cadastro",
+      docs: path.startsWith("/admin/documentos") || path === "/admin/documentos",
+      comunicacao:
+        path.startsWith("/admin/mensagens") ||
+        path.startsWith("/admin/avisos") ||
+        path === "/admin/comunicacao",
+      folgas:
+        path.startsWith("/admin/calendario") ||
+        path.startsWith("/admin/solicitacoes") ||
+        path.startsWith("/admin/aprovacoes") ||
+        path.startsWith("/admin/trocas") ||
+        path.startsWith("/admin/bloqueios") ||
+        path === "/admin/folgas",
+    };
 
-  // 🔥 MENU ADMIN – links diretos (sem submenus expansíveis)
-  const adminMainNav: NavItem[] = [
-    { to: "/admin/home", label: "Início", icon: Home },
-    { to: "/admin/cadastro", label: "Cadastro", icon: Users },
-    { to: "/admin/folgas", label: "Folgas", icon: Calendar },
-    { to: "/admin/documentos", label: "Documentos", icon: FileText },
-    { to: "/admin/comunicacao", label: "Comunicação", icon: Megaphone },
-  ];
+    setFolgasOpen(shouldOpen.folgas);
+    setDocsOpen(shouldOpen.docs);
+    setCadastroOpen(shouldOpen.cadastro);
+    setComunicacaoOpen(shouldOpen.comunicacao);
+  }, [path]);
 
-  // 🔥 MENU COLABORADOR – mantém submenus
-  const employeeMainNav: NavItem[] = [
-    { to: "/home", label: "Início", icon: Home },
-    { to: "/perfil", label: "Meu Cadastro", icon: Settings },
-  ];
-
+  // Navegação do colaborador (submenus)
   const employeeFolgaNav: NavItem[] = [
     { to: "/calendario", label: "Calendário", icon: Calendar },
     { to: "/trocas", label: "Trocas", icon: ArrowLeftRight },
@@ -89,6 +126,100 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/documentos/atestados", label: "Atestados", icon: FileWarning },
     { to: "/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
   ];
+
+  // 🔥 ADMIN: submenus (itens expansíveis)
+  const adminCadastroNav: NavItem[] = [
+    { to: "/admin/colaboradores", label: "Colaboradores", icon: Users },
+    { to: "/admin/cargos", label: "Cargos", icon: Briefcase },
+    { to: "/admin/unidades", label: "Unidades", icon: Building2 },
+  ];
+
+  const adminFolgaNav: NavItem[] = [
+    // O item "Dashboard" não está aqui porque o link principal "/admin/folgas" já é o Dashboard
+    { to: "/admin/calendario", label: "Calendário Geral", icon: Calendar },
+    { to: "/admin/solicitacoes", label: "Solicitações", icon: ClipboardList },
+    { to: "/admin/aprovacoes", label: "Aprovações", icon: UserCheck },
+    { to: "/admin/trocas", label: "Trocas", icon: ArrowLeftRight },
+    { to: "/admin/bloqueios", label: "Datas Bloqueadas", icon: Ban },
+  ];
+
+  const adminDocsNav: NavItem[] = [
+    { to: "/admin/documentos/contracheque", label: "Contracheques", icon: FileText, end: true },
+    { to: "/admin/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
+    { to: "/admin/documentos/atestados", label: "Atestados", icon: FileWarning },
+    { to: "/admin/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
+  ];
+
+  const adminComunicacaoNav: NavItem[] = [
+    { to: "/admin/mensagens", label: "Comunicados", icon: MessageSquare },
+    { to: "/admin/avisos", label: "Quadro de Avisos", icon: Bell },
+  ];
+
+  const getLinkClass = (isActive: boolean, isHome = false) =>
+    cn(
+      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+      isActive
+        ? isHome
+          ? "bg-red-600 text-white font-bold hover:bg-red-700"
+          : "bg-primary/15 text-primary font-medium"
+        : "text-muted-foreground hover:text-foreground hover:bg-accent"
+    );
+
+  // 🔥 Renderiza um item principal com submenu expansível (apenas para admin)
+  const renderAdminMenuItem = (
+    label: string,
+    icon: any,
+    linkTo: string,
+    isOpen: boolean,
+    toggleFn: () => void,
+    subItems: NavItem[]
+  ) => {
+    const isActive = path === linkTo || path.startsWith(linkTo + "/");
+
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center">
+          <NavLink
+            to={linkTo}
+            className={({ isActive }) =>
+              cn(
+                "flex-1 flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+                isActive
+                  ? "bg-primary/15 text-primary font-medium"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
+              )
+            }
+          >
+            {icon({ className: "size-4" })}
+            <span>{label}</span>
+          </NavLink>
+          <button
+            onClick={toggleFn}
+            className="p-2 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+            aria-label={isOpen ? "Fechar menu" : "Abrir menu"}
+          >
+            {isOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+          </button>
+        </div>
+
+        {isOpen && (
+          <div className="pl-4 space-y-1 mt-1 border-l border-border ml-5">
+            {subItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) => getLinkClass(isActive)}
+              >
+                <item.icon className="size-4" />
+                {item.label}
+              </NavLink>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
@@ -120,36 +251,67 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-180px)]">
+          {/* INÍCIO */}
+          <NavLink
+            to={homePath}
+            className={({ isActive }) => getLinkClass(isActive, true)}
+          >
+            <Home className="size-4" />
+            <span>Início</span>
+          </NavLink>
+
           {isAdmin ? (
-            // 🔥 ADMIN: links diretos sem submenus
+            // 🔥 ADMIN: menus com links + submenus expansíveis
             <>
-              {adminMainNav.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) => getLinkClass(isActive, item.to === "/admin/home")}
-                >
-                  <item.icon className="size-4" />
-                  <span>{item.label}</span>
-                </NavLink>
-              ))}
+              {renderAdminMenuItem(
+                "Cadastro",
+                Users,
+                "/admin/cadastro",
+                cadastroOpen,
+                () => toggleMenu("cadastro"),
+                adminCadastroNav
+              )}
+
+              {renderAdminMenuItem(
+                "Folgas",
+                Calendar,
+                "/admin/folgas",
+                folgasOpen,
+                () => toggleMenu("folgas"),
+                adminFolgaNav
+              )}
+
+              {renderAdminMenuItem(
+                "Documentos",
+                FileText,
+                "/admin/documentos",
+                docsOpen,
+                () => toggleMenu("docs"),
+                adminDocsNav
+              )}
+
+              {renderAdminMenuItem(
+                "Comunicação",
+                Megaphone,
+                "/admin/comunicacao",
+                comunicacaoOpen,
+                () => toggleMenu("comunicacao"),
+                adminComunicacaoNav
+              )}
             </>
           ) : (
-            // 🔥 COLABORADOR: mantém submenus
+            // 🔥 COLABORADOR: menus com submenus (mantido)
             <>
-              {employeeMainNav.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) => getLinkClass(isActive, item.to === "/home")}
-                >
-                  <item.icon className="size-4" />
-                  <span>{item.label}</span>
-                </NavLink>
-              ))}
+              <NavLink
+                to="/perfil"
+                className={({ isActive }) => getLinkClass(isActive)}
+              >
+                <Settings className="size-4" />
+                <span>Meu Cadastro</span>
+              </NavLink>
 
               {/* Folgas - submenu para colaborador */}
-              <div className="space-y-1 mt-4">
+              <div className="space-y-1">
                 <div className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-muted-foreground">
                   <Calendar className="size-4" />
                   <span>Folgas</span>
@@ -169,7 +331,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
 
               {/* Documentos - submenu para colaborador */}
-              <div className="space-y-1 mt-4">
+              <div className="space-y-1">
                 <div className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-muted-foreground">
                   <FileText className="size-4" />
                   <span>Documentos</span>
