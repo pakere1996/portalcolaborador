@@ -20,6 +20,7 @@ import {
   Briefcase,
   Building2,
   ShieldAlert,
+  MessageSquare,
   Megaphone,
   Bell,
 } from "lucide-react";
@@ -165,7 +166,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
-      {/* 🔥 HEADER MOBILE – sem NotificationBell (apenas menu) */}
+      {/* HEADER MOBILE */}
       <header className="md:hidden flex items-center justify-between border-b border-border bg-card/50 backdrop-blur px-4 py-3 sticky top-0 z-50">
         <div className="flex items-center gap-2">
           <img src={logo} alt="Pakerê" className="size-7 rounded-md object-cover" />
@@ -323,7 +324,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 )}
               >
                 <div className="flex items-center gap-3">
-                  <MessageSquare className="size-4" />
+                  <Megaphone className="size-4" /> {/* 🔥 Ícone do grupo alterado para Megaphone */}
                   <span>Comunicação</span>
                 </div>
                 {comunicacaoOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
@@ -364,7 +365,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 md:hidden" onClick={() => setOpen(false)} />
       )}
 
-      {/* 🔥 MAIN – NotificationBell aparece UMA VEZ, sempre visível */}
+      {/* MAIN */}
       <main className="flex-1 min-w-0 p-4 md:p-8">
         <div className="flex justify-end mb-6">
           <NotificationBell />
