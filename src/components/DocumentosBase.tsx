@@ -30,7 +30,7 @@ import { toast } from "sonner";
 interface Documento {
   id: string;
   colaborador_id: string;
-  tipo: string;
+  tipo: string; // "contracheque" ou "ponto"
   mes: number;
   ano: number;
   storage_path: string;
@@ -80,7 +80,7 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [loading, setLoading] = useState(false);
-  
+
   const [filtroColab, setFiltroColab] = useState("todos");
   const [filtroMes, setFiltroMes] = useState("todos");
   const [filtroAno, setFiltroAno] = useState("todos");
@@ -132,11 +132,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
       const sortedDocs = (docs ?? []).sort((a, b) => {
         if (a.ano !== b.ano) return b.ano - a.ano;
         if (a.mes !== b.mes) return b.mes - a.mes;
-        const unidadeA = profileMap.get(a.colaborador_id)?.unidade_id;
-        const unidadeB = profileMap.get(b.colaborador_id)?.unidade_id;
-        const nomeUnidadeA = unidadeA ? unitMap.get(unidadeA) || "" : "";
-        const nomeUnidadeB = unidadeB ? unitMap.get(unidadeB) || "" : "";
-        if (nomeUnidadeA !== nomeUnidadeB) return nomeUnidadeA.localeCompare(nomeUnidadeB);
         const nomeA = profileMap.get(a.colaborador_id)?.nome ?? "";
         const nomeB = profileMap.get(b.colaborador_id)?.nome ?? "";
         return nomeA.localeCompare(nomeB);
@@ -376,49 +371,61 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
               Nenhum documento encontrado com os filtros selecionados.
             </div>
           ) : isMobile ? (
-            // 🔥 VERSÃO MOBILE – CARD COM BOTÃO DOWNLOAD E POPOUT NO CLIQUE
             <div className="grid gap-3">
               {filtrados.map((doc) => {
                 const profile = profiles.find((p) => p.id === doc.colaborador_id);
                 const unidade = profile?.unidade_id ? unidades.find(u => u.id === profile.unidade_id) : null;
                 const isEditing = editando === doc.id;
-                const isDisponivel = doc.status === "disponivel" || doc.status === "vinculado";
-
                 return (
                   <div
                     key={doc.id}
                     className="bg-card border border-border rounded-2xl p-4 space-y-2 shadow-sm hover:shadow-md transition-shadow"
                   >
-                    {/* 🔥 Card clicável para abrir popout */}
-                    <div 
-                      className="flex items-start justify-between gap-2 cursor-pointer"
-                      onClick={() => openDetail(doc)}
-                    >
-                      <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0" onClick={() => openDetail(doc)}>
                         <div className="font-semibold text-sm truncate">{profile?.nome ?? "—"}</div>
                         <div className="text-xs text-muted-foreground">
                           {unidade?.nome && <span>{unidade.nome} • </span>}
                           {String(doc.mes).padStart(2, "0")}/{doc.ano}
                         </div>
+                        <Badge
+                          className={
+                            doc.status === "disponivel" || doc.status === "vinculado"
+                              ? "bg-green-100 text-green-700 border-green-200 mt-1"
+                              : "bg-muted text-muted-foreground mt-1"
+                          }
+                        >
+                          {doc.status}
+                        </Badge>
                         {!profile?.ativo && (
-                          <Badge variant="outline" className="mt-1 text-[10px] bg-red-50 text-red-600 border-red-200">
+                          <Badge variant="outline" className="ml-1 text-[10px] bg-red-50 text-red-600 border-red-200 mt-1">
                             Inativo
                           </Badge>
                         )}
                       </div>
-                      {/* 🔥 Botão Download no card (não abre popout) */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 shrink-0"
-                        title="Baixar"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDownload(doc);
-                        }}
-                      >
-                        <Download className="size-4" />
-                      </Button>
+                      <div className="flex gap-1 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          title="Baixar"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownload(doc);
+                          }}
+                        >
+                          <Download className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          title="Detalhes"
+                          onClick={() => openDetail(doc)}
+                        >
+                          <ChevronRight className="size-4" />
+                        </Button>
+                      </div>
                     </div>
                     {isEditing ? (
                       <div className="flex items-center gap-2 mt-2">
@@ -448,7 +455,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
               })}
             </div>
           ) : (
-            // VERSÃO DESKTOP – TABELA (sem alterações)
             <div className="bg-card border border-border rounded-2xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 border-b border-border">
@@ -526,13 +532,31 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                         </td>
                         <td className="p-4 text-right whitespace-nowrap">
                           <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" className="size-8" title="Editar competência" onClick={() => startEditing(doc)}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8"
+                              title="Editar competência"
+                              onClick={() => startEditing(doc)}
+                            >
                               <Pencil className="size-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="size-8" title="Baixar" onClick={() => handleDownload(doc)}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8"
+                              title="Baixar"
+                              onClick={() => handleDownload(doc)}
+                            >
                               <Download className="size-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="size-8 text-red-500 hover:text-red-700 hover:bg-red-50" title="Excluir" onClick={() => handleExcluir(doc)}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              title="Excluir"
+                              onClick={() => handleExcluir(doc)}
+                            >
                               <Trash2 className="size-4" />
                             </Button>
                           </div>
@@ -547,7 +571,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
         </div>
       )}
 
-      {/* 🔥 POPOUT DE DETALHES (mobile) */}
       <Dialog open={isDetailOpen} onOpenChange={(o) => !o && setIsDetailOpen(false)}>
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
@@ -640,7 +663,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de exclusão */}
       <AlertDialog open={excluirDialogOpen} onOpenChange={setExcluirDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
