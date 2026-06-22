@@ -19,7 +19,6 @@ import {
   Bell,
 } from "lucide-react";
 
-// Mapeamento correto de ícones
 const iconMap: Record<string, any> = {
   Users: Users,
   Briefcase: Briefcase,
@@ -46,7 +45,7 @@ export function FavoritosGrid() {
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Star className="size-5 text-yellow-500" />
-            Favoritos
+            Atalhos Favoritos
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -64,7 +63,7 @@ export function FavoritosGrid() {
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Star className="size-5 text-yellow-500" />
-            Favoritos
+            Atalhos Favoritos
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -88,7 +87,7 @@ export function FavoritosGrid() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {favoritos.map((item) => {
             const IconComponent = iconMap[item.icone] || Star;
             return (
@@ -98,7 +97,7 @@ export function FavoritosGrid() {
                 className="block p-4 bg-card border border-border rounded-xl hover:shadow-md hover:border-primary/50 transition-all duration-200 text-center"
               >
                 <IconComponent className="size-6 mx-auto text-primary mb-2" />
-                <span className="text-sm font-medium break-words line-clamp-2">{item.label}</span>
+                <span className="text-sm font-medium line-clamp-2 break-words">{item.label}</span>
               </Link>
             );
           })}
