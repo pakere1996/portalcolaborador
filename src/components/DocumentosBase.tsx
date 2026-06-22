@@ -24,13 +24,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2, Eye, ChevronRight } from "lucide-react";
+import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 interface Documento {
   id: string;
   colaborador_id: string;
-  tipo: string; // agora pode ser "contracheque", "adiantamento" ou "ponto"
+  tipo: string;
   mes: number;
   ano: number;
   storage_path: string;
@@ -38,7 +38,6 @@ interface Documento {
   nome_pdf: string | null;
   created_at: string;
   aprovado_em?: string | null;
-  quinzena?: number | null; // para adiantamentos
 }
 
 interface Profile {
@@ -56,15 +55,13 @@ interface Unidade {
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 interface DocumentosBaseProps {
-  tipo: "contracheque" | "adiantamento" | "ponto";
+  tipo: "contracheque" | "ponto";
   titulo: string;
   icone: React.ReactNode;
   descricao: string;
   importTitle: string;
-  colunasExtras?: (doc: Documento) => React.ReactNode;
 }
 
-// Hook para detectar mobile
 const useMediaQuery = (query: string) => {
   const [matches, setMatches] = useState(false);
   useEffect(() => {
@@ -77,31 +74,27 @@ const useMediaQuery = (query: string) => {
   return matches;
 };
 
-export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, colunasExtras }: DocumentosBaseProps) {
+export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: DocumentosBaseProps) {
   const [aba, setAba] = useState<"importar" | "historico">("importar");
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Filtros
   const [filtroColab, setFiltroColab] = useState("todos");
   const [filtroMes, setFiltroMes] = useState("todos");
   const [filtroAno, setFiltroAno] = useState("todos");
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [filtroUnidade, setFiltroUnidade] = useState("todos");
 
-  // Estados de edição
   const [editando, setEditando] = useState<string | null>(null);
   const [editMes, setEditMes] = useState("");
   const [editAno, setEditAno] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Estado para popout de detalhes (mobile)
   const [selectedDoc, setSelectedDoc] = useState<Documento | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
-  // Exclusão
   const [excluirDialogOpen, setExcluirDialogOpen] = useState(false);
   const [documentoParaExcluir, setDocumentoParaExcluir] = useState<Documento | null>(null);
   const [excluindo, setExcluindo] = useState(false);
@@ -111,7 +104,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Busca documentos do tipo específico
       const { data: docs, error: docsError } = await supabase
         .from("documentos")
         .select("*")
@@ -137,7 +129,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
       const profileMap = new Map(profs?.map(p => [p.id, p]) ?? []);
       const unitMap = new Map(units?.map(u => [u.id, u.nome]) ?? []);
 
-      // Ordenação: ano/mês decrescente, depois nome do colaborador
       const sortedDocs = (docs ?? []).sort((a, b) => {
         if (a.ano !== b.ano) return b.ano - a.ano;
         if (a.mes !== b.mes) return b.mes - a.mes;
@@ -262,13 +253,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
     }
   }, [documentoParaExcluir, load]);
 
-  const getTipoLabel = (tipo: string) => {
-    if (tipo === "contracheque") return "Contracheque";
-    if (tipo === "adiantamento") return "Adiantamento";
-    if (tipo === "ponto") return "Folha de Ponto";
-    return tipo;
-  };
-
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div>
@@ -316,7 +300,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
 
       {aba === "historico" && (
         <div className="space-y-4">
-          {/* Filtros */}
           <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             <div className="space-y-1 col-span-2 md:col-span-1">
               <Label className="text-xs uppercase text-muted-foreground font-bold">Colaborador</Label>
@@ -388,13 +371,11 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
               Nenhum documento encontrado com os filtros selecionados.
             </div>
           ) : isMobile ? (
-            // Versão Mobile – Cards
             <div className="grid gap-3">
               {filtrados.map((doc) => {
                 const profile = profiles.find((p) => p.id === doc.colaborador_id);
                 const unidade = profile?.unidade_id ? unidades.find(u => u.id === profile.unidade_id) : null;
                 const isEditing = editando === doc.id;
-                const tipoLabel = getTipoLabel(doc.tipo);
                 return (
                   <div
                     key={doc.id}
@@ -406,16 +387,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
                         <div className="text-xs text-muted-foreground">
                           {unidade?.nome && <span>{unidade.nome} • </span>}
                           {String(doc.mes).padStart(2, "0")}/{doc.ano}
-                          {tipo === "adiantamento" && doc.quinzena && (
-                            <span className="ml-1 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
-                              {doc.quinzena}ª Quinzena
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          <Badge variant="outline" className="text-[10px]">
-                            {tipoLabel}
-                          </Badge>
                         </div>
                         <Badge
                           className={
@@ -484,17 +455,13 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
               })}
             </div>
           ) : (
-            // Versão Desktop – Tabela
             <div className="bg-card border border-border rounded-2xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 border-b border-border">
                   <tr>
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground">Colaborador</th>
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground">Competência</th>
-                    <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden md:table-cell">Tipo</th>
-                    {colunasExtras && (
-                      <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground">Detalhes</th>
-                    )}
+                    <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden md:table-cell">Arquivo</th>
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden lg:table-cell">Unidade</th>
                     <th className="text-center p-4 font-bold uppercase text-[10px] text-muted-foreground">Status</th>
                     <th className="text-left p-4 font-bold uppercase text-[10px] text-muted-foreground hidden md:table-cell">Aprovado em</th>
@@ -505,7 +472,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
                   {filtrados.map((doc) => {
                     const profile = profiles.find((p) => p.id === doc.colaborador_id);
                     const unidade = profile?.unidade_id ? unidades.find(u => u.id === profile.unidade_id) : null;
-                    const tipoLabel = getTipoLabel(doc.tipo);
                     return (
                       <tr key={doc.id} className="hover:bg-muted/30 transition-colors">
                         <td className="p-4 font-medium">
@@ -536,22 +502,10 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
                           ) : (
                             <span className="font-mono">{String(doc.mes).padStart(2, "0")}/{doc.ano}</span>
                           )}
-                          {tipo === "adiantamento" && doc.quinzena && editando !== doc.id && (
-                            <div className="text-[10px] text-blue-600 font-medium">
-                              {doc.quinzena}ª Quinzena
-                            </div>
-                          )}
                         </td>
-                        <td className="p-4 hidden md:table-cell">
-                          <Badge variant="outline" className="text-[10px]">
-                            {tipoLabel}
-                          </Badge>
+                        <td className="p-4 hidden md:table-cell text-muted-foreground text-xs truncate max-w-[200px]">
+                          {doc.nome_pdf ?? "—"}
                         </td>
-                        {colunasExtras && (
-                          <td className="p-4 hidden md:table-cell">
-                            {colunasExtras(doc)}
-                          </td>
-                        )}
                         <td className="p-4 hidden lg:table-cell text-muted-foreground">
                           {unidade?.nome ?? "—"}
                         </td>
@@ -617,7 +571,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
         </div>
       )}
 
-      {/* Popout de detalhes (mobile) */}
       <Dialog open={isDetailOpen} onOpenChange={(o) => !o && setIsDetailOpen(false)}>
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
@@ -631,16 +584,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
                 
                 <div className="text-muted-foreground">Competência</div>
                 <div className="font-medium">{String(selectedDoc.mes).padStart(2, "0")}/{selectedDoc.ano}</div>
-                
-                <div className="text-muted-foreground">Tipo</div>
-                <div className="font-medium">{getTipoLabel(selectedDoc.tipo)}</div>
-
-                {selectedDoc.tipo === "adiantamento" && selectedDoc.quinzena && (
-                  <>
-                    <div className="text-muted-foreground">Quinzena</div>
-                    <div className="font-medium">{selectedDoc.quinzena}ª Quinzena</div>
-                  </>
-                )}
                 
                 <div className="text-muted-foreground">Unidade</div>
                 <div className="font-medium">
@@ -720,7 +663,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de exclusão */}
       <AlertDialog open={excluirDialogOpen} onOpenChange={setExcluirDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -731,8 +673,6 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle, co
               <strong>Colaborador:</strong> {profiles.find(p => p.id === documentoParaExcluir?.colaborador_id)?.nome ?? "—"}
               <br />
               <strong>Competência:</strong> {documentoParaExcluir ? `${String(documentoParaExcluir.mes).padStart(2, "0")}/${documentoParaExcluir.ano}` : ""}
-              <br />
-              <strong>Tipo:</strong> {documentoParaExcluir ? getTipoLabel(documentoParaExcluir.tipo) : ""}
               <br /><br />
               Esta ação <strong>não pode ser desfeita</strong>.
             </AlertDialogDescription>
