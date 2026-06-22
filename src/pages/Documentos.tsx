@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { FileText, Download, Eye, Filter } from "lucide-react";
+import { FileText, Download, Eye } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
 import {
   Dialog,
@@ -13,38 +13,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
 
 interface Documento {
   id: string;
   tipo: string;
-  subtipo?: string | null; // "mensal" | "quinzenal" | null
-  quinzena?: number | null; // 1 | 2
   mes: number;
   ano: number;
   storage_path: string;
   nome_pdf: string | null;
   created_at: string;
 }
-
-const TIPOS_DOCUMENTO = [
-  { value: "todos", label: "Todos" },
-  { value: "contracheque", label: "Contracheque" },
-  { value: "ponto", label: "Folha de Ponto" },
-];
-
-const SUBTIPOS_FILTRO = [
-  { value: "todos", label: "Todos" },
-  { value: "mensal", label: "Mensal" },
-  { value: "quinzenal", label: "Adiantamento" },
-];
 
 export default function Documentos() {
   const { user } = useAuth();
@@ -54,49 +32,19 @@ export default function Documentos() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<Documento | null>(null);
 
-  // Filtros
-  const [filtroTipo, setFiltroTipo] = useState("todos");
-  const [filtroSubtipo, setFiltroSubtipo] = useState("todos");
-  const [filtroAno, setFiltroAno] = useState<string>("todos");
-  const [filtroMes, setFiltroMes] = useState<string>("todos");
-
-  const [anos, setAnos] = useState<number[]>([]);
-  const [meses, setMeses] = useState<number[]>([]);
-
   const load = async () => {
     if (!user) return;
     setLoading(true);
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from("documentos")
         .select("*")
-        .eq("colaborador_id", user.id);
-
-      if (filtroTipo !== "todos") {
-        query = query.eq("tipo", filtroTipo);
-      }
-      if (filtroSubtipo !== "todos") {
-        query = query.eq("subtipo", filtroSubtipo);
-      }
-      if (filtroAno !== "todos") {
-        query = query.eq("ano", parseInt(filtroAno));
-      }
-      if (filtroMes !== "todos") {
-        query = query.eq("mes", parseInt(filtroMes));
-      }
-
-      const { data, error } = await query
+        .eq("colaborador_id", user.id)
         .order("ano", { ascending: false })
         .order("mes", { ascending: false });
 
       if (error) throw error;
       setDocumentos(data ?? []);
-
-      // Extrai anos e meses disponíveis para filtros
-      const anosSet = new Set(data?.map(d => d.ano) ?? []);
-      const mesesSet = new Set(data?.map(d => d.mes) ?? []);
-      setAnos(Array.from(anosSet).sort((a, b) => b - a));
-      setMeses(Array.from(mesesSet).sort((a, b) => b - a));
     } catch (error) {
       toast.error("Erro ao carregar documentos", { description: (error as Error).message });
     } finally {
@@ -106,7 +54,7 @@ export default function Documentos() {
 
   useEffect(() => {
     load();
-  }, [user, filtroTipo, filtroSubtipo, filtroAno, filtroMes]);
+  }, [user]);
 
   const handleDownload = async (doc: Documento) => {
     const { data } = await supabase.storage
@@ -138,20 +86,6 @@ export default function Documentos() {
     return tipo;
   };
 
-  const getSubtipoLabel = (subtipo?: string | null, quinzena?: number | null) => {
-    if (subtipo === "quinzenal") {
-      return `Adiantamento ${quinzena}ª Quinzena`;
-    }
-    return "Mensal";
-  };
-
-  const limparFiltros = () => {
-    setFiltroTipo("todos");
-    setFiltroSubtipo("todos");
-    setFiltroAno("todos");
-    setFiltroMes("todos");
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -167,82 +101,18 @@ export default function Documentos() {
           <FileText className="size-6 text-primary" /> Meus Documentos
         </h1>
         <p className="text-muted-foreground mt-1">
-          Acesse e baixe seus contracheques, folhas de ponto e adiantamentos.
+          Acesse e baixe seus contracheques, folhas de ponto e outros documentos vinculados.
         </p>
       </div>
 
       <Card className="border-border shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
-          <CardTitle className="text-lg">Filtros</CardTitle>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs font-bold uppercase text-muted-foreground">Tipo</Label>
-              <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-                <SelectTrigger className="w-[140px] h-9">
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIPOS_DOCUMENTO.map(t => (
-                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* 🔥 FILTRO POR SUBTIPO */}
-            <div className="space-y-1">
-              <Label className="text-xs font-bold uppercase text-muted-foreground">Subtipo</Label>
-              <Select value={filtroSubtipo} onValueChange={setFiltroSubtipo}>
-                <SelectTrigger className="w-[140px] h-9">
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SUBTIPOS_FILTRO.map(s => (
-                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs font-bold uppercase text-muted-foreground">Ano</Label>
-              <Select value={filtroAno} onValueChange={setFiltroAno}>
-                <SelectTrigger className="w-[100px] h-9">
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  {anos.map(a => (
-                    <SelectItem key={a} value={String(a)}>{a}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs font-bold uppercase text-muted-foreground">Mês</Label>
-              <Select value={filtroMes} onValueChange={setFiltroMes}>
-                <SelectTrigger className="w-[100px] h-9">
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  {meses.map(m => (
-                    <SelectItem key={m} value={String(m)}>{String(m).padStart(2, "0")}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button variant="ghost" size="sm" onClick={limparFiltros} className="mt-6 h-9">
-              Limpar
-            </Button>
-          </div>
+        <CardHeader>
+          <CardTitle className="text-lg">Histórico de Documentos</CardTitle>
         </CardHeader>
         <CardContent>
           {documentos.length === 0 ? (
             <div className="text-center p-8 text-muted-foreground">
-              Nenhum documento encontrado com os filtros selecionados.
+              Nenhum documento disponível.
             </div>
           ) : (
             <div className="space-y-3">
@@ -256,19 +126,8 @@ export default function Documentos() {
                       <FileText className="size-5" />
                     </div>
                     <div>
-                      <div className="font-medium flex items-center gap-2 flex-wrap">
+                      <div className="font-medium">
                         {getTipoLabel(doc.tipo)}
-                        {/* 🔥 BADGE DE ADIANTAMENTO */}
-                        {doc.subtipo === "quinzenal" && (
-                          <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
-                            Adiantamento {doc.quinzena}ª Quinzena
-                          </span>
-                        )}
-                        {doc.subtipo === "mensal" && (
-                          <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
-                            Mensal
-                          </span>
-                        )}
                       </div>
                       <div className="text-sm text-muted-foreground">
                         {String(doc.mes).padStart(2, "0")}/{doc.ano}
@@ -300,14 +159,13 @@ export default function Documentos() {
         </CardContent>
       </Card>
 
-      {/* Dialog de visualização */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Visualização do Documento</DialogTitle>
             <DialogDescription>
               {selectedDoc
-                ? `${getTipoLabel(selectedDoc.tipo)} - ${String(selectedDoc.mes).padStart(2, "0")}/${selectedDoc.ano}${selectedDoc.subtipo === "quinzenal" ? ` (Adiantamento ${selectedDoc.quinzena}ª Quinzena)` : ""}`
+                ? `${getTipoLabel(selectedDoc.tipo)} - ${String(selectedDoc.mes).padStart(2, "0")}/${selectedDoc.ano}`
                 : "Documento"}
             </DialogDescription>
           </DialogHeader>
