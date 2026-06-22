@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -142,6 +142,7 @@ const adminModules = [
 export default function AdminHomeAdminPage() {
   const { pendentes, totalPendentes, loading, showNotification, setShowNotification } = useAtestadosPendentes();
 
+  // Notificação em tela (toast) quando há atestados pendentes
   useEffect(() => {
     if (totalPendentes > 0 && !showNotification) {
       toast.info(`📋 ${totalPendentes} atestado(s) pendente(s) de aprovação`, {
@@ -154,7 +155,7 @@ export default function AdminHomeAdminPage() {
         },
       });
     }
-  }, [totalPendentes]);
+  }, [totalPendentes, showNotification]);
 
   const groupedModules = adminModules.reduce((acc, module) => {
     if (!acc[module.category]) {
@@ -173,7 +174,24 @@ export default function AdminHomeAdminPage() {
         <p className="text-muted-foreground mt-1">Acesso rápido aos módulos de gestão.</p>
       </div>
 
-      {!loading && totalPendentes > 0 && (
+      {/* 🔥 Card de Atestados Pendentes – com skeleton de carregamento */}
+      {loading ? (
+        <Card className="border-amber-200 bg-amber-50/50 shadow-sm animate-pulse">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <div className="size-5 rounded-full bg-amber-300/50" />
+              <div className="h-5 w-48 bg-amber-300/50 rounded" />
+              <div className="ml-2 h-5 w-8 bg-amber-300/50 rounded-full" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="h-12 bg-amber-200/50 rounded-lg" />
+              <div className="h-12 bg-amber-200/50 rounded-lg" />
+            </div>
+          </CardContent>
+        </Card>
+      ) : totalPendentes > 0 ? (
         <Card className="border-amber-200 bg-amber-50/50 shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-amber-800">
@@ -207,8 +225,9 @@ export default function AdminHomeAdminPage() {
             </div>
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
+      {/* Módulos administrativos */}
       {Object.entries(groupedModules).map(([category, modules]) => (
         <div key={category} className="space-y-4">
           <h2 className="text-xl font-semibold border-b pb-1 text-primary">{category}</h2>
@@ -228,12 +247,7 @@ export default function AdminHomeAdminPage() {
         </div>
       ))}
 
-      {loading && (
-        <div className="flex items-center justify-center p-12">
-          <Loader2 className="size-8 animate-spin text-muted-foreground" />
-        </div>
-      )}
-
+      {/* 🔥 AlertDialog – notificação em tela para atestados pendentes */}
       <AlertDialog open={showNotification} onOpenChange={setShowNotification}>
         <AlertDialogContent className="max-w-md rounded-2xl">
           <AlertDialogHeader>
