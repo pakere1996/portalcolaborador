@@ -126,7 +126,7 @@ const adminModules = [
   {
     title: "Comunicados",
     description: "Envie mensagens para colaboradores.",
-    icon: Bell,
+    icon: MessageSquare,
     to: "/admin/mensagens",
     category: "Comunicação",
   },
