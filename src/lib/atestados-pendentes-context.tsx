@@ -35,10 +35,8 @@ export function AtestadosPendentesProvider({ children }: { children: ReactNode }
   const [loading, setLoading] = useState(true);
   const [showNotification, setShowNotification] = useState(false);
 
-  // Determina se é admin (usando role e fallback localStorage)
   const isAdmin = role === "admin" || localStorage.getItem("user_role") === "admin";
 
-  // Função para carregar os pendentes
   const carregarPendentes = useCallback(async () => {
     console.log("[Atestados] Iniciando carregamento...");
     
@@ -49,9 +47,7 @@ export function AtestadosPendentesProvider({ children }: { children: ReactNode }
       return;
     }
 
-    // Se não for admin, já definimos loading false acima; se for admin, setamos true
     setLoading(true);
-    
     try {
       console.log("[Atestados] Buscando atestados pendentes no Supabase...");
       const { data: atestados, error: atestadosError } = await supabase
@@ -74,7 +70,6 @@ export function AtestadosPendentesProvider({ children }: { children: ReactNode }
         return;
       }
 
-      // Busca os nomes dos colaboradores
       const colaboradorIds = [...new Set(atestados.map((a) => a.colaborador_id))];
       console.log(`[Atestados] Buscando perfis para ${colaboradorIds.length} colaboradores`);
       
@@ -104,7 +99,6 @@ export function AtestadosPendentesProvider({ children }: { children: ReactNode }
       console.log(`[Atestados] ${pendentesFormatados.length} atestados formatados e salvos`);
     } catch (error) {
       console.error("[Atestados] Erro geral no carregamento:", error);
-      // Em caso de erro, definimos array vazio para não quebrar a UI
       setPendentes([]);
     } finally {
       console.log("[Atestados] Finalizando carregamento, setLoading(false)");
@@ -112,7 +106,6 @@ export function AtestadosPendentesProvider({ children }: { children: ReactNode }
     }
   }, [isAdmin]);
 
-  // Efeito para carregar na montagem e a cada 30 segundos
   useEffect(() => {
     console.log("[Atestados] useEffect montado, chamando carregarPendentes");
     carregarPendentes();
@@ -126,7 +119,7 @@ export function AtestadosPendentesProvider({ children }: { children: ReactNode }
       console.log("[Atestados] Desmontando, limpando intervalo");
       clearInterval(interval);
     };
-  }, []); // Array vazio para evitar recriação do efeito
+  }, []); // ⬅️ Array vazio para rodar apenas na montagem
 
   const totalPendentes = pendentes.length;
 
