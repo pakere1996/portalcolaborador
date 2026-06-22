@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,117 +32,13 @@ import {
 import { useAtestadosPendentes } from "@/lib/atestados-pendentes-context";
 
 const adminModules = [
-  {
-    title: "Colaboradores",
-    description: "Gerencie perfis, cargos e status de colaboradores.",
-    icon: Users,
-    to: "/admin/colaboradores",
-    category: "Cadastro",
-  },
-  {
-    title: "Cargos",
-    description: "Gerencie os cargos da empresa.",
-    icon: Briefcase,
-    to: "/admin/cargos",
-    category: "Cadastro",
-  },
-  {
-    title: "Unidades",
-    description: "Gerencie as unidades da loja.",
-    icon: Building2,
-    to: "/admin/unidades",
-    category: "Cadastro",
-  },
-  {
-    title: "Dashboard Folgas",
-    description: "Visão geral e estatísticas do sistema de folgas.",
-    icon: Shield,
-    to: "/admin/folgas",
-    category: "Folgas",
-  },
-  {
-    title: "Calendário Geral",
-    description: "Visão consolidada de todas as folgas da equipe.",
-    icon: Calendar,
-    to: "/admin/calendario",
-    category: "Folgas",
-  },
-  {
-    title: "Solicitações Especiais",
-    description: "Gerencie pedidos de folgas fora das regras normais.",
-    icon: ClipboardList,
-    to: "/admin/solicitacoes",
-    category: "Folgas",
-  },
-  {
-    title: "Aprovações",
-    description: "Aprove ou rejeite folgas pendentes e prioridades de aniversário.",
-    icon: UserCheck,
-    to: "/admin/aprovacoes",
-    category: "Folgas",
-  },
-  {
-    title: "Trocas de Folga",
-    description: "Monitore e gerencie as solicitações de troca entre colaboradores.",
-    icon: ArrowLeftRight,
-    to: "/admin/trocas",
-    category: "Folgas",
-  },
-  {
-    title: "Datas Bloqueadas",
-    description: "Configure e gerencie dias de bloqueio de folgas.",
-    icon: Ban,
-    to: "/admin/bloqueios",
-    category: "Folgas",
-  },
-  {
-    title: "Contracheques",
-    description: "Faça upload e gerencie contracheques.",
-    icon: FileText,
-    to: "/admin/documentos/contracheque",
-    category: "Documentos",
-  },
-  {
-    title: "Folhas de Ponto",
-    description: "Faça upload e gerencie folhas de ponto.",
-    icon: FileText,
-    to: "/admin/documentos/ponto",
-    category: "Documentos",
-  },
-  {
-    title: "Atestados",
-    description: "Gerencie e aprove atestados médicos.",
-    icon: FileWarning,
-    to: "/admin/documentos/atestados",
-    category: "Documentos",
-  },
-  {
-    title: "Registros Disciplinares",
-    description: "Cadastre advertências e suspensões.",
-    icon: ShieldAlert,
-    to: "/admin/documentos/disciplinar",
-    category: "Documentos",
-  },
-  {
-    title: "Comunicados",
-    description: "Envie mensagens para colaboradores.",
-    icon: Bell,
-    to: "/admin/mensagens",
-    category: "Comunicação",
-  },
-  {
-    title: "Quadro de Avisos",
-    description: "Crie avisos para os colaboradores.",
-    icon: Bell,
-    to: "/admin/avisos",
-    category: "Comunicação",
-  },
+  // ... (mantenha a lista de módulos igual à que você já tem)
 ];
 
 export default function AdminHomeAdminPage() {
   const { pendentes, totalPendentes, loading, showNotification, setShowNotification } = useAtestadosPendentes();
 
-  // Notificação em tela (toast) quando há atestados pendentes
+  // Notificação em tela (toast)
   useEffect(() => {
     if (totalPendentes > 0 && !showNotification) {
       toast.info(`📋 ${totalPendentes} atestado(s) pendente(s) de aprovação`, {
@@ -174,20 +70,18 @@ export default function AdminHomeAdminPage() {
         <p className="text-muted-foreground mt-1">Acesso rápido aos módulos de gestão.</p>
       </div>
 
-      {/* 🔥 Card de Atestados Pendentes – com skeleton de carregamento */}
+      {/* 🔥 Card de Pendências – agora com título fixo e estados claros */}
       {loading ? (
-        <Card className="border-amber-200 bg-amber-50/50 shadow-sm animate-pulse">
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <div className="size-5 rounded-full bg-amber-300/50" />
-              <div className="h-5 w-48 bg-amber-300/50 rounded" />
-              <div className="ml-2 h-5 w-8 bg-amber-300/50 rounded-full" />
-            </div>
+        <Card className="border-border shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Bell className="size-5 text-muted-foreground" />
+              Pendências
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <div className="h-12 bg-amber-200/50 rounded-lg" />
-              <div className="h-12 bg-amber-200/50 rounded-lg" />
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="size-6 animate-spin text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
@@ -196,7 +90,7 @@ export default function AdminHomeAdminPage() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-amber-800">
               <Bell className="size-5" />
-              Atestados Pendentes de Aprovação
+              Pendências
               <Badge className="ml-2 bg-amber-600 text-white">{totalPendentes}</Badge>
             </CardTitle>
           </CardHeader>
@@ -225,7 +119,21 @@ export default function AdminHomeAdminPage() {
             </div>
           </CardContent>
         </Card>
-      ) : null}
+      ) : (
+        <Card className="border-border shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Bell className="size-5 text-muted-foreground" />
+              Pendências
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center text-muted-foreground py-6">
+              Nenhuma pendência no momento.
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Módulos administrativos */}
       {Object.entries(groupedModules).map(([category, modules]) => (
@@ -247,7 +155,7 @@ export default function AdminHomeAdminPage() {
         </div>
       ))}
 
-      {/* 🔥 AlertDialog – notificação em tela para atestados pendentes */}
+      {/* AlertDialog – notificação em tela */}
       <AlertDialog open={showNotification} onOpenChange={setShowNotification}>
         <AlertDialogContent className="max-w-md rounded-2xl">
           <AlertDialogHeader>
