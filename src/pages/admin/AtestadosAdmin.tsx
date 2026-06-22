@@ -3,6 +3,7 @@ import { DocumentosAdminBase } from "@/components/DocumentosAdminBase";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   atestadoStoragePath,
@@ -37,6 +38,7 @@ export default function AtestadosAdmin() {
     }
   };
 
+  // 🔥 Função para preencher unidade automaticamente ao selecionar colaborador
   const handleColaboradorChange = async (colaboradorId: string, setForm: any) => {
     if (!colaboradorId) return;
     try {
@@ -70,6 +72,7 @@ export default function AtestadosAdmin() {
       }}
       formatarStatus={formatAtestadoStatus}
       statusClass={statusClass}
+      // 🔥 CAMPOS EXTRAS NO FORMULÁRIO DE IMPORTAÇÃO (apenas dias e retorno)
       camposExtras={(form, setForm, busy) => (
         <>
           <div className="space-y-2">
@@ -95,6 +98,7 @@ export default function AtestadosAdmin() {
           )}
         </>
       )}
+      // 🔥 COLUNAS EXTRAS NA TABELA (apenas dias e retorno – status já é exibido pela base)
       colunasExtras={(doc) => {
         const dias = (doc as any).dias_afastamento || 0;
         const dataRetorno = new Date(new Date(doc.data + 'T00:00:00').getTime() + dias * 24 * 60 * 60 * 1000);
@@ -105,6 +109,7 @@ export default function AtestadosAdmin() {
           </div>
         );
       }}
+      // 🔥 AÇÕES EXTRAS (botões Aprovar/Rejeitar para pendentes)
       acoesExtras={(doc) => (
         doc.status === "pendente" ? (
           <div className="flex gap-1 mt-1">
@@ -130,6 +135,9 @@ export default function AtestadosAdmin() {
           </div>
         ) : null
       )}
+      // 🔥 EDIT CAMPOS EXTRAS – REMOVIDOS para evitar duplicação
+      // A base já renderiza status, dias e observação do admin
+      // Não passamos editCamposExtras para não duplicar
       validarForm={(form) => {
         if (!form.dias_afastamento || parseInt(form.dias_afastamento) < 0) {
           return "Informe um número válido de dias de afastamento";

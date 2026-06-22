@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { Plus, Users, Pencil, Trash2, Search, Key, Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { formatCPF, onlyDigits, isValidCPFLength } from "@/lib/cpf";
-import { Badge } from "@/components/ui/badge"; // 🔥 IMPORT CORRIGIDO
+import { Badge } from "@/components/ui/badge";
 import { ColaboradorFormDialog } from "@/components/ColaboradorFormDialog";
 import { Tables } from "@/integrations/supabase/types";
 import { adminApi } from "@/lib/admin-api";

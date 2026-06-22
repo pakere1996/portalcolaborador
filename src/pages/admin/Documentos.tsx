@@ -4,7 +4,7 @@ import { FileText, FileWarning, ShieldAlert, Clock } from "lucide-react";
 const modulos = [
   {
     title: "Contracheques",
-    description: "Importe e gerencie contracheques mensais e adiantamentos quinzenais.",
+    description: "Importe e gerencie contracheques mensais dos colaboradores.",
     icon: FileText,
     to: "/admin/documentos/contracheque",
     cor: "text-blue-600",

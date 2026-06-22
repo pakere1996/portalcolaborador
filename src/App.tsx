@@ -11,8 +11,9 @@ import Trocas from "./pages/Trocas";
 import Historico from "./pages/Historico";
 import Documentos from "./pages/Documentos";
 import DocumentosAtestados from "./pages/DocumentosAtestados";
-import DocumentosDisciplinar from "./pages/DocumentosDisciplinar";
+import DocumentosDisciplinar from "./pages/DocumentosDisciplinar"; // 🔥 NOVO
 
+// Admin Pages
 import HomeAdmin from "./pages/admin/HomeAdmin";
 import Colaboradores from "./pages/admin/Colaboradores";
 import Cargos from "./pages/admin/Cargos";
@@ -31,6 +32,7 @@ import SetupAdmin from "./pages/SetupAdmin";
 import MensagensAdmin from "./pages/admin/Mensagens";
 import QuadroAvisosAdmin from "./pages/admin/QuadroAvisos";
 
+// 🔥 Função para verificar se o usuário é admin (usando localStorage como fallback)
 const isUserAdmin = (role?: string | null): boolean => {
   if (role === "admin") return true;
   const storedRole = localStorage.getItem('user_role');
@@ -40,7 +42,11 @@ const isUserAdmin = (role?: string | null): boolean => {
 function AuthenticatedRoutes() {
   const { session, role, loading } = useAuth();
   const isAuthenticated = !!session;
+
+  // 🔥 Determina se é admin (prioriza role do contexto, fallback para localStorage)
   const isAdmin = isUserAdmin(role);
+
+  console.log('🔍 AuthenticatedRoutes - role:', role, 'isAdmin:', isAdmin, 'loading:', loading);
 
   if (loading) {
     return (
@@ -57,6 +63,7 @@ function AuthenticatedRoutes() {
   return (
     <AppShell>
       <Routes>
+        {/* Shared Routes */}
         <Route path="/perfil" element={<Perfil />} />
         <Route path="/calendario" element={<Calendario />} />
         <Route path="/admin/calendario" element={<CalendarioAdmin />} />
@@ -65,44 +72,53 @@ function AuthenticatedRoutes() {
         <Route path="/documentos" element={<Documentos />} />
         <Route path="/documentos/atestados" element={<DocumentosAtestados />} />
         <Route path="/documentos/ponto" element={<Documentos />} />
-        <Route path="/documentos/disciplinar" element={<DocumentosDisciplinar />} />
+        <Route path="/documentos/disciplinar" element={<DocumentosDisciplinar />} /> {/* 🔥 NOVA ROTA */}
 
+        {/* 🔥 Rotas de Home com redirecionamento baseado em isAdmin */}
         <Route path="/home" element={isAdmin ? <Navigate to="/admin/home" replace /> : <Home />} />
         <Route path="/" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
 
+        {/* Admin Routes */}
         {isAdmin ? (
           <>
             <Route path="/admin" element={<Navigate to="/admin/home" replace />} />
             <Route path="/admin/home" element={<HomeAdmin />} />
             
+            {/* Cadastro Group */}
             <Route path="/admin/colaboradores" element={<Colaboradores />} />
             <Route path="/admin/cargos" element={<Cargos />} />
             <Route path="/admin/unidades" element={<Unidades />} />
 
+            {/* Folgas Group */}
             <Route path="/admin/folgas" element={<FolgasDashboard />} />
             <Route path="/admin/solicitacoes" element={<Solicitacoes />} />
             <Route path="/admin/aprovacoes" element={<Aprovacoes />} />
             <Route path="/admin/trocas" element={<TrocasAdmin />} />
             <Route path="/admin/bloqueios" element={<Bloqueios />} />
 
+            {/* Documentos Group */}
             <Route path="/admin/documentos" element={<DocumentosHub />} />
             <Route path="/admin/documentos/contracheque" element={<DocumentosContracheque />} />
             <Route path="/admin/documentos/ponto" element={<DocumentosPontoAdmin />} />
             <Route path="/admin/documentos/atestados" element={<AtestadosAdmin />} />
             <Route path="/admin/documentos/disciplinar" element={<RegistrosDisciplinaresAdmin />} />
             
+            {/* Comunicação Group */}
             <Route path="/admin/mensagens" element={<MensagensAdmin />} />
             <Route path="/admin/avisos" element={<QuadroAvisosAdmin />} />
             
+            {/* Setup */}
             <Route path="/admin/setup" element={<SetupAdmin />} />
           </>
         ) : (
           <>
+            {/* Se não for admin, redireciona qualquer rota admin para home */}
             <Route path="/admin/*" element={<Navigate to="/home" replace />} />
             <Route path="/admin" element={<Navigate to="/home" replace />} />
           </>
         )}
 
+        {/* Fallback para usuários autenticados */}
         <Route path="*" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
       </Routes>
     </AppShell>

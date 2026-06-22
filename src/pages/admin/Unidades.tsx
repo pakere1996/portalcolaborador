@@ -22,17 +22,13 @@ interface Unidade {
   cidade: string | null;
   telefone: string | null;
   ativo: boolean;
-  possui_relogio_ponto: boolean;
-  possui_adiantamento_quinzenal: boolean;
-  dia_adiantamento_quinzenal: number | null;
+  possui_relogio_ponto: boolean; // 🔥 NOVO
   created_at: string;
 }
 
 const blank = {
   nome: "", cnpj: "", endereco: "", cidade: "", telefone: "",
-  possui_relogio_ponto: false,
-  possui_adiantamento_quinzenal: false,
-  dia_adiantamento_quinzenal: "",
+  possui_relogio_ponto: false, // 🔥 NOVO
 };
 
 export default function Unidades() {
@@ -66,9 +62,7 @@ export default function Unidades() {
         cidade: form.cidade.trim() || null,
         telefone: form.telefone.trim() || null,
         ativo: true,
-        possui_relogio_ponto: form.possui_relogio_ponto || false,
-        possui_adiantamento_quinzenal: form.possui_adiantamento_quinzenal || false,
-        dia_adiantamento_quinzenal: form.possui_adiantamento_quinzenal ? Number(form.dia_adiantamento_quinzenal) : null,
+        possui_relogio_ponto: form.possui_relogio_ponto || false, // 🔥 NOVO
       });
       if (error) throw error;
       toast.success("Unidade cadastrada!");
@@ -91,8 +85,6 @@ export default function Unidades() {
       cidade: u.cidade ?? "",
       telefone: u.telefone ?? "",
       possui_relogio_ponto: u.possui_relogio_ponto ?? false,
-      possui_adiantamento_quinzenal: u.possui_adiantamento_quinzenal ?? false,
-      dia_adiantamento_quinzenal: u.dia_adiantamento_quinzenal?.toString() ?? "",
     });
   };
 
@@ -106,9 +98,7 @@ export default function Unidades() {
         endereco: editForm.endereco.trim() || null,
         cidade: editForm.cidade.trim() || null,
         telefone: editForm.telefone.trim() || null,
-        possui_relogio_ponto: editForm.possui_relogio_ponto || false,
-        possui_adiantamento_quinzenal: editForm.possui_adiantamento_quinzenal || false,
-        dia_adiantamento_quinzenal: editForm.possui_adiantamento_quinzenal ? Number(editForm.dia_adiantamento_quinzenal) : null,
+        possui_relogio_ponto: editForm.possui_relogio_ponto || false, // 🔥 NOVO
       }).eq("id", editing.id);
       if (error) throw error;
       toast.success("Unidade atualizada!");
@@ -180,6 +170,7 @@ export default function Unidades() {
                 <Input value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} placeholder="Ex: (62) 99999-9999" />
               </div>
 
+              {/* 🔥 Switch para relógio de ponto */}
               <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
                 <Switch
                   id="possui_relogio_ponto"
@@ -187,30 +178,6 @@ export default function Unidades() {
                   onCheckedChange={(checked) => setForm({ ...form, possui_relogio_ponto: checked })}
                 />
                 <Label htmlFor="possui_relogio_ponto">Possui relógio de ponto</Label>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="possui_adiantamento_quinzenal"
-                    checked={form.possui_adiantamento_quinzenal || false}
-                    onCheckedChange={(checked) => setForm({ ...form, possui_adiantamento_quinzenal: checked, dia_adiantamento_quinzenal: checked ? form.dia_adiantamento_quinzenal : "" })}
-                  />
-                  <Label htmlFor="possui_adiantamento_quinzenal">Possui adiantamento quinzenal</Label>
-                </div>
-                {form.possui_adiantamento_quinzenal && (
-                  <div className="mt-2">
-                    <Label>Dia do adiantamento (1-31)</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={31}
-                      value={form.dia_adiantamento_quinzenal}
-                      onChange={(e) => setForm({ ...form, dia_adiantamento_quinzenal: e.target.value })}
-                      placeholder="Ex: 15"
-                    />
-                  </div>
-                )}
               </div>
             </div>
             <DialogFooter>
@@ -230,14 +197,13 @@ export default function Unidades() {
                 <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">CNPJ</th>
                 <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">Cidade</th>
                 <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Relógio</th>
-                <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Adiantamento</th>
                 <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
                 <th className="text-right p-4 font-bold uppercase tracking-wider text-[10px]">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {list.length === 0 && (
-                <tr><td colSpan={7} className="p-12 text-center text-muted-foreground">Nenhuma unidade cadastrada.</td></tr>
+                <tr><td colSpan={6} className="p-12 text-center text-muted-foreground">Nenhuma unidade cadastrada.</td></tr>
               )}
               {list.map((u) => (
                 <tr key={u.id} className="hover:bg-muted/20 transition-colors">
@@ -252,10 +218,11 @@ export default function Unidades() {
                     <span className="text-muted-foreground">{u.cidade || "—"}</span>
                   </td>
                   <td className="p-4 text-center">
-                    {u.possui_relogio_ponto ? "✅" : "❌"}
-                  </td>
-                  <td className="p-4 text-center">
-                    {u.possui_adiantamento_quinzenal ? `Dia ${u.dia_adiantamento_quinzenal}` : "❌"}
+                    {u.possui_relogio_ponto ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Sim</span>
+                    ) : (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Não</span>
+                    )}
                   </td>
                   <td className="p-4 text-center">
                     <Switch checked={u.ativo} onCheckedChange={() => toggleAtivo(u)} />
@@ -288,32 +255,11 @@ export default function Unidades() {
             <div className="space-y-2"><Label>Telefone</Label><Input value={editForm.telefone} onChange={(e) => setEditForm({ ...editForm, telefone: e.target.value })} /></div>
             <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
               <Switch
+                id="edit_possui_relogio_ponto"
                 checked={editForm.possui_relogio_ponto || false}
                 onCheckedChange={(checked) => setEditForm({ ...editForm, possui_relogio_ponto: checked })}
               />
-              <Label>Possui relógio de ponto</Label>
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  checked={editForm.possui_adiantamento_quinzenal || false}
-                  onCheckedChange={(checked) => setEditForm({ ...editForm, possui_adiantamento_quinzenal: checked, dia_adiantamento_quinzenal: checked ? editForm.dia_adiantamento_quinzenal : "" })}
-                />
-                <Label>Possui adiantamento quinzenal</Label>
-              </div>
-              {editForm.possui_adiantamento_quinzenal && (
-                <div className="mt-2">
-                  <Label>Dia do adiantamento</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={31}
-                    value={editForm.dia_adiantamento_quinzenal}
-                    onChange={(e) => setEditForm({ ...editForm, dia_adiantamento_quinzenal: e.target.value })}
-                    placeholder="Ex: 15"
-                  />
-                </div>
-              )}
+              <Label htmlFor="edit_possui_relogio_ponto">Possui relógio de ponto</Label>
             </div>
           </div>
           <DialogFooter>

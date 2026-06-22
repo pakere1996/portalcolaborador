@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { FileText, Download, Eye } from "lucide-react";
+import { FileText, Download, Eye, Filter, DownloadCloud } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
 import {
   Dialog,
@@ -13,6 +13,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 
 interface Documento {
   id: string;
@@ -24,6 +32,22 @@ interface Documento {
   created_at: string;
 }
 
+const MESES = [
+  { value: "todos", label: "Todos" },
+  { value: "1", label: "Janeiro" },
+  { value: "2", label: "Fevereiro" },
+  { value: "3", label: "Março" },
+  { value: "4", label: "Abril" },
+  { value: "5", label: "Maio" },
+  { value: "6", label: "Junho" },
+  { value: "7", label: "Julho" },
+  { value: "8", label: "Agosto" },
+  { value: "9", label: "Setembro" },
+  { value: "10", label: "Outubro" },
+  { value: "11", label: "Novembro" },
+  { value: "12", label: "Dezembro" },
+];
+
 export default function Documentos() {
   const { user } = useAuth();
   const [documentos, setDocumentos] = useState<Documento[]>([]);
@@ -31,20 +55,44 @@ export default function Documentos() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<Documento | null>(null);
+  const [downloadingAll, setDownloadingAll] = useState(false);
+
+  // Filtros
+  const [filtroTipo, setFiltroTipo] = useState("todos");
+  const [filtroAno, setFiltroAno] = useState<string>("todos");
+  const [filtroMes, setFiltroMes] = useState<string>("todos");
+
+  const [anos, setAnos] = useState<number[]>([]);
 
   const load = async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("documentos")
         .select("*")
-        .eq("colaborador_id", user.id)
+        .eq("colaborador_id", user.id);
+
+      if (filtroTipo !== "todos") {
+        query = query.eq("tipo", filtroTipo);
+      }
+      if (filtroAno !== "todos") {
+        query = query.eq("ano", parseInt(filtroAno));
+      }
+      if (filtroMes !== "todos") {
+        query = query.eq("mes", parseInt(filtroMes));
+      }
+
+      const { data, error } = await query
         .order("ano", { ascending: false })
         .order("mes", { ascending: false });
 
       if (error) throw error;
       setDocumentos(data ?? []);
+
+      // Extrai anos disponíveis para filtros
+      const anosSet = new Set(data?.map(d => d.ano) ?? []);
+      setAnos(Array.from(anosSet).sort((a, b) => b - a));
     } catch (error) {
       toast.error("Erro ao carregar documentos", { description: (error as Error).message });
     } finally {
@@ -54,7 +102,7 @@ export default function Documentos() {
 
   useEffect(() => {
     load();
-  }, [user]);
+  }, [user, filtroTipo, filtroAno, filtroMes]);
 
   const handleDownload = async (doc: Documento) => {
     const { data } = await supabase.storage
@@ -64,6 +112,34 @@ export default function Documentos() {
       window.open(data.signedUrl, "_blank");
     } else {
       toast.error("Erro ao gerar link de download");
+    }
+  };
+
+  // 🔥 Função para baixar todos os documentos do filtro
+  const handleDownloadAll = async () => {
+    if (documentos.length === 0) {
+      toast.warning("Nenhum documento para baixar");
+      return;
+    }
+
+    setDownloadingAll(true);
+    try {
+      // Baixa um por um (abre em novas abas)
+      for (const doc of documentos) {
+        const { data } = await supabase.storage
+          .from("documentos")
+          .createSignedUrl(doc.storage_path, 60);
+        if (data?.signedUrl) {
+          window.open(data.signedUrl, "_blank");
+        }
+        // Pequeno delay para não sobrecarregar o navegador
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+      toast.success(`${documentos.length} documento(s) baixado(s)!`);
+    } catch (error) {
+      toast.error("Erro ao baixar documentos", { description: (error as Error).message });
+    } finally {
+      setDownloadingAll(false);
     }
   };
 
@@ -86,6 +162,12 @@ export default function Documentos() {
     return tipo;
   };
 
+  const limparFiltros = () => {
+    setFiltroTipo("todos");
+    setFiltroAno("todos");
+    setFiltroMes("todos");
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -106,16 +188,69 @@ export default function Documentos() {
       </div>
 
       <Card className="border-border shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg">Histórico de Documentos</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
+          <CardTitle className="text-lg">Filtros</CardTitle>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Tipo</Label>
+              <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+                <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="contracheque">Contracheque</SelectItem>
+                  <SelectItem value="ponto">Folha de Ponto</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Mês</Label>
+              <Select value={filtroMes} onValueChange={setFiltroMes}>
+                <SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectContent>
+                  {MESES.map(m => (
+                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Ano</Label>
+              <Select value={filtroAno} onValueChange={setFiltroAno}>
+                <SelectTrigger className="w-[100px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  {anos.map(a => (
+                    <SelectItem key={a} value={String(a)}>{a}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button variant="ghost" size="sm" onClick={limparFiltros} className="mt-6 h-9">
+              Limpar
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {documentos.length === 0 ? (
             <div className="text-center p-8 text-muted-foreground">
-              Nenhum documento disponível.
+              Nenhum documento encontrado com os filtros selecionados.
             </div>
           ) : (
             <div className="space-y-3">
+              {/* 🔥 Botão de download múltiplo */}
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadAll}
+                  disabled={downloadingAll}
+                  className="text-primary border-primary/30 hover:bg-primary/5"
+                >
+                  <DownloadCloud className="size-4 mr-1" />
+                  {downloadingAll ? "Baixando..." : `Baixar todos (${documentos.length})`}
+                </Button>
+              </div>
+
               {documentos.map((doc) => (
                 <div
                   key={doc.id}
@@ -159,6 +294,7 @@ export default function Documentos() {
         </CardContent>
       </Card>
 
+      {/* Dialog de visualização */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>

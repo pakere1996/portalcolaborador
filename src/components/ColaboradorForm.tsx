@@ -7,7 +7,7 @@ import { formatCPF, onlyDigits } from "@/lib/cpf";
 import { formatPhone } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 
-type Unidade = Tables<'unidades'> & { possui_adiantamento_quinzenal?: boolean };
+type Unidade = Tables<'unidades'> & { possui_relogio_ponto?: boolean };
 type Cargo = Tables<'cargos'>;
 
 interface ColaboradorFormProps {
@@ -57,9 +57,9 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
 
   const cargoOptions = getCargoOptions(cargos);
 
+  // Verifica se a unidade selecionada tem relógio
   const unidadeSelecionada = unidades.find(u => u.id === form.unidadeId);
   const unidadeTemRelogio = unidadeSelecionada?.possui_relogio_ponto || false;
-  const unidadeTemAdiantamento = unidadeSelecionada?.possui_adiantamento_quinzenal || false;
   const isSwitchDisabled = busy || !unidadeTemRelogio || !form.unidadeId || form.unidadeId === 'none';
 
   return (
@@ -289,21 +289,6 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
           )}
         </Label>
       </div>
-
-      {/* 🔥 ADIANTAMENTO QUINZENAL – habilitado se unidade permitir */}
-      {unidadeTemAdiantamento && (
-        <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
-          <Switch 
-            id="possui_adiantamento_quinzenal" 
-            checked={form.possui_adiantamento_quinzenal || false} 
-            onCheckedChange={(checked) => handleFormChange('possui_adiantamento_quinzenal', checked)} 
-            disabled={busy}
-          />
-          <Label htmlFor="possui_adiantamento_quinzenal">
-            Possui adiantamento quinzenal (dia {unidadeSelecionada?.dia_adiantamento_quinzenal || '?'})
-          </Label>
-        </div>
-      )}
 
       {isEdit && (
         <div className="flex items-center space-x-2 pt-2">

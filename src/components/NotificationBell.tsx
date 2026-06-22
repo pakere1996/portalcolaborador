@@ -25,7 +25,7 @@ interface Notificacao {
 export function NotificationBell() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { totalPendentes, carregarPendentes } = useAtestadosPendentes();
+  const { totalPendentes } = useAtestadosPendentes();
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -51,10 +51,6 @@ export function NotificationBell() {
 
   useEffect(() => {
     carregarNotificacoes();
-    const interval = setInterval(() => {
-      carregarPendentes();
-    }, 30000);
-    return () => clearInterval(interval);
   }, [user]);
 
   const marcarComoLida = async (id: string) => {
