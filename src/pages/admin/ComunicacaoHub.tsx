@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { MessageSquare, Bell } from "lucide-react";
+import { AniversariantesWidget } from "@/components/AniversariantesWidget";
 
 const modules = [
   {
@@ -18,16 +19,24 @@ const modules = [
 
 export default function ComunicacaoHub() {
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
           <MessageSquare className="size-6 text-primary" /> Comunicação
         </h1>
         <p className="text-muted-foreground mt-1">
-          Gerencie comunicados e avisos para os colaboradores.
+          Gerencie comunicados, avisos e confraternize com os aniversariantes da equipe.
         </p>
       </div>
 
+      {/* Aniversariantes Widget */}
+      <AniversariantesWidget 
+        title="🎂 Aniversariantes dos Próximos 30 Dias" 
+        showMessageButton={true} 
+        maxItems={10} 
+      />
+
+      {/* Cards de Comunicação */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {modules.map((m) => (
           <Link key={m.to} to={m.to} className="block">
