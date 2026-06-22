@@ -323,7 +323,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 )}
               >
                 <div className="flex items-center gap-3">
-                  <Megaphone className="size-4" />
+                  <MessageSquare className="size-4" />
                   <span>Comunicação</span>
                 </div>
                 {comunicacaoOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
