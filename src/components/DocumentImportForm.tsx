@@ -95,27 +95,41 @@ export function DocumentImportForm() {
 
   const documentType = window.location.pathname.includes("ponto") ? "ponto" : "contracheque";
 
+  // 🔥 MELHORIA 1: Carregar dados em paralelo com Promise.all
   useEffect(() => {
     if (!user) return;
-    const fetchProfiles = async () => {
-      let query = supabase
-        .from("profiles")
-        .select("id, nome, cpf, matricula, unidade_id, possui_folha_ponto, regime_trabalho")
-        .eq("ativo", true);
-      
-      if (documentType === "ponto") {
-        query = query.eq("possui_folha_ponto", true);
-      }
-      
-      const { data } = await query.order("nome");
-      setProfiles((data ?? []) as ProfileForMatching[]);
-    };
-    fetchProfiles();
 
-    supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome")
-      .then(({ data }) => setUnidades(data ?? []));
-    supabase.from("cargos").select("id, nome").order("nome")
-      .then(({ data }) => setListaCargos(data ?? []));
+    const loadData = async () => {
+      try {
+        let profilesQuery = supabase
+          .from("profiles")
+          .select("id, nome, cpf, matricula, unidade_id, possui_folha_ponto, regime_trabalho")
+          .eq("ativo", true);
+        
+        if (documentType === "ponto") {
+          profilesQuery = profilesQuery.eq("possui_folha_ponto", true);
+        }
+
+        const [profilesResult, unidadesResult, cargosResult] = await Promise.all([
+          profilesQuery.order("nome"),
+          supabase.from("unidades").select("id, nome, cnpj").eq("ativo", true).order("nome"),
+          supabase.from("cargos").select("id, nome").order("nome"),
+        ]);
+
+        if (profilesResult.error) throw profilesResult.error;
+        if (unidadesResult.error) throw unidadesResult.error;
+        if (cargosResult.error) throw cargosResult.error;
+
+        setProfiles(profilesResult.data ?? []);
+        setUnidades(unidadesResult.data ?? []);
+        setListaCargos(cargosResult.data ?? []);
+      } catch (error) {
+        console.error("Erro ao carregar dados iniciais:", error);
+        toast.error("Erro ao carregar dados de referência");
+      }
+    };
+
+    loadData();
   }, [user?.id, documentType]);
 
   useEffect(() => {
@@ -203,7 +217,6 @@ export function DocumentImportForm() {
         return;
       }
 
-      // Log para verificar se o texto está vazio
       const pagesWithText = pages.filter(p => p.text.trim().length > 0);
       console.log(`📝 ${pagesWithText.length} páginas com texto (${pages.length - pagesWithText.length} vazias)`);
 
@@ -389,7 +402,6 @@ export function DocumentImportForm() {
     }
   };
 
-  // 🔥 Função para extrair página do PDF – CORRIGIDA DEFINITIVAMENTE
   const extractPageFromPdf = async (file: File, pageNumber: number): Promise<Blob> => {
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -406,6 +418,7 @@ export function DocumentImportForm() {
     }
   };
 
+  // 🔥 MELHORIA 2: DELETE em lote + uploads paralelizados em chunks
   const handleAprovarTudo = async () => {
     const pendentes = pageResults.filter(r => !r.resolvido && !r.ignorado);
     if (pendentes.length > 0) {
@@ -419,51 +432,83 @@ export function DocumentImportForm() {
       let salvos = 0;
       let substituidos = 0;
 
-      for (const result of pageResults) {
-        if (result.ignorado || !result.matchedProfile || !result.mes || !result.ano) continue;
+      // 🔥 2a: DELETAR EM LOTE – primeiro, coletar todos os IDs a substituir
+      const idsParaSubstituir = pageResults
+        .filter(r => r.duplicadoId && r.acaoSeDuplicado === "substituir")
+        .map(r => r.duplicadoId);
 
-        if (result.duplicadoId && result.acaoSeDuplicado === "substituir") {
-          await supabase.from("documentos").delete().eq("id", result.duplicadoId);
-          substituidos++;
-        } else if (result.duplicadoId) {
-          continue;
-        }
+      if (idsParaSubstituir.length > 0) {
+        const { error: deleteError } = await supabase
+          .from("documentos")
+          .delete()
+          .in("id", idsParaSubstituir);
+        if (deleteError) throw deleteError;
+        substituidos = idsParaSubstituir.length;
+        console.log(`🗑️ ${substituidos} documento(s) substituído(s) deletados em lote`);
+      }
 
-        const storagePath = `documentos/${documentType}/${result.matchedProfile.id}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}_${Date.now()}.pdf`;
-        
-        // 🔥 EXTRAI APENAS A PÁGINA DO COLABORADOR
-        try {
-          const pagePdfBlob = await extractPageFromPdf(selectedFile!, result.pageNumber);
-          const { error: uploadError } = await supabase.storage.from("documentos")
-            .upload(storagePath, pagePdfBlob, { contentType: "application/pdf", upsert: true });
-          if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
-        } catch (extractError) {
-          console.error(`❌ Erro ao extrair/upload página ${result.pageNumber}:`, extractError);
-          toast.error(`Erro ao processar página ${result.pageNumber}`, {
-            description: (extractError as Error).message,
-          });
-          continue;
-        }
+      // 🔥 2b: Filtrar apenas os resultados que precisam ser salvos
+      const resultsParaSalvar = pageResults.filter(
+        r => !r.ignorado && r.matchedProfile && r.mes && r.ano
+      );
 
-        const { error: insertError } = await supabase.from("documentos").insert({
-          colaborador_id: result.matchedProfile.id,
-          tipo: documentType,
-          mes: result.mes,
-          ano: result.ano,
-          storage_path: storagePath,
-          status: "disponivel",
-          nome_pdf: selectedFile!.name,
-          unidade_id: result.unidadeId,
-          aprovado_em: aprovadoEm,
-        });
-        if (insertError) throw insertError;
+      if (resultsParaSalvar.length === 0) {
+        toast.info("Nenhum documento novo para salvar.");
+        return;
+      }
 
-        salvos++;
-        setPageResults(prev => prev.map(r =>
-          r.pageNumber === result.pageNumber
-            ? { ...r, aprovado: true, aprovadoEm }
-            : r
-        ));
+      // 🔥 2c: Processar em chunks de 3 para não sobrecarregar a API
+      const chunkSize = 3;
+      for (let i = 0; i < resultsParaSalvar.length; i += chunkSize) {
+        const chunk = resultsParaSalvar.slice(i, i + chunkSize);
+        await Promise.all(
+          chunk.map(async (result) => {
+            // Pular se já foi substituído (deletado) ou se for duplicado com ação "manter_antigo"
+            if (result.duplicadoId && result.acaoSeDuplicado === "substituir") {
+              // Já foi deletado, não precisa fazer nada
+              return;
+            }
+            if (result.duplicadoId && result.acaoSeDuplicado === "manter_antigo") {
+              // Ignorado, não salvar
+              return;
+            }
+
+            const storagePath = `documentos/${documentType}/${result.matchedProfile!.id}/${result.ano}_${String(result.mes).padStart(2, "0")}_p${result.pageNumber}_${Date.now()}.pdf`;
+            
+            try {
+              const pagePdfBlob = await extractPageFromPdf(selectedFile!, result.pageNumber);
+              const { error: uploadError } = await supabase.storage.from("documentos")
+                .upload(storagePath, pagePdfBlob, { contentType: "application/pdf", upsert: true });
+              if (uploadError && !uploadError.message.includes("already exists")) throw uploadError;
+            } catch (extractError) {
+              console.error(`❌ Erro ao extrair/upload página ${result.pageNumber}:`, extractError);
+              toast.error(`Erro ao processar página ${result.pageNumber}`, {
+                description: (extractError as Error).message,
+              });
+              return;
+            }
+
+            const { error: insertError } = await supabase.from("documentos").insert({
+              colaborador_id: result.matchedProfile!.id,
+              tipo: documentType,
+              mes: result.mes,
+              ano: result.ano,
+              storage_path: storagePath,
+              status: "disponivel",
+              nome_pdf: selectedFile!.name,
+              unidade_id: result.unidadeId,
+              aprovado_em: aprovadoEm,
+            });
+            if (insertError) throw insertError;
+
+            salvos++;
+            setPageResults(prev => prev.map(r =>
+              r.pageNumber === result.pageNumber
+                ? { ...r, aprovado: true, aprovadoEm }
+                : r
+            ));
+          })
+        );
       }
 
       let msg = `${salvos} documento(s) salvo(s) com sucesso!`;
