@@ -24,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2, ChevronRight } from "lucide-react";
+import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2, ChevronRight, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 interface Documento {
@@ -179,6 +179,17 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
       window.open(data.signedUrl, "_blank");
     } else {
       toast.error("Erro ao gerar link de download");
+    }
+  }, []);
+
+  const handleVisualizar = useCallback(async (doc: Documento) => {
+    const { data } = await supabase.storage
+      .from("documentos")
+      .createSignedUrl(doc.storage_path, 60);
+    if (data?.signedUrl) {
+      window.open(data.signedUrl, "_blank");
+    } else {
+      toast.error("Erro ao gerar link de visualização");
     }
   }, []);
 
@@ -407,6 +418,18 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="size-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                          title="Visualizar"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleVisualizar(doc);
+                          }}
+                        >
+                          <Eye className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="size-8"
                           title="Baixar"
                           onClick={(e) => {
@@ -535,6 +558,15 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
                             <Button
                               variant="ghost"
                               size="icon"
+                              className="size-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                              title="Visualizar"
+                              onClick={() => handleVisualizar(doc)}
+                            >
+                              <Eye className="size-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               className="size-8"
                               title="Editar competência"
                               onClick={() => startEditing(doc)}
@@ -619,6 +651,17 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
               </div>
 
               <div className="flex flex-wrap gap-2 pt-2 border-t">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => {
+                    handleVisualizar(selectedDoc);
+                    setIsDetailOpen(false);
+                  }}
+                >
+                  <Eye className="size-4 mr-1" /> Visualizar
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
