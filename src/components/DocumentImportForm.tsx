@@ -18,13 +18,11 @@ interface Profile {
   id: string;
   nome: string;
   unidade_id: string | null;
-  tem_adiantamento_individual?: boolean;
 }
 
 interface Unidade {
   id: string;
   nome: string;
-  tem_adiantamento?: boolean;
 }
 
 const MESES = [
@@ -49,12 +47,10 @@ export function DocumentImportForm() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
 
-  // Formulário
   const [selectedColaborador, setSelectedColaborador] = useState("");
   const [selectedMes, setSelectedMes] = useState("");
   const [selectedAno, setSelectedAno] = useState("");
-  const [tipoDocumento, setTipoDocumento] = useState<"contracheque" | "adiantamento" | "ponto">("contracheque");
-  const [selectedQuinzena, setSelectedQuinzena] = useState<1 | 2 | null>(null);
+  const [tipoDocumento, setTipoDocumento] = useState<"contracheque" | "ponto">("contracheque");
   const [file, setFile] = useState<File | null>(null);
 
   const load = async () => {
@@ -62,13 +58,13 @@ export function DocumentImportForm() {
     try {
       const { data: profs } = await supabase
         .from("profiles")
-        .select("id, nome, unidade_id, tem_adiantamento_individual")
+        .select("id, nome, unidade_id")
         .eq("ativo", true)
         .order("nome");
 
       const { data: units } = await supabase
         .from("unidades")
-        .select("id, nome, tem_adiantamento")
+        .select("id, nome")
         .eq("ativo", true);
 
       setProfiles(profs ?? []);
@@ -84,19 +80,11 @@ export function DocumentImportForm() {
     load();
   }, []);
 
-  const colaboradorPodeAdiantamento = (colaboradorId: string) => {
-    const col = profiles.find(p => p.id === colaboradorId);
-    if (!col) return false;
-    const unidade = unidades.find(u => u.id === col.unidade_id);
-    return !!(unidade?.tem_adiantamento && col.tem_adiantamento_individual);
-  };
-
   const resetForm = () => {
     setSelectedColaborador("");
     setSelectedMes("");
     setSelectedAno("");
     setTipoDocumento("contracheque");
-    setSelectedQuinzena(null);
     setFile(null);
   };
 
@@ -106,20 +94,11 @@ export function DocumentImportForm() {
     if (!selectedMes) return toast.error("Selecione o mês");
     if (!selectedAno) return toast.error("Selecione o ano");
 
-    // Validação para adiantamento
-    if (tipoDocumento === "adiantamento") {
-      if (!selectedQuinzena) return toast.error("Selecione a quinzena");
-      if (!colaboradorPodeAdiantamento(selectedColaborador)) {
-        return toast.error("Este colaborador não tem direito a adiantamento.");
-      }
-    }
-
     setUploading(true);
     try {
       const fileExt = file.name.split('.').pop();
       const mesStr = String(selectedMes).padStart(2, "0");
-      const quinzenaStr = tipoDocumento === "adiantamento" ? `_${selectedQuinzena}` : "";
-      const fileName = `${selectedColaborador}/${selectedAno}/${mesStr}/${tipoDocumento}${quinzenaStr}.${fileExt}`;
+      const fileName = `${selectedColaborador}/${selectedAno}/${mesStr}/${tipoDocumento}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from("documentos")
@@ -136,11 +115,6 @@ export function DocumentImportForm() {
         nome_pdf: file.name,
         status: "disponivel",
       };
-
-      // Adicionar quinzena apenas para adiantamento
-      if (tipoDocumento === "adiantamento" && selectedQuinzena) {
-        insertData.quinzena = selectedQuinzena;
-      }
 
       const { error: insertError } = await supabase
         .from("documentos")
@@ -164,17 +138,13 @@ export function DocumentImportForm() {
           <Label>Tipo de Documento</Label>
           <Select
             value={tipoDocumento}
-            onValueChange={(v: "contracheque" | "adiantamento" | "ponto") => {
-              setTipoDocumento(v);
-              if (v !== "adiantamento") setSelectedQuinzena(null);
-            }}
+            onValueChange={(v: "contracheque" | "ponto") => setTipoDocumento(v)}
           >
             <SelectTrigger>
               <SelectValue placeholder="Selecione" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="contracheque">Contracheque</SelectItem>
-              <SelectItem value="adiantamento">Adiantamento Quinzenal</SelectItem>
               <SelectItem value="ponto">Folha de Ponto</SelectItem>
             </SelectContent>
           </Select>
@@ -188,10 +158,7 @@ export function DocumentImportForm() {
             </SelectTrigger>
             <SelectContent>
               {profiles.map(p => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.nome}
-                  {colaboradorPodeAdiantamento(p.id) && " (Adiantamento)"}
-                </SelectItem>
+                <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -224,21 +191,6 @@ export function DocumentImportForm() {
             </SelectContent>
           </Select>
         </div>
-
-        {tipoDocumento === "adiantamento" && (
-          <div className="space-y-2">
-            <Label>Quinzena</Label>
-            <Select value={selectedQuinzena?.toString() || ""} onValueChange={(v) => setSelectedQuinzena(Number(v) as 1 | 2)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">1ª Quinzena</SelectItem>
-                <SelectItem value="2">2ª Quinzena</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
 
         <div className="space-y-2 md:col-span-2">
           <Label>Arquivo PDF</Label>
