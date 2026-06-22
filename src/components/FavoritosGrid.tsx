@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Star, Loader2 } from "lucide-react";
+import { Star, Loader2, StarOff } from "lucide-react";
 import { useFavoritos } from "@/lib/useFavoritos";
+import { Button } from "@/components/ui/button";
 import {
   Users,
   Briefcase,
@@ -37,7 +38,7 @@ const iconMap: Record<string, any> = {
 };
 
 export function FavoritosGrid() {
-  const { favoritos, loading } = useFavoritos();
+  const { favoritos, loading, removerFavorito } = useFavoritos();
 
   if (loading) {
     return (
@@ -45,7 +46,7 @@ export function FavoritosGrid() {
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Star className="size-5 text-yellow-500" />
-            Atalhos Favoritos
+            Favoritos
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -63,7 +64,7 @@ export function FavoritosGrid() {
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Star className="size-5 text-yellow-500" />
-            Atalhos Favoritos
+            Favoritos
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -87,18 +88,29 @@ export function FavoritosGrid() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
           {favoritos.map((item) => {
             const IconComponent = iconMap[item.icone] || Star;
             return (
-              <Link
-                key={item.id}
-                to={item.rota}
-                className="block p-4 bg-card border border-border rounded-xl hover:shadow-md hover:border-primary/50 transition-all duration-200 text-center"
-              >
-                <IconComponent className="size-6 mx-auto text-primary mb-2" />
-                <span className="text-sm font-medium line-clamp-2 break-words">{item.label}</span>
-              </Link>
+              <div key={item.id} className="relative group">
+                <Link
+                  to={item.rota}
+                  className="block p-3 bg-card border border-border rounded-xl hover:shadow-md hover:border-primary/50 transition-all duration-200 text-center h-full min-w-[100px]"
+                >
+                  <IconComponent className="size-6 mx-auto text-primary mb-1.5" />
+                  <span className="text-xs font-medium line-clamp-2 leading-tight break-words">{item.label}</span>
+                </Link>
+                {/* Botão de remover – pode ser removido se não quiser */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute -top-2 -right-2 size-5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 hover:text-red-500"
+                  onClick={() => removerFavorito(item.rota)}
+                  title="Remover dos favoritos"
+                >
+                  <StarOff className="size-3" />
+                </Button>
+              </div>
             );
           })}
         </div>
