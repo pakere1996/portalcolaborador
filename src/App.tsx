@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AppShell } from "./components/AppShell";
 import { useAuth } from "./lib/auth-context";
+import { AtestadosPendentesProvider } from "./lib/atestados-pendentes-context"; // 🔥 IMPORTADO
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Perfil from "./pages/Perfil";
@@ -11,7 +12,7 @@ import Trocas from "./pages/Trocas";
 import Historico from "./pages/Historico";
 import Documentos from "./pages/Documentos";
 import DocumentosAtestados from "./pages/DocumentosAtestados";
-import DocumentosDisciplinar from "./pages/DocumentosDisciplinar"; // 🔥 NOVO
+import DocumentosDisciplinar from "./pages/DocumentosDisciplinar";
 
 // Admin Pages
 import HomeAdmin from "./pages/admin/HomeAdmin";
@@ -42,8 +43,6 @@ const isUserAdmin = (role?: string | null): boolean => {
 function AuthenticatedRoutes() {
   const { session, role, loading } = useAuth();
   const isAuthenticated = !!session;
-
-  // 🔥 Determina se é admin (prioriza role do contexto, fallback para localStorage)
   const isAdmin = isUserAdmin(role);
 
   console.log('🔍 AuthenticatedRoutes - role:', role, 'isAdmin:', isAdmin, 'loading:', loading);
@@ -61,67 +60,69 @@ function AuthenticatedRoutes() {
   }
 
   return (
-    <AppShell>
-      <Routes>
-        {/* Shared Routes */}
-        <Route path="/perfil" element={<Perfil />} />
-        <Route path="/calendario" element={<Calendario />} />
-        <Route path="/admin/calendario" element={<CalendarioAdmin />} />
-        <Route path="/trocas" element={<Trocas />} />
-        <Route path="/historico" element={<Historico />} />
-        <Route path="/documentos" element={<Documentos />} />
-        <Route path="/documentos/atestados" element={<DocumentosAtestados />} />
-        <Route path="/documentos/ponto" element={<Documentos />} />
-        <Route path="/documentos/disciplinar" element={<DocumentosDisciplinar />} /> {/* 🔥 NOVA ROTA */}
+    // 🔥 ENVOLVE TODAS AS ROTAS AUTENTICADAS COM O PROVIDER DE ATESTADOS
+    <AtestadosPendentesProvider>
+      <AppShell>
+        <Routes>
+          {/* Shared Routes */}
+          <Route path="/perfil" element={<Perfil />} />
+          <Route path="/calendario" element={<Calendario />} />
+          <Route path="/admin/calendario" element={<CalendarioAdmin />} />
+          <Route path="/trocas" element={<Trocas />} />
+          <Route path="/historico" element={<Historico />} />
+          <Route path="/documentos" element={<Documentos />} />
+          <Route path="/documentos/atestados" element={<DocumentosAtestados />} />
+          <Route path="/documentos/ponto" element={<Documentos />} />
+          <Route path="/documentos/disciplinar" element={<DocumentosDisciplinar />} />
 
-        {/* 🔥 Rotas de Home com redirecionamento baseado em isAdmin */}
-        <Route path="/home" element={isAdmin ? <Navigate to="/admin/home" replace /> : <Home />} />
-        <Route path="/" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
+          {/* Rotas de Home com redirecionamento */}
+          <Route path="/home" element={isAdmin ? <Navigate to="/admin/home" replace /> : <Home />} />
+          <Route path="/" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
 
-        {/* Admin Routes */}
-        {isAdmin ? (
-          <>
-            <Route path="/admin" element={<Navigate to="/admin/home" replace />} />
-            <Route path="/admin/home" element={<HomeAdmin />} />
-            
-            {/* Cadastro Group */}
-            <Route path="/admin/colaboradores" element={<Colaboradores />} />
-            <Route path="/admin/cargos" element={<Cargos />} />
-            <Route path="/admin/unidades" element={<Unidades />} />
+          {/* Admin Routes */}
+          {isAdmin ? (
+            <>
+              <Route path="/admin" element={<Navigate to="/admin/home" replace />} />
+              <Route path="/admin/home" element={<HomeAdmin />} />
+              
+              {/* Cadastro Group */}
+              <Route path="/admin/colaboradores" element={<Colaboradores />} />
+              <Route path="/admin/cargos" element={<Cargos />} />
+              <Route path="/admin/unidades" element={<Unidades />} />
 
-            {/* Folgas Group */}
-            <Route path="/admin/folgas" element={<FolgasDashboard />} />
-            <Route path="/admin/solicitacoes" element={<Solicitacoes />} />
-            <Route path="/admin/aprovacoes" element={<Aprovacoes />} />
-            <Route path="/admin/trocas" element={<TrocasAdmin />} />
-            <Route path="/admin/bloqueios" element={<Bloqueios />} />
+              {/* Folgas Group */}
+              <Route path="/admin/folgas" element={<FolgasDashboard />} />
+              <Route path="/admin/solicitacoes" element={<Solicitacoes />} />
+              <Route path="/admin/aprovacoes" element={<Aprovacoes />} />
+              <Route path="/admin/trocas" element={<TrocasAdmin />} />
+              <Route path="/admin/bloqueios" element={<Bloqueios />} />
 
-            {/* Documentos Group */}
-            <Route path="/admin/documentos" element={<DocumentosHub />} />
-            <Route path="/admin/documentos/contracheque" element={<DocumentosContracheque />} />
-            <Route path="/admin/documentos/ponto" element={<DocumentosPontoAdmin />} />
-            <Route path="/admin/documentos/atestados" element={<AtestadosAdmin />} />
-            <Route path="/admin/documentos/disciplinar" element={<RegistrosDisciplinaresAdmin />} />
-            
-            {/* Comunicação Group */}
-            <Route path="/admin/mensagens" element={<MensagensAdmin />} />
-            <Route path="/admin/avisos" element={<QuadroAvisosAdmin />} />
-            
-            {/* Setup */}
-            <Route path="/admin/setup" element={<SetupAdmin />} />
-          </>
-        ) : (
-          <>
-            {/* Se não for admin, redireciona qualquer rota admin para home */}
-            <Route path="/admin/*" element={<Navigate to="/home" replace />} />
-            <Route path="/admin" element={<Navigate to="/home" replace />} />
-          </>
-        )}
+              {/* Documentos Group */}
+              <Route path="/admin/documentos" element={<DocumentosHub />} />
+              <Route path="/admin/documentos/contracheque" element={<DocumentosContracheque />} />
+              <Route path="/admin/documentos/ponto" element={<DocumentosPontoAdmin />} />
+              <Route path="/admin/documentos/atestados" element={<AtestadosAdmin />} />
+              <Route path="/admin/documentos/disciplinar" element={<RegistrosDisciplinaresAdmin />} />
+              
+              {/* Comunicação Group */}
+              <Route path="/admin/mensagens" element={<MensagensAdmin />} />
+              <Route path="/admin/avisos" element={<QuadroAvisosAdmin />} />
+              
+              {/* Setup */}
+              <Route path="/admin/setup" element={<SetupAdmin />} />
+            </>
+          ) : (
+            <>
+              <Route path="/admin/*" element={<Navigate to="/home" replace />} />
+              <Route path="/admin" element={<Navigate to="/home" replace />} />
+            </>
+          )}
 
-        {/* Fallback para usuários autenticados */}
-        <Route path="*" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
-      </Routes>
-    </AppShell>
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
+        </Routes>
+      </AppShell>
+    </AtestadosPendentesProvider>
   );
 }
 
