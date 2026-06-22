@@ -11,9 +11,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { extractTextFromPDF, renderPdfPageAsImage } from "@/lib/pdf-utils";
+import { extractTextFromPDF, renderPdfPageAsImage, extractSinglePageAsBlob } from "@/lib/pdf-utils";
 import { adminApi } from "@/lib/admin-api";
-import { PDFDocument } from "pdf-lib";
+import * as pdfjsLib from "pdfjs-dist";
 
 export interface PageResult {
   pageNumber: number;
@@ -68,34 +68,40 @@ const normalizeNome = (str: string): string => {
 };
 
 export function DocumentImportForm() {
+  const { user } = useAuth();
+  const documentType = window.location.pathname.includes("ponto") ? "ponto" : "contracheque";
+
+  // Estado do arquivo e UI
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [pageResults, setPageResults] = useState<PageResult[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
-  const [profiles, setProfiles] = useState<ProfileForMatching[]>([]);
-  const [unidades, setUnidades] = useState<Unidade[]>([]);
-  const [listaCargos, setListaCargos] = useState<Cargo[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isApproving, setIsApproving] = useState(false);
-  const [manualProfileId, setManualProfileId] = useState<string>("");
   const [pageImageUrl, setPageImageUrl] = useState<string | null>(null);
   const [loadingPageImage, setLoadingPageImage] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
 
+  // Dados de referência (carregados em paralelo)
+  const [profiles, setProfiles] = useState<ProfileForMatching[]>([]);
+  const [unidades, setUnidades] = useState<Unidade[]>([]);
+  const [listaCargos, setListaCargos] = useState<Cargo[]>([]);
+
+  // Estados de ação
+  const [isUploading, setIsUploading] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [manualProfileId, setManualProfileId] = useState<string>("");
+  const [showNovoColab, setShowNovoColab] = useState(false);
+  const [confirmIgnorar, setConfirmIgnorar] = useState(false);
+  const [avisoPendentes, setAvisoPendentes] = useState(false);
+
+  // Formulário de novo colaborador
   const [novoColabForm, setNovoColabForm] = useState({
     nome: "", cpf: "", cargo: "", unidadeId: "", senha: "",
     folgaFixa: "none", dataAdmissao: "", dataNascimento: "",
     whatsapp: "", perfil_acesso: "colaborador", matricula: "",
   });
-  const [showNovoColab, setShowNovoColab] = useState(false);
-  const [confirmIgnorar, setConfirmIgnorar] = useState(false);
-  const [avisoPendentes, setAvisoPendentes] = useState(false);
-  const { user } = useAuth();
 
-  const documentType = window.location.pathname.includes("ponto") ? "ponto" : "contracheque";
-
-  // 🔥 MELHORIA 1: Carregar dados em paralelo com Promise.all
+  // Carregar dados de referência em paralelo
   useEffect(() => {
     if (!user) return;
 
@@ -132,6 +138,7 @@ export function DocumentImportForm() {
     loadData();
   }, [user?.id, documentType]);
 
+  // Renderizar imagem da página atual
   useEffect(() => {
     setShowNovoColab(false);
     setManualProfileId("");
@@ -152,6 +159,10 @@ export function DocumentImportForm() {
       }
     }
   }, [currentPage, selectedFile, pageResults.length]);
+
+  // =========================================================================
+  // Funções auxiliares
+  // =========================================================================
 
   const cleanCNPJ = (cnpj: string) => cnpj.replace(/\D/g, "");
 
@@ -189,6 +200,44 @@ export function DocumentImportForm() {
     }
     return { profile: null, nomeEncontrado: null };
   };
+
+  // 🔥 Função segura para contar páginas de um Blob PDF
+  const getPdfPageCount = async (blob: Blob): Promise<number> => {
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      return pdf.numPages;
+    } catch (error) {
+      console.error("Erro ao contar páginas:", error);
+      return 0;
+    }
+  };
+
+  // 🔥 Função de extração de página com validação robusta
+  const extractPageFromPdf = async (file: File, pageNumber: number): Promise<Blob> => {
+    try {
+      console.log(`📄 Extraindo página ${pageNumber} do PDF:`, file.name);
+      
+      const arrayBuffer = await file.arrayBuffer();
+      const blob = await extractSinglePageAsBlob(arrayBuffer, pageNumber);
+      
+      // 🔥 Verifica se o blob realmente tem apenas uma página
+      const pageCount = await getPdfPageCount(blob);
+      if (pageCount !== 1) {
+        throw new Error(`A extração resultou em ${pageCount} páginas, mas deveria ser 1.`);
+      }
+      
+      console.log(`✅ Página ${pageNumber} extraída com sucesso, tamanho: ${(blob.size / 1024).toFixed(1)} KB`);
+      return blob;
+    } catch (error) {
+      console.error(`❌ Erro ao extrair página ${pageNumber}:`, error);
+      throw new Error(`Falha ao extrair página ${pageNumber}: ${(error as Error).message}`);
+    }
+  };
+
+  // =========================================================================
+  // Handlers principais
+  // =========================================================================
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -284,6 +333,12 @@ export function DocumentImportForm() {
       });
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const irParaPagina = (index: number) => {
+    if (index >= 0 && index < pageResults.length) {
+      setCurrentPage(index);
     }
   };
 
@@ -396,29 +451,10 @@ export function DocumentImportForm() {
     avancarParaProximaPendente();
   };
 
-  const irParaPagina = (index: number) => {
-    if (index >= 0 && index < pageResults.length) {
-      setCurrentPage(index);
-    }
-  };
+  // =========================================================================
+  // Handlers de aprovação – com DELETE em lote e uploads em chunks
+  // =========================================================================
 
-  const extractPageFromPdf = async (file: File, pageNumber: number): Promise<Blob> => {
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      const pdfDoc = await PDFDocument.load(arrayBuffer);
-      const newPdf = await PDFDocument.create();
-      const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageNumber - 1]);
-      newPdf.addPage(copiedPage);
-      const pdfBytes = await newPdf.save();
-      const uint8Array = new Uint8Array(pdfBytes);
-      return new Blob([uint8Array], { type: "application/pdf" });
-    } catch (error) {
-      console.error("❌ Erro ao extrair página:", error);
-      throw new Error(`Falha ao extrair página ${pageNumber}: ${(error as Error).message}`);
-    }
-  };
-
-  // 🔥 MELHORIA 2: DELETE em lote + uploads paralelizados em chunks
   const handleAprovarTudo = async () => {
     const pendentes = pageResults.filter(r => !r.resolvido && !r.ignorado);
     if (pendentes.length > 0) {
@@ -432,7 +468,7 @@ export function DocumentImportForm() {
       let salvos = 0;
       let substituidos = 0;
 
-      // 🔥 2a: DELETAR EM LOTE – primeiro, coletar todos os IDs a substituir
+      // 1) DELETAR EM LOTE – coletar todos os IDs a substituir
       const idsParaSubstituir = pageResults
         .filter(r => r.duplicadoId && r.acaoSeDuplicado === "substituir")
         .map(r => r.duplicadoId);
@@ -447,7 +483,7 @@ export function DocumentImportForm() {
         console.log(`🗑️ ${substituidos} documento(s) substituído(s) deletados em lote`);
       }
 
-      // 🔥 2b: Filtrar apenas os resultados que precisam ser salvos
+      // 2) Filtrar apenas os resultados que precisam ser salvos
       const resultsParaSalvar = pageResults.filter(
         r => !r.ignorado && r.matchedProfile && r.mes && r.ano
       );
@@ -457,7 +493,7 @@ export function DocumentImportForm() {
         return;
       }
 
-      // 🔥 2c: Processar em chunks de 3 para não sobrecarregar a API
+      // 3) Processar em chunks de 3 para não sobrecarregar a API
       const chunkSize = 3;
       for (let i = 0; i < resultsParaSalvar.length; i += chunkSize) {
         const chunk = resultsParaSalvar.slice(i, i + chunkSize);
@@ -528,6 +564,10 @@ export function DocumentImportForm() {
     }
   };
 
+  // =========================================================================
+  // Renderização
+  // =========================================================================
+
   const result = pageResults[currentPage];
   const totalPages = pageResults.length;
   const resolvidos = pageResults.filter(r => r.resolvido).length;
@@ -558,6 +598,7 @@ export function DocumentImportForm() {
     </div>
   );
 
+  // Estado inicial: sem resultados
   if (pageResults.length === 0) {
     return (
       <div className="space-y-4">
@@ -596,6 +637,7 @@ export function DocumentImportForm() {
     );
   }
 
+  // Estado com resultados
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between text-sm">
@@ -610,7 +652,6 @@ export function DocumentImportForm() {
 
       {result && (
         <div className={`rounded-2xl border-2 p-5 space-y-4 ${result.ignorado ? "border-gray-200 bg-gray-50 opacity-60" : result.duplicadoId && !result.acaoSeDuplicado ? "border-amber-300 bg-amber-50/50" : result.resolvido ? "border-green-300 bg-green-50" : "border-red-200 bg-red-50/50"}`}>
-
           <div className="flex items-center gap-2">
             {result.ignorado ? <XCircle className="size-5 text-gray-400" /> : result.duplicadoId && !result.acaoSeDuplicado ? <AlertTriangle className="size-5 text-amber-500" /> : result.resolvido ? <CheckCircle2 className="size-5 text-green-600" /> : <XCircle className="size-5 text-red-500" />}
             <span className="font-semibold text-sm">
