@@ -1,7 +1,8 @@
 import * as pdfjsLib from "pdfjs-dist";
 import { PDFDocument } from "pdf-lib";
 
-// 🔥 CONFIGURA O WORKER PARA USAR O ARQUIVO LOCAL (copiado para public)
+// 🔥 CONFIGURA O WORKER USANDO O ARQUIVO LOCAL DA PASTA public
+// Garante que o worker seja servido corretamente
 pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
 export interface PageText {
@@ -40,17 +41,25 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
     console.log(`🖼️ Renderizando página ${pageNumber} do PDF:`, file.name);
 
     const arrayBuffer = await file.arrayBuffer();
+    console.log("📄 ArrayBuffer carregado, tamanho:", arrayBuffer.byteLength);
+
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    console.log(`📚 PDF carregado, ${pdf.numPages} páginas`);
+
     const page = await pdf.getPage(pageNumber);
+    console.log(`✅ Página ${pageNumber} obtida`);
+
     const viewport = page.getViewport({ scale: 1.5 });
+    console.log(`📐 Viewport: ${viewport.width}x${viewport.height}`);
 
     const canvas = document.createElement("canvas");
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("Canvas context não disponível");
-
     canvas.width = viewport.width;
     canvas.height = viewport.height;
 
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Canvas context não disponível");
+
+    console.log("⏳ Renderizando página no canvas...");
     await page.render({
       canvasContext: context,
       viewport: viewport,
@@ -60,7 +69,9 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
     console.log("✅ Imagem renderizada com sucesso");
     return dataUrl;
   } catch (error) {
-    console.error("❌ Erro ao renderizar página do PDF:", error);
+    console.error("❌ Erro ao renderizar página do PDF:");
+    console.error("  Mensagem:", error instanceof Error ? error.message : String(error));
+    console.error("  Stack:", error instanceof Error ? error.stack : "Sem stack");
     throw new Error(`Falha ao renderizar página do PDF: ${(error as Error).message}`);
   }
 };
