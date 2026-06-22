@@ -7,7 +7,7 @@ export default function DocumentosAdiantamento() {
       tipo="adiantamento"
       titulo="Adiantamentos Quinzenais"
       icone={<FileText className="size-6 text-primary" />}
-      descricao="Importe e gerencie adiantamentos quinzenais dos colaboradores."
+      descricao="Gerencie os adiantamentos quinzenais dos colaboradores."
       importTitle="Importar Adiantamento"
     />
   );
