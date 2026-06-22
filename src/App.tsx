@@ -2,7 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AppShell } from "./components/AppShell";
 import { useAuth } from "./lib/auth-context";
-import { AtestadosPendentesProvider } from "./lib/atestados-pendentes-context"; // 🔥 IMPORTADO
+import { AtestadosPendentesProvider } from "./lib/atestados-pendentes-context";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Perfil from "./pages/Perfil";
@@ -33,7 +33,10 @@ import SetupAdmin from "./pages/SetupAdmin";
 import MensagensAdmin from "./pages/admin/Mensagens";
 import QuadroAvisosAdmin from "./pages/admin/QuadroAvisos";
 
-// 🔥 Função para verificar se o usuário é admin (usando localStorage como fallback)
+// 🔥 NOVOS HUBS
+import CadastroHub from "./pages/admin/CadastroHub";
+import ComunicacaoHub from "./pages/admin/ComunicacaoHub";
+
 const isUserAdmin = (role?: string | null): boolean => {
   if (role === "admin") return true;
   const storedRole = localStorage.getItem('user_role');
@@ -60,7 +63,6 @@ function AuthenticatedRoutes() {
   }
 
   return (
-    // 🔥 ENVOLVE TODAS AS ROTAS AUTENTICADAS COM O PROVIDER DE ATESTADOS
     <AtestadosPendentesProvider>
       <AppShell>
         <Routes>
@@ -85,7 +87,11 @@ function AuthenticatedRoutes() {
               <Route path="/admin" element={<Navigate to="/admin/home" replace />} />
               <Route path="/admin/home" element={<HomeAdmin />} />
               
-              {/* Cadastro Group */}
+              {/* 🔥 HUBS (novos) */}
+              <Route path="/admin/cadastro" element={<CadastroHub />} />
+              <Route path="/admin/comunicacao" element={<ComunicacaoHub />} />
+
+              {/* Cadastro Group (sub-páginas) */}
               <Route path="/admin/colaboradores" element={<Colaboradores />} />
               <Route path="/admin/cargos" element={<Cargos />} />
               <Route path="/admin/unidades" element={<Unidades />} />
@@ -104,7 +110,7 @@ function AuthenticatedRoutes() {
               <Route path="/admin/documentos/atestados" element={<AtestadosAdmin />} />
               <Route path="/admin/documentos/disciplinar" element={<RegistrosDisciplinaresAdmin />} />
               
-              {/* Comunicação Group */}
+              {/* Comunicação Group (sub-páginas) */}
               <Route path="/admin/mensagens" element={<MensagensAdmin />} />
               <Route path="/admin/avisos" element={<QuadroAvisosAdmin />} />
               
