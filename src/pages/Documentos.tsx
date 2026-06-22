@@ -24,7 +24,9 @@ import { Label } from "@/components/ui/label";
 
 interface Documento {
   id: string;
-  tipo: string; // "contracheque", "adiantamento", "ponto"
+  tipo: string;
+  subtipo?: string | null; // "mensal" | "quinzenal" | null
+  quinzena?: number | null; // 1 | 2
   mes: number;
   ano: number;
   storage_path: string;
@@ -35,8 +37,13 @@ interface Documento {
 const TIPOS_DOCUMENTO = [
   { value: "todos", label: "Todos" },
   { value: "contracheque", label: "Contracheque" },
-  { value: "adiantamento", label: "Adiantamento" },
   { value: "ponto", label: "Folha de Ponto" },
+];
+
+const SUBTIPOS_FILTRO = [
+  { value: "todos", label: "Todos" },
+  { value: "mensal", label: "Mensal" },
+  { value: "quinzenal", label: "Adiantamento" },
 ];
 
 export default function Documentos() {
@@ -49,6 +56,7 @@ export default function Documentos() {
 
   // Filtros
   const [filtroTipo, setFiltroTipo] = useState("todos");
+  const [filtroSubtipo, setFiltroSubtipo] = useState("todos");
   const [filtroAno, setFiltroAno] = useState<string>("todos");
   const [filtroMes, setFiltroMes] = useState<string>("todos");
 
@@ -67,6 +75,9 @@ export default function Documentos() {
       if (filtroTipo !== "todos") {
         query = query.eq("tipo", filtroTipo);
       }
+      if (filtroSubtipo !== "todos") {
+        query = query.eq("subtipo", filtroSubtipo);
+      }
       if (filtroAno !== "todos") {
         query = query.eq("ano", parseInt(filtroAno));
       }
@@ -81,6 +92,7 @@ export default function Documentos() {
       if (error) throw error;
       setDocumentos(data ?? []);
 
+      // Extrai anos e meses disponíveis para filtros
       const anosSet = new Set(data?.map(d => d.ano) ?? []);
       const mesesSet = new Set(data?.map(d => d.mes) ?? []);
       setAnos(Array.from(anosSet).sort((a, b) => b - a));
@@ -94,7 +106,7 @@ export default function Documentos() {
 
   useEffect(() => {
     load();
-  }, [user, filtroTipo, filtroAno, filtroMes]);
+  }, [user, filtroTipo, filtroSubtipo, filtroAno, filtroMes]);
 
   const handleDownload = async (doc: Documento) => {
     const { data } = await supabase.storage
@@ -122,13 +134,20 @@ export default function Documentos() {
 
   const getTipoLabel = (tipo: string) => {
     if (tipo === "contracheque") return "Contracheque";
-    if (tipo === "adiantamento") return "Adiantamento";
     if (tipo === "ponto") return "Folha de Ponto";
     return tipo;
   };
 
+  const getSubtipoLabel = (subtipo?: string | null, quinzena?: number | null) => {
+    if (subtipo === "quinzenal") {
+      return `Adiantamento ${quinzena}ª Quinzena`;
+    }
+    return "Mensal";
+  };
+
   const limparFiltros = () => {
     setFiltroTipo("todos");
+    setFiltroSubtipo("todos");
     setFiltroAno("todos");
     setFiltroMes("todos");
   };
@@ -148,7 +167,7 @@ export default function Documentos() {
           <FileText className="size-6 text-primary" /> Meus Documentos
         </h1>
         <p className="text-muted-foreground mt-1">
-          Acesse e baixe seus contracheques, adiantamentos e folhas de ponto.
+          Acesse e baixe seus contracheques, folhas de ponto e adiantamentos.
         </p>
       </div>
 
@@ -159,7 +178,9 @@ export default function Documentos() {
             <div className="space-y-1">
               <Label className="text-xs font-bold uppercase text-muted-foreground">Tipo</Label>
               <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-                <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectTrigger className="w-[140px] h-9">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
                 <SelectContent>
                   {TIPOS_DOCUMENTO.map(t => (
                     <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
@@ -167,10 +188,28 @@ export default function Documentos() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* 🔥 FILTRO POR SUBTIPO */}
+            <div className="space-y-1">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Subtipo</Label>
+              <Select value={filtroSubtipo} onValueChange={setFiltroSubtipo}>
+                <SelectTrigger className="w-[140px] h-9">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SUBTIPOS_FILTRO.map(s => (
+                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-1">
               <Label className="text-xs font-bold uppercase text-muted-foreground">Ano</Label>
               <Select value={filtroAno} onValueChange={setFiltroAno}>
-                <SelectTrigger className="w-[100px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectTrigger className="w-[100px] h-9">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todos">Todos</SelectItem>
                   {anos.map(a => (
@@ -179,10 +218,13 @@ export default function Documentos() {
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-1">
               <Label className="text-xs font-bold uppercase text-muted-foreground">Mês</Label>
               <Select value={filtroMes} onValueChange={setFiltroMes}>
-                <SelectTrigger className="w-[100px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectTrigger className="w-[100px] h-9">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todos">Todos</SelectItem>
                   {meses.map(m => (
@@ -191,6 +233,7 @@ export default function Documentos() {
                 </SelectContent>
               </Select>
             </div>
+
             <Button variant="ghost" size="sm" onClick={limparFiltros} className="mt-6 h-9">
               Limpar
             </Button>
@@ -213,8 +256,19 @@ export default function Documentos() {
                       <FileText className="size-5" />
                     </div>
                     <div>
-                      <div className="font-medium">
+                      <div className="font-medium flex items-center gap-2 flex-wrap">
                         {getTipoLabel(doc.tipo)}
+                        {/* 🔥 BADGE DE ADIANTAMENTO */}
+                        {doc.subtipo === "quinzenal" && (
+                          <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
+                            Adiantamento {doc.quinzena}ª Quinzena
+                          </span>
+                        )}
+                        {doc.subtipo === "mensal" && (
+                          <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
+                            Mensal
+                          </span>
+                        )}
                       </div>
                       <div className="text-sm text-muted-foreground">
                         {String(doc.mes).padStart(2, "0")}/{doc.ano}
@@ -246,13 +300,14 @@ export default function Documentos() {
         </CardContent>
       </Card>
 
+      {/* Dialog de visualização */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Visualização do Documento</DialogTitle>
             <DialogDescription>
               {selectedDoc
-                ? `${getTipoLabel(selectedDoc.tipo)} - ${String(selectedDoc.mes).padStart(2, "0")}/${selectedDoc.ano}`
+                ? `${getTipoLabel(selectedDoc.tipo)} - ${String(selectedDoc.mes).padStart(2, "0")}/${selectedDoc.ano}${selectedDoc.subtipo === "quinzenal" ? ` (Adiantamento ${selectedDoc.quinzena}ª Quinzena)` : ""}`
                 : "Documento"}
             </DialogDescription>
           </DialogHeader>

@@ -1,10 +1,12 @@
 import * as pdfjsLib from "pdfjs-dist";
 import { PDFDocument } from "pdf-lib";
 
-// 🔥 DEFINIÇÃO EXPLÍCITA DO WORKER (versão fixa)
-// Use a versão 4.0.379 (última estável) – ou a versão que você tiver instalada
-const PDFJS_VERSION = "4.0.379"; // Altere se necessário
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`;
+// Configura o worker com arquivo local
+const workerUrl = new URL(
+  "pdfjs-dist/build/pdf.worker.min.js",
+  import.meta.url
+).toString();
+pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
 export interface PageText {
   pageNumber: number;
@@ -53,10 +55,12 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
     canvas.width = viewport.width;
     canvas.height = viewport.height;
 
+    // 🔥 CORREÇÃO: usar ambos os campos para compatibilidade com diferentes versões do pdf.js
     await page.render({
+      canvas: canvas,
       canvasContext: context,
       viewport: viewport,
-    }).promise;
+    } as any).promise;
 
     const dataUrl = canvas.toDataURL("image/png");
     console.log("✅ Imagem renderizada com sucesso");
@@ -83,6 +87,7 @@ export const extractSinglePageAsBlob = async (
     const newPdfBytes = await newPdf.save();
     console.log("✅ Página extraída com sucesso");
     
+    // 🔥 CORREÇÃO: converter para Uint8Array antes de criar o Blob
     const uint8Array = new Uint8Array(newPdfBytes);
     return new Blob([uint8Array], { type: "application/pdf" });
   } catch (error) {
