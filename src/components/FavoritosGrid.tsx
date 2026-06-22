@@ -3,23 +3,39 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Star, Loader2, StarOff } from "lucide-react";
 import { useFavoritos } from "@/lib/useFavoritos";
 import { Button } from "@/components/ui/button";
+import {
+  Users,
+  Briefcase,
+  Building2,
+  Shield,
+  Calendar,
+  ClipboardList,
+  UserCheck,
+  ArrowLeftRight,
+  Ban,
+  FileText,
+  FileWarning,
+  ShieldAlert,
+  MessageSquare,
+  Bell,
+} from "lucide-react";
 
-// Mapeamento de ícones para componentes (simplificado)
+// Mapeamento correto de ícones
 const iconMap: Record<string, any> = {
-  Users: Star,
-  Briefcase: Star,
-  Building2: Star,
-  Shield: Star,
-  Calendar: Star,
-  ClipboardList: Star,
-  UserCheck: Star,
-  ArrowLeftRight: Star,
-  Ban: Star,
-  FileText: Star,
-  FileWarning: Star,
-  ShieldAlert: Star,
-  MessageSquare: Star,
-  Bell: Star,
+  Users: Users,
+  Briefcase: Briefcase,
+  Building2: Building2,
+  Shield: Shield,
+  Calendar: Calendar,
+  ClipboardList: ClipboardList,
+  UserCheck: UserCheck,
+  ArrowLeftRight: ArrowLeftRight,
+  Ban: Ban,
+  FileText: FileText,
+  FileWarning: FileWarning,
+  ShieldAlert: ShieldAlert,
+  MessageSquare: MessageSquare,
+  Bell: Bell,
 };
 
 export function FavoritosGrid() {
@@ -80,7 +96,7 @@ export function FavoritosGrid() {
               <div key={item.id} className="relative group">
                 <Link
                   to={item.rota}
-                  className="block p-4 bg-card border border-border rounded-xl hover:shadow-md hover:border-primary/50 transition-all duration-200 text-center"
+                  className="block p-4 bg-card border border-border rounded-xl hover:shadow-md hover:border-primary/50 transition-all duration-200 text-center h-full"
                 >
                   <IconComponent className="size-6 mx-auto text-primary mb-2" />
                   <span className="text-sm font-medium line-clamp-2">{item.label}</span>
