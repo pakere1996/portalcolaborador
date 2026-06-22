@@ -1,36 +1,12 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Users, Calendar, CalendarCheck, ClipboardList, ArrowLeftRight, Ban, Sparkles, Cake, AlertTriangle, ChevronRight, Building2, MessageCircle } from "lucide-react";
+import { Shield, Users, Calendar, CalendarCheck, ClipboardList, ArrowLeftRight, Ban, Sparkles, AlertTriangle } from "lucide-react";
 import { formatBR, parseYMD } from "@/lib/folga-rules";
 import { Button } from "@/components/ui/button";
 import { adminApi } from "@/lib/admin-api";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-
-interface Unidade {
-  id: string;
-  nome: string;
-}
-
-interface Aniversariante {
-  id: string;
-  nome: string;
-  data_nascimento: string;
-  idade: number;
-  unidade: string;
-  whatsapp: string | null;
-}
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -42,18 +18,8 @@ export default function AdminDashboard() {
     ocupacaoHoje: "0/1",
   });
   const [proximasFolgas, setProximasFolgas] = useState<{ data: string; ocupacao: number; limite: number; temAniversario?: boolean; status: string; percentual: number }[]>([]);
-  const [aniversariantes, setAniversariantes] = useState<Aniversariante[]>([]);
-  const [unidades, setUnidades] = useState<Unidade[]>([]);
-  const [busySorteio, setBusySorteio] = useState(false);
   const [alertas, setAlertas] = useState<{ tipo: string; mensagem: string; data?: string }[]>([]);
-
-  // Estado para o modal de envio de mensagem
-  const [msgDialog, setMsgDialog] = useState<{ open: boolean; colaborador: Aniversariante | null; mensagem: string }>({
-    open: false,
-    colaborador: null,
-    mensagem: "",
-  });
-  const [sending, setSending] = useState(false);
+  const [busySorteio, setBusySorteio] = useState(false);
 
   const load = async () => {
     const now = new Date();
@@ -72,9 +38,8 @@ export default function AdminDashboard() {
       priosRes,
       folgasDataRes,
       profilesRes,
-      unidadesRes
     ] = await Promise.all([
-      supabase.from("profiles").select("id, nome, data_nascimento, folga_fixa_semana, ativo, unidade_id, whatsapp").eq("ativo", true),
+      supabase.from("profiles").select("id, nome, data_nascimento, folga_fixa_semana, ativo, unidade_id").eq("ativo", true),
       supabase.from("folgas").select("*", { count: "exact", head: true }).gte("data", start).lte("data", end),
       supabase.from("solicitacoes_especiais").select("*", { count: "exact", head: true }).eq("status", "pendente"),
       supabase.from("datas_bloqueadas").select("*", { count: "exact", head: true }).eq("liberada", false),
@@ -82,15 +47,10 @@ export default function AdminDashboard() {
       supabase.from("dia_config").select("data, limite_colaboradores").gte("data", start).lte("data", end),
       supabase.from("prioridade_aniversario").select("data").eq("status", "ativa").gte("data", start).lte("data", end),
       supabase.from("folgas").select("data").gte("data", start).lte("data", end),
-      supabase.from("profiles").select("id, nome, data_nascimento, folga_fixa_semana, unidade_id, whatsapp").eq("ativo", true),
-      supabase.from("unidades").select("id, nome").eq("ativo", true),
+      supabase.from("profiles").select("id, nome, data_nascimento, folga_fixa_semana, unidade_id").eq("ativo", true),
     ]);
 
     const profilesAtivos = profilesRes.data ?? [];
-    const unidadesList = unidadesRes.data ?? [];
-    setUnidades(unidadesList);
-
-    const unidadeMap = new Map(unidadesList.map(u => [u.id, u.nome]));
 
     const todayLimit = (configRes.data ?? []).find((c) => c.data === todayIso)?.limite_colaboradores ?? 1;
     const todayMonthly = (folgasDataRes.data ?? []).filter((f) => f.data === todayIso).length;
@@ -104,46 +64,6 @@ export default function AdminDashboard() {
       trocasPendentes: trocasP.count ?? 0,
       ocupacaoHoje: `${todayMonthly + todayFixed}/${todayLimit}`,
     });
-
-    // Aniversariantes dos próximos 30 dias
-    const anoAtual = now.getFullYear();
-    const hoje = new Date(anoAtual, now.getMonth(), now.getDate());
-    const limite = new Date(hoje);
-    limite.setDate(limite.getDate() + 30);
-
-    const aniversariantesList = profilesAtivos
-      .filter(p => p.data_nascimento)
-      .map(p => {
-        const nasc = new Date(p.data_nascimento + "T00:00:00");
-        let proximoAniversario = new Date(anoAtual, nasc.getMonth(), nasc.getDate());
-        if (proximoAniversario < hoje) {
-          proximoAniversario = new Date(anoAtual + 1, nasc.getMonth(), nasc.getDate());
-        }
-        const idade = proximoAniversario.getFullYear() - nasc.getFullYear();
-        const unidadeNome = p.unidade_id ? unidadeMap.get(p.unidade_id) || "—" : "—";
-        return {
-          id: p.id,
-          nome: p.nome,
-          data_nascimento: p.data_nascimento,
-          dia: nasc.getDate(),
-          mes: nasc.getMonth() + 1,
-          proximoAniversario,
-          idade,
-          unidade: unidadeNome,
-          whatsapp: p.whatsapp || null,
-        };
-      })
-      .filter(item => item.proximoAniversario >= hoje && item.proximoAniversario <= limite)
-      .sort((a, b) => a.proximoAniversario.getTime() - b.proximoAniversario.getTime());
-
-    setAniversariantes(aniversariantesList.map(a => ({
-      id: a.id,
-      nome: a.nome,
-      data_nascimento: a.data_nascimento,
-      idade: a.idade,
-      unidade: a.unidade,
-      whatsapp: a.whatsapp,
-    })));
 
     // Próximos fins de semana
     const { data: folgasData } = folgasDataRes;
@@ -186,7 +106,6 @@ export default function AdminDashboard() {
         data: p.data
       });
     });
-
     setAlertas(novosAlertas);
   };
 
@@ -224,55 +143,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // 🔥 Função para abrir o modal de envio de mensagem
-  const openMsgDialog = (colaborador: Aniversariante) => {
-    const mensagemPadrao = `🎉 Feliz Aniversário, ${colaborador.nome.split(' ')[0]}! 🎂
-
-A equipe Pakerê deseja a você um dia especial, cheio de alegria e realizações. Que este novo ano de vida seja repleto de sucesso e felicidade!
-
-Atenciosamente,
-Equipe Pakerê`;
-
-    setMsgDialog({
-      open: true,
-      colaborador,
-      mensagem: mensagemPadrao,
-    });
-  };
-
-  // 🔥 Função para enviar a mensagem via WhatsApp
-  const sendWhatsAppMessage = async () => {
-    if (!msgDialog.colaborador) return;
-    if (!msgDialog.colaborador.whatsapp) {
-      toast.error("Colaborador não possui WhatsApp cadastrado.");
-      return;
-    }
-
-    setSending(true);
-    try {
-      // Formata o número (remove tudo que não é dígito)
-      const numero = msgDialog.colaborador.whatsapp.replace(/\D/g, '');
-      // Verifica se tem 11 dígitos (DDD + 9 dígitos)
-      if (numero.length < 10) {
-        toast.error("Número de WhatsApp inválido.");
-        return;
-      }
-
-      // Abre o WhatsApp Web com a mensagem pré-preenchida
-      const mensagemEncoded = encodeURIComponent(msgDialog.mensagem);
-      const url = `https://wa.me/55${numero}?text=${mensagemEncoded}`;
-      window.open(url, '_blank');
-
-      toast.success("Mensagem aberta no WhatsApp!");
-      setMsgDialog({ open: false, colaborador: null, mensagem: "" });
-    } catch (error) {
-      console.error("Erro ao enviar mensagem:", error);
-      toast.error("Erro ao enviar mensagem.");
-    } finally {
-      setSending(false);
-    }
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case "lotado": return "bg-red-100 text-red-700 border-red-200";
@@ -294,7 +164,7 @@ Equipe Pakerê`;
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-            <Shield className="size-6 text-primary" /> Painel Administrativo
+            <Shield className="size-6 text-primary" /> Dashboard de Folgas
           </h1>
           <p className="text-muted-foreground mt-1">Visão geral das escalas e solicitações.</p>
         </div>
@@ -336,138 +206,45 @@ Equipe Pakerê`;
         </div>
       )}
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card className="shadow-sm border-border">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="size-4 text-primary" /> Ocupação dos Próximos Fins de Semana
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {proximasFolgas.map((p) => (
-                <div key={p.data} className="p-3 rounded-xl bg-muted/30 border border-border/50">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-900">{formatBR(parseYMD(p.data))}</span>
-                      {p.temAniversario && (
-                        <span title="Aniversariante com prioridade">
-                          <Cake className="size-4 text-amber-500" />
-                        </span>
-                      )}
-                    </div>
-                    <Badge className={getStatusColor(p.status)}>{getStatusLabel(p.status)}</Badge>
+      <Card className="shadow-sm border-border">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="size-4 text-primary" /> Ocupação dos Próximos Fins de Semana
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {proximasFolgas.map((p) => (
+              <div key={p.data} className="p-3 rounded-xl bg-muted/30 border border-border/50">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-900">{formatBR(parseYMD(p.data))}</span>
+                    {p.temAniversario && (
+                      <span title="Aniversariante com prioridade">
+                        <Sparkles className="size-4 text-amber-500" />
+                      </span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className={`h-full transition-all ${
-                          p.status === "lotado" ? "bg-red-500" :
-                          p.status === "cheio" ? "bg-orange-500" : "bg-emerald-500"
-                        }`}
-                        style={{ width: `${Math.min(100, p.percentual)}%` }}
-                      />
-                    </div>
-                    <span className="text-xs font-mono text-slate-600 w-16 text-right">{p.ocupacao}/{p.limite}</span>
-                    <span className="text-xs text-muted-foreground w-16 text-right">{p.percentual}%</span>
-                  </div>
+                  <Badge className={getStatusColor(p.status)}>{getStatusLabel(p.status)}</Badge>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm border-border">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Cake className="size-4 text-primary" /> Aniversariantes dos Próximos 30 Dias
-            </CardTitle>
-            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">{aniversariantes.length}</Badge>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {aniversariantes.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">Nenhum aniversariante nos próximos 30 dias.</div>
-              ) : (
-                aniversariantes.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between p-3 rounded-xl bg-amber-50/30 border border-amber-100/50 gap-2">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="size-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 font-bold shrink-0">
-                        {new Date(a.data_nascimento + "T00:00:00").getDate()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold text-slate-900 truncate">{a.nome}</div>
-                        <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                          <span>Completa {a.idade} anos</span>
-                          <span className="flex items-center gap-0.5">
-                            <Building2 className="size-3" />
-                            {a.unidade}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    {/* 🔥 Botão de enviar mensagem (WhatsApp) */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0 gap-1.5 text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700"
-                      onClick={() => openMsgDialog(a)}
-                      disabled={!a.whatsapp}
-                      title={a.whatsapp ? "Enviar mensagem de aniversário" : "Sem WhatsApp cadastrado"}
-                    >
-                      <MessageCircle className="size-4" />
-                      <span className="hidden sm:inline text-xs">Mensagem</span>
-                    </Button>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all ${
+                        p.status === "lotado" ? "bg-red-500" :
+                        p.status === "cheio" ? "bg-orange-500" : "bg-emerald-500"
+                      }`}
+                      style={{ width: `${Math.min(100, p.percentual)}%` }}
+                    />
                   </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* 🔥 Modal de envio de mensagem */}
-      <Dialog open={msgDialog.open} onOpenChange={(open) => !open && setMsgDialog({ open: false, colaborador: null, mensagem: "" })}>
-        <DialogContent className="max-w-lg rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageCircle className="size-5 text-primary" />
-              Enviar mensagem para {msgDialog.colaborador?.nome}
-            </DialogTitle>
-            <DialogDescription>
-              A mensagem será aberta no WhatsApp Web. Verifique o número antes de enviar.
-              <br />
-              <span className="text-xs text-muted-foreground">
-                WhatsApp: {msgDialog.colaborador?.whatsapp || "Não cadastrado"}
-              </span>
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="mensagem">Mensagem</Label>
-              <Textarea
-                id="mensagem"
-                value={msgDialog.mensagem}
-                onChange={(e) => setMsgDialog({ ...msgDialog, mensagem: e.target.value })}
-                rows={8}
-                className="resize-none"
-              />
-            </div>
+                  <span className="text-xs font-mono text-slate-600 w-16 text-right">{p.ocupacao}/{p.limite}</span>
+                  <span className="text-xs text-muted-foreground w-16 text-right">{p.percentual}%</span>
+                </div>
+              </div>
+            ))}
           </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="ghost" onClick={() => setMsgDialog({ open: false, colaborador: null, mensagem: "" })} disabled={sending}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={sendWhatsAppMessage}
-              disabled={sending || !msgDialog.colaborador?.whatsapp}
-              className="gap-2"
-            >
-              {sending ? "Enviando..." : <><MessageCircle className="size-4" /> Enviar via WhatsApp</>}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </CardContent>
+      </Card>
     </div>
   );
 }
