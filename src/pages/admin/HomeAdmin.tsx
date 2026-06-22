@@ -31,7 +31,6 @@ import {
 } from "lucide-react";
 import { useAtestadosPendentes } from "@/lib/atestados-pendentes-context";
 
-// 🔥 SUA LISTA DE MÓDULOS COMPLETA (COLOQUE A QUE VOCÊ JÁ TINHA)
 const adminModules = [
   {
     title: "Colaboradores",
@@ -143,7 +142,7 @@ const adminModules = [
 export default function AdminHomeAdminPage() {
   const { pendentes, totalPendentes, loading, showNotification, setShowNotification } = useAtestadosPendentes();
 
-  // Notificação em tela (toast)
+  // Toast de notificação
   useEffect(() => {
     if (totalPendentes > 0 && !showNotification) {
       toast.info(`📋 ${totalPendentes} atestado(s) pendente(s) de aprovação`, {
@@ -175,7 +174,7 @@ export default function AdminHomeAdminPage() {
         <p className="text-muted-foreground mt-1">Acesso rápido aos módulos de gestão.</p>
       </div>
 
-      {/* 🔥 Card de Pendências – com título fixo e skeleton melhorado */}
+      {/* 🔥 Card de Pendências – com título fixo e estados claros */}
       {loading ? (
         <Card className="border-border shadow-sm">
           <CardHeader>
@@ -240,7 +239,7 @@ export default function AdminHomeAdminPage() {
         </Card>
       )}
 
-      {/* Módulos administrativos – exatamente como você já tinha */}
+      {/* Módulos administrativos */}
       {Object.entries(groupedModules).map(([category, modules]) => (
         <div key={category} className="space-y-4">
           <h2 className="text-xl font-semibold border-b pb-1 text-primary">{category}</h2>
@@ -260,7 +259,7 @@ export default function AdminHomeAdminPage() {
         </div>
       ))}
 
-      {/* AlertDialog – notificação em tela (mantido) */}
+      {/* AlertDialog – notificação em tela */}
       <AlertDialog open={showNotification} onOpenChange={setShowNotification}>
         <AlertDialogContent className="max-w-md rounded-2xl">
           <AlertDialogHeader>
