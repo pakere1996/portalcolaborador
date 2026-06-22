@@ -1,34 +1,3 @@
-<div className="flex items-center justify-between flex-wrap gap-3">
-  <div>
-    <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-      <Users className="size-6 text-primary" /> Colaboradores
-    </h1>
-    <p className="text-muted-foreground mt-1">Gerencie a equipe, cargos e acessos ao sistema.</p>
-  </div>
-  <div className="flex items-center gap-2">
-    {/* 🔥 Botão Favoritar */}
-    <FavoritarBotao rota="/admin/colaboradores" label="Colaboradores" icone="Users" />
-    
-    <Dialog open={openNewDialog} onOpenChange={setOpenNewDialog}>
-      <DialogTrigger asChild>
-        <Button className="rounded-full px-6"><Plus className="size-4 mr-2" /> Novo Colaborador</Button>
-      </DialogTrigger>
-      <ColaboradorFormDialog
-        open={openNewDialog}
-        onOpenChange={setOpenNewDialog}
-        form={newForm}
-        setForm={setNewForm}
-        unidades={unidades}
-        cargos={cargos}
-        busy={busy}
-        isEdit={false}
-        onSave={handleCreate}
-      />
-    </Dialog>
-  </div>
-</div>
-
-import { FavoritarBotao } from "@/components/FavoritarBotao";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -49,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { ColaboradorFormDialog } from "@/components/ColaboradorFormDialog";
 import { Tables } from "@/integrations/supabase/types";
 import { adminApi } from "@/lib/admin-api";
+import { FavoritarBotao } from "@/components/FavoritarBotao";
 
 type Profile = Tables<'profiles'> & { role?: string | null };
 type Unidade = Tables<'unidades'> & { possui_relogio_ponto?: boolean };
@@ -345,22 +315,25 @@ export default function Colaboradores() {
           </h1>
           <p className="text-muted-foreground mt-1">Gerencie a equipe, cargos e acessos ao sistema.</p>
         </div>
-        <Dialog open={openNewDialog} onOpenChange={setOpenNewDialog}>
-          <DialogTrigger asChild>
-            <Button className="rounded-full px-6"><Plus className="size-4 mr-2" /> Novo Colaborador</Button>
-          </DialogTrigger>
-          <ColaboradorFormDialog
-            open={openNewDialog}
-            onOpenChange={setOpenNewDialog}
-            form={newForm}
-            setForm={setNewForm}
-            unidades={unidades}
-            cargos={cargos}
-            busy={busy}
-            isEdit={false}
-            onSave={handleCreate}
-          />
-        </Dialog>
+        <div className="flex items-center gap-2">
+          <FavoritarBotao rota="/admin/colaboradores" label="Colaboradores" icone="Users" />
+          <Dialog open={openNewDialog} onOpenChange={setOpenNewDialog}>
+            <DialogTrigger asChild>
+              <Button className="rounded-full px-6"><Plus className="size-4 mr-2" /> Novo Colaborador</Button>
+            </DialogTrigger>
+            <ColaboradorFormDialog
+              open={openNewDialog}
+              onOpenChange={setOpenNewDialog}
+              form={newForm}
+              setForm={setNewForm}
+              unidades={unidades}
+              cargos={cargos}
+              busy={busy}
+              isEdit={false}
+              onSave={handleCreate}
+            />
+          </Dialog>
+        </div>
       </div>
 
       <div className="bg-card border border-border rounded-2xl p-4 flex flex-wrap gap-4 items-end">
