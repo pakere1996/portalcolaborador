@@ -125,7 +125,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/bloqueios", label: "Datas Bloqueadas", icon: Ban },
   ];
 
-  // COLABORADOR: Meus Documentos + Atestados + Registros Disciplinares
+  // 🔥 COLABORADOR: Meus Documentos + Atestados + Registros Disciplinares
   const employeeDocsNav: NavItem[] = [
     { to: "/documentos", label: "Meus Documentos", icon: FileText, end: true },
     { to: "/documentos/atestados", label: "Atestados", icon: FileWarning },
