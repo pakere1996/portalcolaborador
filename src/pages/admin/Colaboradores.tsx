@@ -1,3 +1,13 @@
+<div className="flex items-center justify-between">
+  <div>
+    <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+      <Users className="size-6 text-primary" /> Colaboradores
+    </h1>
+    <p className="text-muted-foreground mt-1">Gerencie perfis, cargos e status de colaboradores.</p>
+  </div>
+  <FavoritarBotao rota="/admin/colaboradores" label="Colaboradores" icone="Users" />
+</div>
+
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
