@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Upload, Loader2 } from "lucide-react";
 
@@ -49,10 +50,11 @@ export function DocumentImportForm() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
 
+  // Formulário
   const [selectedColaborador, setSelectedColaborador] = useState("");
   const [selectedMes, setSelectedMes] = useState("");
   const [selectedAno, setSelectedAno] = useState("");
-  const [tipoDocumento, setTipoDocumento] = useState<"contracheque" | "adiantamento" | "ponto">("contracheque");
+  const [isAdiantamento, setIsAdiantamento] = useState(false);
   const [file, setFile] = useState<File | null>(null);
 
   const load = async () => {
@@ -93,7 +95,7 @@ export function DocumentImportForm() {
     setSelectedColaborador("");
     setSelectedMes("");
     setSelectedAno("");
-    setTipoDocumento("contracheque");
+    setIsAdiantamento(false);
     setFile(null);
   };
 
@@ -103,7 +105,8 @@ export function DocumentImportForm() {
     if (!selectedMes) return toast.error("Selecione o mês");
     if (!selectedAno) return toast.error("Selecione o ano");
 
-    if (tipoDocumento === "adiantamento") {
+    // Validação para adiantamento
+    if (isAdiantamento) {
       if (!colaboradorPodeAdiantamento(selectedColaborador)) {
         return toast.error("Este colaborador não tem direito a adiantamento.");
       }
@@ -113,7 +116,8 @@ export function DocumentImportForm() {
     try {
       const fileExt = file.name.split('.').pop();
       const mesStr = String(selectedMes).padStart(2, "0");
-      const fileName = `${selectedColaborador}/${selectedAno}/${mesStr}/${tipoDocumento}.${fileExt}`;
+      const tipo = isAdiantamento ? "adiantamento" : "contracheque";
+      const fileName = `${selectedColaborador}/${selectedAno}/${mesStr}/${tipo}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from("documentos")
@@ -123,7 +127,7 @@ export function DocumentImportForm() {
 
       const insertData: any = {
         colaborador_id: selectedColaborador,
-        tipo: tipoDocumento,
+        tipo: tipo,
         mes: parseInt(selectedMes),
         ano: parseInt(selectedAno),
         storage_path: fileName,
@@ -149,23 +153,6 @@ export function DocumentImportForm() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Tipo de Documento</Label>
-          <Select
-            value={tipoDocumento}
-            onValueChange={(v: "contracheque" | "adiantamento" | "ponto") => setTipoDocumento(v)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="contracheque">Contracheque</SelectItem>
-              <SelectItem value="adiantamento">Adiantamento Quinzenal</SelectItem>
-              <SelectItem value="ponto">Folha de Ponto</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
         <div className="space-y-2">
           <Label>Colaborador</Label>
           <Select value={selectedColaborador} onValueChange={setSelectedColaborador}>
@@ -211,7 +198,7 @@ export function DocumentImportForm() {
           </Select>
         </div>
 
-        <div className="space-y-2 md:col-span-2">
+        <div className="space-y-2">
           <Label>Arquivo PDF</Label>
           <Input
             type="file"
@@ -220,6 +207,24 @@ export function DocumentImportForm() {
             className="cursor-pointer"
           />
           {file && <p className="text-sm text-muted-foreground">{file.name}</p>}
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <div className="flex items-center space-x-3 rounded-xl border border-border p-4">
+            <Switch
+              id="adiantamento"
+              checked={isAdiantamento}
+              onCheckedChange={setIsAdiantamento}
+            />
+            <Label htmlFor="adiantamento" className="cursor-pointer">
+              Este documento é um <strong>Adiantamento Quinzenal</strong>
+            </Label>
+          </div>
+          {isAdiantamento && selectedColaborador && !colaboradorPodeAdiantamento(selectedColaborador) && (
+            <p className="text-sm text-red-500">
+              ⚠️ Este colaborador não tem direito a adiantamento. Verifique as permissões.
+            </p>
+          )}
         </div>
       </div>
 
