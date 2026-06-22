@@ -31,8 +31,113 @@ import {
 } from "lucide-react";
 import { useAtestadosPendentes } from "@/lib/atestados-pendentes-context";
 
+// 🔥 SUA LISTA DE MÓDULOS COMPLETA (COLOQUE A QUE VOCÊ JÁ TINHA)
 const adminModules = [
-  // ... (mantenha a lista de módulos igual à que você já tem)
+  {
+    title: "Colaboradores",
+    description: "Gerencie perfis, cargos e status de colaboradores.",
+    icon: Users,
+    to: "/admin/colaboradores",
+    category: "Cadastro",
+  },
+  {
+    title: "Cargos",
+    description: "Gerencie os cargos da empresa.",
+    icon: Briefcase,
+    to: "/admin/cargos",
+    category: "Cadastro",
+  },
+  {
+    title: "Unidades",
+    description: "Gerencie as unidades da loja.",
+    icon: Building2,
+    to: "/admin/unidades",
+    category: "Cadastro",
+  },
+  {
+    title: "Dashboard Folgas",
+    description: "Visão geral e estatísticas do sistema de folgas.",
+    icon: Shield,
+    to: "/admin/folgas",
+    category: "Folgas",
+  },
+  {
+    title: "Calendário Geral",
+    description: "Visão consolidada de todas as folgas da equipe.",
+    icon: Calendar,
+    to: "/admin/calendario",
+    category: "Folgas",
+  },
+  {
+    title: "Solicitações Especiais",
+    description: "Gerencie pedidos de folgas fora das regras normais.",
+    icon: ClipboardList,
+    to: "/admin/solicitacoes",
+    category: "Folgas",
+  },
+  {
+    title: "Aprovações",
+    description: "Aprove ou rejeite folgas pendentes e prioridades de aniversário.",
+    icon: UserCheck,
+    to: "/admin/aprovacoes",
+    category: "Folgas",
+  },
+  {
+    title: "Trocas de Folga",
+    description: "Monitore e gerencie as solicitações de troca entre colaboradores.",
+    icon: ArrowLeftRight,
+    to: "/admin/trocas",
+    category: "Folgas",
+  },
+  {
+    title: "Datas Bloqueadas",
+    description: "Configure e gerencie dias de bloqueio de folgas.",
+    icon: Ban,
+    to: "/admin/bloqueios",
+    category: "Folgas",
+  },
+  {
+    title: "Contracheques",
+    description: "Faça upload e gerencie contracheques.",
+    icon: FileText,
+    to: "/admin/documentos/contracheque",
+    category: "Documentos",
+  },
+  {
+    title: "Folhas de Ponto",
+    description: "Faça upload e gerencie folhas de ponto.",
+    icon: FileText,
+    to: "/admin/documentos/ponto",
+    category: "Documentos",
+  },
+  {
+    title: "Atestados",
+    description: "Gerencie e aprove atestados médicos.",
+    icon: FileWarning,
+    to: "/admin/documentos/atestados",
+    category: "Documentos",
+  },
+  {
+    title: "Registros Disciplinares",
+    description: "Cadastre advertências e suspensões.",
+    icon: ShieldAlert,
+    to: "/admin/documentos/disciplinar",
+    category: "Documentos",
+  },
+  {
+    title: "Comunicados",
+    description: "Envie mensagens para colaboradores.",
+    icon: Bell,
+    to: "/admin/mensagens",
+    category: "Comunicação",
+  },
+  {
+    title: "Quadro de Avisos",
+    description: "Crie avisos para os colaboradores.",
+    icon: Bell,
+    to: "/admin/avisos",
+    category: "Comunicação",
+  },
 ];
 
 export default function AdminHomeAdminPage() {
@@ -70,7 +175,7 @@ export default function AdminHomeAdminPage() {
         <p className="text-muted-foreground mt-1">Acesso rápido aos módulos de gestão.</p>
       </div>
 
-      {/* 🔥 Card de Pendências – agora com título fixo e estados claros */}
+      {/* 🔥 Card de Pendências – com título fixo e skeleton melhorado */}
       {loading ? (
         <Card className="border-border shadow-sm">
           <CardHeader>
@@ -135,7 +240,7 @@ export default function AdminHomeAdminPage() {
         </Card>
       )}
 
-      {/* Módulos administrativos */}
+      {/* Módulos administrativos – exatamente como você já tinha */}
       {Object.entries(groupedModules).map(([category, modules]) => (
         <div key={category} className="space-y-4">
           <h2 className="text-xl font-semibold border-b pb-1 text-primary">{category}</h2>
@@ -155,7 +260,7 @@ export default function AdminHomeAdminPage() {
         </div>
       ))}
 
-      {/* AlertDialog – notificação em tela */}
+      {/* AlertDialog – notificação em tela (mantido) */}
       <AlertDialog open={showNotification} onOpenChange={setShowNotification}>
         <AlertDialogContent className="max-w-md rounded-2xl">
           <AlertDialogHeader>
