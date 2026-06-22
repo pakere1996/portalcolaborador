@@ -30,11 +30,12 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { AvisosPopout } from "@/components/AvisosPopout";
 import logo from "@/assets/pakere-logo.png";
 import { cn } from "@/lib/utils";
+import { LucideIcon } from "lucide-react";
 
 interface NavItem {
   to: string;
   label: string;
-  icon: any;
+  icon: LucideIcon;
   end?: boolean;
 }
 
@@ -135,7 +136,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   ];
 
   const adminFolgaNav: NavItem[] = [
-    // O item "Dashboard" não está aqui porque o link principal "/admin/folgas" já é o Dashboard
     { to: "/admin/calendario", label: "Calendário Geral", icon: Calendar },
     { to: "/admin/solicitacoes", label: "Solicitações", icon: ClipboardList },
     { to: "/admin/aprovacoes", label: "Aprovações", icon: UserCheck },
@@ -168,7 +168,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // 🔥 Renderiza um item principal com submenu expansível (apenas para admin)
   const renderAdminMenuItem = (
     label: string,
-    icon: any,
+    Icon: LucideIcon,
     linkTo: string,
     isOpen: boolean,
     toggleFn: () => void,
@@ -190,7 +190,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               )
             }
           >
-            {icon({ className: "size-4" })}
+            <Icon className="size-4" />
             <span>{label}</span>
           </NavLink>
           <button
