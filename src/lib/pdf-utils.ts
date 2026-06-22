@@ -1,12 +1,11 @@
 import * as pdfjsLib from "pdfjs-dist";
 import { PDFDocument } from "pdf-lib";
 
-// 🔥 SOLUÇÃO DEFINITIVA: Importa o worker como um módulo ES com ?worker
-// O Vite vai tratar isso corretamente e servir o worker de forma compatível
-import Worker from "pdfjs-dist/build/pdf.worker.mjs?worker";
+// 🔥 CORRETO: usa ?url para obter a URL como string
+import workerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 
-// 🔥 Configura o worker usando o objeto importado
-pdfjsLib.GlobalWorkerOptions.workerSrc = Worker;
+// 🔥 Configura o worker com a URL resolvida
+pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
 export interface PageText {
   pageNumber: number;
