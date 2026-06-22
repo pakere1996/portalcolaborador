@@ -7,12 +7,9 @@ import {
   ClipboardList,
   LogOut,
   Menu,
-  Shield,
   UserCheck,
   Users,
   X,
-  ChevronDown,
-  ChevronRight,
   Settings,
   FileText,
   FileWarning,
@@ -24,7 +21,7 @@ import {
   Megaphone,
   Bell,
 } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/NotificationBell";
 import { AvisosPopout } from "@/components/AvisosPopout";
@@ -44,31 +41,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const path = location.pathname;
   const [open, setOpen] = useState(false);
 
-  const [folgasOpen, setFolgasOpen] = useState(false);
-  const [docsOpen, setDocsOpen] = useState(false);
-  const [cadastroOpen, setCadastroOpen] = useState(false);
-  const [comunicacaoOpen, setComunicacaoOpen] = useState(false);
-
-  const toggleMenu = useCallback(
-    (menu: "folgas" | "docs" | "cadastro" | "comunicacao") => {
-      const setters = {
-        folgas: setFolgasOpen,
-        docs: setDocsOpen,
-        cadastro: setCadastroOpen,
-        comunicacao: setComunicacaoOpen,
-      };
-      Object.values(setters).forEach((setter) => setter(false));
-      const currentState = {
-        folgas: folgasOpen,
-        docs: docsOpen,
-        cadastro: cadastroOpen,
-        comunicacao: comunicacaoOpen,
-      }[menu];
-      setters[menu](!currentState);
-    },
-    [folgasOpen, docsOpen, cadastroOpen, comunicacaoOpen]
-  );
-
   const getIsAdmin = () => {
     const savedRole = localStorage.getItem('user_role');
     if (savedRole) return savedRole === 'admin';
@@ -76,83 +48,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   const isAdmin = getIsAdmin();
-  const homePath = isAdmin ? "/admin/home" : "/home";
 
   useEffect(() => {
     setOpen(false);
   }, [path]);
-
-  useEffect(() => {
-    const shouldOpen = {
-      cadastro:
-        path.startsWith("/admin/colaboradores") ||
-        path.startsWith("/admin/cargos") ||
-        path.startsWith("/admin/unidades"),
-      docs: path.includes("/documentos"),
-      comunicacao:
-        path.startsWith("/admin/mensagens") ||
-        path.startsWith("/admin/avisos"),
-      folgas:
-        path.includes("/calendario") ||
-        path.includes("/trocas") ||
-        path.includes("/historico") ||
-        (path.startsWith("/admin") &&
-          !path.includes("/documentos") &&
-          !path.includes("/colaboradores") &&
-          !path.includes("/mensagens") &&
-          !path.includes("/avisos") &&
-          !path.includes("/home")),
-    };
-
-    setFolgasOpen(shouldOpen.folgas);
-    setDocsOpen(shouldOpen.docs);
-    setCadastroOpen(shouldOpen.cadastro);
-    setComunicacaoOpen(shouldOpen.comunicacao);
-  }, [path]);
-
-  // Navegação do colaborador
-  const employeeFolgaNav: NavItem[] = [
-    { to: "/calendario", label: "Calendário", icon: Calendar },
-    { to: "/trocas", label: "Trocas", icon: ArrowLeftRight },
-    { to: "/historico", label: "Histórico", icon: ClipboardList },
-  ];
-
-  const adminFolgaNav: NavItem[] = [
-    { to: "/admin/folgas", label: "Dashboard", icon: Shield },
-    { to: "/admin/calendario", label: "Calendário Geral", icon: Calendar },
-    { to: "/admin/solicitacoes", label: "Solicitações", icon: ClipboardList },
-    { to: "/admin/aprovacoes", label: "Aprovações", icon: UserCheck },
-    { to: "/admin/trocas", label: "Trocas", icon: ArrowLeftRight },
-    { to: "/admin/bloqueios", label: "Datas Bloqueadas", icon: Ban },
-  ];
-
-  // COLABORADOR: Meus Documentos + Atestados + Registros Disciplinares
-  const employeeDocsNav: NavItem[] = [
-    { to: "/documentos", label: "Meus Documentos", icon: FileText, end: true },
-    { to: "/documentos/atestados", label: "Atestados", icon: FileWarning },
-    { to: "/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
-  ];
-
-  const adminDocsNav: NavItem[] = [
-    { to: "/admin/documentos/contracheque", label: "Contracheques", icon: FileText, end: true },
-    { to: "/admin/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
-    { to: "/admin/documentos/atestados", label: "Atestados", icon: FileWarning },
-    { to: "/admin/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
-  ];
-
-  const adminCadastroNav: NavItem[] = [
-    { to: "/admin/colaboradores", label: "Colaboradores", icon: Users },
-    { to: "/admin/cargos", label: "Cargos", icon: Briefcase },
-    { to: "/admin/unidades", label: "Unidades", icon: Building2 },
-  ];
-
-  const adminComunicacaoNav: NavItem[] = [
-    { to: "/admin/mensagens", label: "Mensagens", icon: MessageSquare },
-    { to: "/admin/avisos", label: "Quadro de Avisos", icon: Bell },
-  ];
-
-  const folgaNav = isAdmin ? adminFolgaNav : employeeFolgaNav;
-  const docsNav = isAdmin ? adminDocsNav : employeeDocsNav;
 
   const getLinkClass = (isActive: boolean, isHome = false) =>
     cn(
@@ -163,6 +62,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           : "bg-primary/15 text-primary font-medium"
         : "text-muted-foreground hover:text-foreground hover:bg-accent"
     );
+
+  // 🔥 MENU ADMIN – links diretos (sem submenus expansíveis)
+  const adminMainNav: NavItem[] = [
+    { to: "/admin/home", label: "Início", icon: Home },
+    { to: "/admin/cadastro", label: "Cadastro", icon: Users },
+    { to: "/admin/folgas", label: "Folgas", icon: Calendar },
+    { to: "/admin/documentos", label: "Documentos", icon: FileText },
+    { to: "/admin/comunicacao", label: "Comunicação", icon: Megaphone },
+  ];
+
+  // 🔥 MENU COLABORADOR – mantém submenus
+  const employeeMainNav: NavItem[] = [
+    { to: "/home", label: "Início", icon: Home },
+    { to: "/perfil", label: "Meu Cadastro", icon: Settings },
+  ];
+
+  const employeeFolgaNav: NavItem[] = [
+    { to: "/calendario", label: "Calendário", icon: Calendar },
+    { to: "/trocas", label: "Trocas", icon: ArrowLeftRight },
+    { to: "/historico", label: "Histórico", icon: ClipboardList },
+  ];
+
+  const employeeDocsNav: NavItem[] = [
+    { to: "/documentos", label: "Meus Documentos", icon: FileText, end: true },
+    { to: "/documentos/atestados", label: "Atestados", icon: FileWarning },
+    { to: "/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
+  ];
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
@@ -194,145 +120,42 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-180px)]">
-          <NavLink
-            to={homePath}
-            className={({ isActive }) => getLinkClass(isActive, true)}
-          >
-            <Home className="size-4" />
-            <span>Início</span>
-          </NavLink>
-
           {isAdmin ? (
-            <div className="space-y-1">
-              <button
-                onClick={() => toggleMenu("cadastro")}
-                className={cn(
-                  "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                  cadastroOpen || path.includes("/admin/colaboradores") || path.includes("/admin/cargos") || path.includes("/admin/unidades")
-                    ? "text-primary bg-primary/5"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <Users className="size-4" />
-                  <span>Cadastro</span>
-                </div>
-                {cadastroOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-              </button>
-
-              {cadastroOpen && (
-                <div className="pl-4 space-y-1 mt-1 border-l border-border ml-5">
-                  {adminCadastroNav.map((item) => (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      className={({ isActive }) => getLinkClass(isActive)}
-                    >
-                      <item.icon className="size-4" />
-                      {item.label}
-                    </NavLink>
-                  ))}
-                </div>
-              )}
-            </div>
+            // 🔥 ADMIN: links diretos sem submenus
+            <>
+              {adminMainNav.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) => getLinkClass(isActive, item.to === "/admin/home")}
+                >
+                  <item.icon className="size-4" />
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
+            </>
           ) : (
-            <NavLink
-              to="/perfil"
-              className={({ isActive }) => getLinkClass(isActive)}
-            >
-              <Settings className="size-4" />
-              <span>Meu Cadastro</span>
-            </NavLink>
-          )}
+            // 🔥 COLABORADOR: mantém submenus
+            <>
+              {employeeMainNav.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) => getLinkClass(isActive, item.to === "/home")}
+                >
+                  <item.icon className="size-4" />
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
 
-          <div className="space-y-1">
-            <button
-              onClick={() => toggleMenu("folgas")}
-              className={cn(
-                "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                folgasOpen || path.includes("/calendario") || path.includes("/trocas") || path.includes("/historico") || (path.startsWith("/admin") && !path.includes("/documentos") && !path.includes("/colaboradores") && !path.includes("/mensagens") && !path.includes("/avisos") && !path.includes("/home"))
-                  ? "text-primary bg-primary/5"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <Calendar className="size-4" />
-                <span>Folgas</span>
-              </div>
-              {folgasOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-            </button>
-
-            {folgasOpen && (
-              <div className="pl-4 space-y-1 mt-1 border-l border-border ml-5">
-                {folgaNav.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    className={({ isActive }) => getLinkClass(isActive)}
-                  >
-                    <item.icon className="size-4" />
-                    {item.label}
-                  </NavLink>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-1">
-            <button
-              onClick={() => toggleMenu("docs")}
-              className={cn(
-                "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                docsOpen || path.includes("/documentos")
-                  ? "text-primary bg-primary/5"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <FileText className="size-4" />
-                <span>Documentos</span>
-              </div>
-              {docsOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-            </button>
-
-            {docsOpen && (
-              <div className="pl-4 space-y-1 mt-1 border-l border-border ml-5">
-                {docsNav.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.end}
-                    className={({ isActive }) => getLinkClass(isActive)}
-                  >
-                    <item.icon className="size-4" />
-                    {item.label}
-                  </NavLink>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {isAdmin && (
-            <div className="space-y-1">
-              <button
-                onClick={() => toggleMenu("comunicacao")}
-                className={cn(
-                  "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
-                  comunicacaoOpen || path.includes("/admin/mensagens") || path.includes("/admin/avisos")
-                    ? "text-primary bg-primary/5"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <Megaphone className="size-4" /> {/* 🔥 Ícone do grupo alterado para Megaphone */}
-                  <span>Comunicação</span>
+              {/* Folgas - submenu para colaborador */}
+              <div className="space-y-1 mt-4">
+                <div className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-muted-foreground">
+                  <Calendar className="size-4" />
+                  <span>Folgas</span>
                 </div>
-                {comunicacaoOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-              </button>
-
-              {comunicacaoOpen && (
-                <div className="pl-4 space-y-1 mt-1 border-l border-border ml-5">
-                  {adminComunicacaoNav.map((item) => (
+                <div className="pl-4 space-y-1 border-l border-border ml-5">
+                  {employeeFolgaNav.map((item) => (
                     <NavLink
                       key={item.to}
                       to={item.to}
@@ -343,8 +166,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     </NavLink>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+
+              {/* Documentos - submenu para colaborador */}
+              <div className="space-y-1 mt-4">
+                <div className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-muted-foreground">
+                  <FileText className="size-4" />
+                  <span>Documentos</span>
+                </div>
+                <div className="pl-4 space-y-1 border-l border-border ml-5">
+                  {employeeDocsNav.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.end}
+                      className={({ isActive }) => getLinkClass(isActive)}
+                    >
+                      <item.icon className="size-4" />
+                      {item.label}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
         </nav>
 
