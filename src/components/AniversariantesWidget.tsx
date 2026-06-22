@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Cake, Building2, MessageCircle, Loader2 } from "lucide-react";
+import { Cake, Loader2, Building2, MessageCircle } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -17,11 +17,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
-interface Unidade {
-  id: string;
-  nome: string;
-}
-
 interface Aniversariante {
   id: string;
   nome: string;
@@ -29,21 +24,29 @@ interface Aniversariante {
   idade: number;
   unidade: string;
   whatsapp: string | null;
+  dias_para_aniversario: number;
 }
 
-export function AniversariantesWidget() {
+interface AniversariantesWidgetProps {
+  limit?: number;
+  showSendButton?: boolean;
+}
+
+export function AniversariantesWidget({ limit = 10, showSendButton = true }: AniversariantesWidgetProps) {
   const [aniversariantes, setAniversariantes] = useState<Aniversariante[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Estado para o modal de envio de mensagem
-  const [msgDialog, setMsgDialog] = useState<{ open: boolean; colaborador: Aniversariante | null; mensagem: string }>({
+  const [msgDialog, setMsgDialog] = useState<{
+    open: boolean;
+    colaborador: Aniversariante | null;
+    mensagem: string;
+  }>({
     open: false,
     colaborador: null,
     mensagem: "",
   });
   const [sending, setSending] = useState(false);
 
-  const carregarAniversariantes = async () => {
+  const loadAniversariantes = async () => {
     setLoading(true);
     try {
       const now = new Date();
@@ -52,26 +55,29 @@ export function AniversariantesWidget() {
       const limite = new Date(hoje);
       limite.setDate(limite.getDate() + 30);
 
-      // Buscar colaboradores ativos com data de nascimento e unidades
-      const [profilesRes, unidadesRes] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("id, nome, data_nascimento, unidade_id, whatsapp")
-          .eq("ativo", true)
-          .not("data_nascimento", "is", null),
-        supabase
-          .from("unidades")
-          .select("id, nome")
-          .eq("ativo", true),
-      ]);
+      const { data: profiles, error } = await supabase
+        .from("profiles")
+        .select(`
+          id,
+          nome,
+          data_nascimento,
+          whatsapp,
+          unidade_id,
+          unidades!unidade_id (nome)
+        `)
+        .eq("ativo", true)
+        .not("data_nascimento", "is", null);
 
-      if (profilesRes.error) throw profilesRes.error;
-      if (unidadesRes.error) throw unidadesRes.error;
+      if (error) throw error;
 
-      const unidadesList = unidadesRes.data ?? [];
-      const unidadeMap = new Map(unidadesList.map(u => [u.id, u.nome]));
+      const unidadeMap = new Map();
+      profiles?.forEach(p => {
+        if (p.unidades) {
+          unidadeMap.set(p.unidade_id, p.unidades.nome);
+        }
+      });
 
-      const aniversariantesList = (profilesRes.data ?? [])
+      const aniversariantesList = (profiles ?? [])
         .map(p => {
           const nasc = new Date(p.data_nascimento + "T00:00:00");
           let proximoAniversario = new Date(anoAtual, nasc.getMonth(), nasc.getDate());
@@ -79,48 +85,34 @@ export function AniversariantesWidget() {
             proximoAniversario = new Date(anoAtual + 1, nasc.getMonth(), nasc.getDate());
           }
           const idade = proximoAniversario.getFullYear() - nasc.getFullYear();
-          const unidadeNome = p.unidade_id ? unidadeMap.get(p.unidade_id) || "—" : "—";
+          const diffTime = proximoAniversario.getTime() - hoje.getTime();
+          const diffDias = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
           return {
             id: p.id,
             nome: p.nome,
             data_nascimento: p.data_nascimento,
             idade,
-            unidade: unidadeNome,
+            unidade: p.unidade_id ? unidadeMap.get(p.unidade_id) || "—" : "—",
             whatsapp: p.whatsapp || null,
+            dias_para_aniversario: diffDias,
           };
         })
-        .filter(item => {
-          const nasc = new Date(item.data_nascimento + "T00:00:00");
-          let proximo = new Date(anoAtual, nasc.getMonth(), nasc.getDate());
-          if (proximo < hoje) {
-            proximo = new Date(anoAtual + 1, nasc.getMonth(), nasc.getDate());
-          }
-          return proximo >= hoje && proximo <= limite;
-        })
-        .sort((a, b) => {
-          const aNasc = new Date(a.data_nascimento + "T00:00:00");
-          const bNasc = new Date(b.data_nascimento + "T00:00:00");
-          const aProx = new Date(anoAtual, aNasc.getMonth(), aNasc.getDate());
-          const bProx = new Date(anoAtual, bNasc.getMonth(), bNasc.getDate());
-          if (aProx < hoje) aProx.setFullYear(anoAtual + 1);
-          if (bProx < hoje) bProx.setFullYear(anoAtual + 1);
-          return aProx.getTime() - bProx.getTime();
-        });
+        .filter(item => item.dias_para_aniversario >= 0 && item.dias_para_aniversario <= 30)
+        .sort((a, b) => a.dias_para_aniversario - b.dias_para_aniversario)
+        .slice(0, limit);
 
       setAniversariantes(aniversariantesList);
     } catch (error) {
       console.error("Erro ao carregar aniversariantes:", error);
-      toast.error("Erro ao carregar aniversariantes");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    carregarAniversariantes();
+    loadAniversariantes();
   }, []);
 
-  // 🔥 Função para abrir o modal de envio de mensagem
   const openMsgDialog = (colaborador: Aniversariante) => {
     const mensagemPadrao = `🎉 Feliz Aniversário, ${colaborador.nome.split(' ')[0]}! 🎂
 
@@ -136,7 +128,6 @@ Equipe Pakerê`;
     });
   };
 
-  // 🔥 Função para enviar a mensagem via WhatsApp
   const sendWhatsAppMessage = async () => {
     if (!msgDialog.colaborador) return;
     if (!msgDialog.colaborador.whatsapp) {
@@ -204,8 +195,8 @@ Equipe Pakerê`;
 
   return (
     <>
-      <Card className="border-border shadow-sm">
-        <CardHeader>
+      <Card className="border-border shadow-sm flex flex-col">
+        <CardHeader className="pb-3 shrink-0">
           <CardTitle className="text-lg flex items-center gap-2">
             <Cake className="size-5 text-pink-500" />
             Aniversariantes dos Próximos 30 Dias
@@ -214,12 +205,12 @@ Equipe Pakerê`;
             </Badge>
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex-1 overflow-y-auto max-h-[400px] pr-1">
           <div className="space-y-3">
             {aniversariantes.map((p) => (
               <div
                 key={p.id}
-                className="flex items-center justify-between p-3 bg-pink-50 rounded-lg border border-pink-100 shadow-sm"
+                className="flex items-center justify-between p-3 bg-pink-50 rounded-lg border border-pink-100 shadow-sm gap-2"
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <div className="size-10 rounded-full bg-pink-200 flex items-center justify-center text-pink-700 font-bold shrink-0">
@@ -227,7 +218,7 @@ Equipe Pakerê`;
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="font-medium truncate">{p.nome}</div>
-                    <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                    <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5">
                       <span>Completa {p.idade} anos</span>
                       <span className="flex items-center gap-0.5">
                         <Building2 className="size-3" />
@@ -236,17 +227,19 @@ Equipe Pakerê`;
                     </div>
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 gap-1.5 text-pink-600 border-pink-200 hover:bg-pink-50 hover:text-pink-700"
-                  onClick={() => openMsgDialog(p)}
-                  disabled={!p.whatsapp}
-                  title={p.whatsapp ? "Enviar mensagem de aniversário" : "Sem WhatsApp cadastrado"}
-                >
-                  <MessageCircle className="size-4" />
-                  <span className="hidden sm:inline text-xs">Mensagem</span>
-                </Button>
+                {showSendButton && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-1.5 text-pink-600 border-pink-200 hover:bg-pink-50 hover:text-pink-700"
+                    onClick={() => openMsgDialog(p)}
+                    disabled={!p.whatsapp}
+                    title={p.whatsapp ? "Enviar mensagem de aniversário" : "Sem WhatsApp cadastrado"}
+                  >
+                    <MessageCircle className="size-4" />
+                    <span className="hidden sm:inline text-xs">Mensagem</span>
+                  </Button>
+                )}
               </div>
             ))}
           </div>
