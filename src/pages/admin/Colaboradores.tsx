@@ -1,5 +1,3 @@
-import { FavoritarBotao } from "@/components/FavoritarBotao";
-
 <div className="flex items-center justify-between">
   <div>
     <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
@@ -10,6 +8,7 @@ import { FavoritarBotao } from "@/components/FavoritarBotao";
   <FavoritarBotao rota="/admin/colaboradores" label="Colaboradores" icone="Users" />
 </div>
 
+import { FavoritarBotao } from "@/components/FavoritarBotao";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
