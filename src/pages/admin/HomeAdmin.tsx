@@ -1,8 +1,13 @@
 import { useEffect } from "react";
+import { useAtestadosPendentes } from "@/lib/atestados-pendentes-context";
+import { useFavoritos } from "@/lib/useFavoritos";
+import { AniversariantesWidget } from "@/components/AniversariantesWidget";
+import { FavoritosGrid } from "@/components/FavoritosGrid";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Bell, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -12,138 +17,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import {
-  Users,
-  Shield,
-  UserCheck,
-  ClipboardList,
-  FileText,
-  FileWarning,
-  ArrowLeftRight,
-  Ban,
-  Building2,
-  Briefcase,
-  ShieldAlert,
-  Calendar,
-  Bell,
-  MessageSquare,
-  Loader2,
-  X,
-} from "lucide-react";
-import { useAtestadosPendentes } from "@/lib/atestados-pendentes-context";
-
-const adminModules = [
-  {
-    title: "Colaboradores",
-    description: "Gerencie perfis, cargos e status de colaboradores.",
-    icon: Users,
-    to: "/admin/colaboradores",
-    category: "Cadastro",
-  },
-  {
-    title: "Cargos",
-    description: "Gerencie os cargos da empresa.",
-    icon: Briefcase,
-    to: "/admin/cargos",
-    category: "Cadastro",
-  },
-  {
-    title: "Unidades",
-    description: "Gerencie as unidades da loja.",
-    icon: Building2,
-    to: "/admin/unidades",
-    category: "Cadastro",
-  },
-  {
-    title: "Dashboard Folgas",
-    description: "Visão geral e estatísticas do sistema de folgas.",
-    icon: Shield,
-    to: "/admin/folgas",
-    category: "Folgas",
-  },
-  {
-    title: "Calendário Geral",
-    description: "Visão consolidada de todas as folgas da equipe.",
-    icon: Calendar,
-    to: "/admin/calendario",
-    category: "Folgas",
-  },
-  {
-    title: "Solicitações Especiais",
-    description: "Gerencie pedidos de folgas fora das regras normais.",
-    icon: ClipboardList,
-    to: "/admin/solicitacoes",
-    category: "Folgas",
-  },
-  {
-    title: "Aprovações",
-    description: "Aprove ou rejeite folgas pendentes e prioridades de aniversário.",
-    icon: UserCheck,
-    to: "/admin/aprovacoes",
-    category: "Folgas",
-  },
-  {
-    title: "Trocas de Folga",
-    description: "Monitore e gerencie as solicitações de troca entre colaboradores.",
-    icon: ArrowLeftRight,
-    to: "/admin/trocas",
-    category: "Folgas",
-  },
-  {
-    title: "Datas Bloqueadas",
-    description: "Configure e gerencie dias de bloqueio de folgas.",
-    icon: Ban,
-    to: "/admin/bloqueios",
-    category: "Folgas",
-  },
-  {
-    title: "Contracheques",
-    description: "Faça upload e gerencie contracheques.",
-    icon: FileText,
-    to: "/admin/documentos/contracheque",
-    category: "Documentos",
-  },
-  {
-    title: "Folhas de Ponto",
-    description: "Faça upload e gerencie folhas de ponto.",
-    icon: FileText,
-    to: "/admin/documentos/ponto",
-    category: "Documentos",
-  },
-  {
-    title: "Atestados",
-    description: "Gerencie e aprove atestados médicos.",
-    icon: FileWarning,
-    to: "/admin/documentos/atestados",
-    category: "Documentos",
-  },
-  {
-    title: "Registros Disciplinares",
-    description: "Cadastre advertências e suspensões.",
-    icon: ShieldAlert,
-    to: "/admin/documentos/disciplinar",
-    category: "Documentos",
-  },
-  {
-    title: "Comunicados",
-    description: "Envie mensagens para colaboradores.",
-    icon: MessageSquare,
-    to: "/admin/mensagens",
-    category: "Comunicação",
-  },
-  {
-    title: "Quadro de Avisos",
-    description: "Crie avisos para os colaboradores.",
-    icon: Bell,
-    to: "/admin/avisos",
-    category: "Comunicação",
-  },
-];
+import { X } from "lucide-react";
 
 export default function AdminHomeAdminPage() {
-  const { pendentes, totalPendentes, loading, showNotification, setShowNotification } = useAtestadosPendentes();
+  const { pendentes, totalPendentes, loading: loadingAtestados, showNotification, setShowNotification } = useAtestadosPendentes();
+  const { favoritos, loading: loadingFavoritos } = useFavoritos();
 
-  // 🔥 Toast de notificação quando há pendências
+  // Toast de notificação
   useEffect(() => {
     if (totalPendentes > 0 && !showNotification) {
       toast.info(`📋 ${totalPendentes} atestado(s) pendente(s) de aprovação`, {
@@ -158,25 +38,23 @@ export default function AdminHomeAdminPage() {
     }
   }, [totalPendentes, showNotification]);
 
-  const groupedModules = adminModules.reduce((acc, module) => {
-    if (!acc[module.category]) {
-      acc[module.category] = [];
-    }
-    acc[module.category].push(module);
-    return acc;
-  }, {} as Record<string, typeof adminModules>);
-
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
+    <div className="max-w-7xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-          <Shield className="size-6 text-primary" /> Painel Administrativo
+          <Bell className="size-6 text-primary" /> Painel Administrativo
         </h1>
-        <p className="text-muted-foreground mt-1">Acesso rápido aos módulos de gestão.</p>
+        <p className="text-muted-foreground mt-1">Visão geral e atalhos rápidos.</p>
       </div>
 
-      {/* 🔥 Card de Pendências – agora com título fixo e estados claros */}
-      {loading ? (
+      {/* Grid de 2 colunas: Aniversariantes + Favoritos */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <AniversariantesWidget showMessageButton={true} maxItems={6} />
+        <FavoritosGrid />
+      </div>
+
+      {/* Card de Pendências (se houver) */}
+      {loadingAtestados ? (
         <Card className="border-border shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -185,7 +63,7 @@ export default function AdminHomeAdminPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-center py-8">
+            <div className="flex items-center justify-center py-6">
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
             </div>
           </CardContent>
@@ -224,43 +102,9 @@ export default function AdminHomeAdminPage() {
             </div>
           </CardContent>
         </Card>
-      ) : (
-        <Card className="border-border shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Bell className="size-5 text-muted-foreground" />
-              Pendências
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center text-muted-foreground py-6">
-              Nenhuma pendência no momento.
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      ) : null}
 
-      {/* Módulos administrativos */}
-      {Object.entries(groupedModules).map(([category, modules]) => (
-        <div key={category} className="space-y-4">
-          <h2 className="text-xl font-semibold border-b pb-1 text-primary">{category}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {modules.map((module) => (
-              <Link key={module.to} to={module.to} className="block h-full">
-                <div className="bg-card border border-border rounded-2xl p-5 shadow-sm hover:shadow-lg hover:border-primary/50 transition-all duration-200 h-full flex flex-col">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-base font-semibold text-primary">{module.title}</h3>
-                    <module.icon className="size-6 text-yellow-500 shrink-0" />
-                  </div>
-                  <p className="text-sm text-muted-foreground flex-1">{module.description}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      ))}
-
-      {/* 🔥 AlertDialog – notificação em tela */}
+      {/* AlertDialog – notificação em tela */}
       <AlertDialog open={showNotification} onOpenChange={setShowNotification}>
         <AlertDialogContent className="max-w-md rounded-2xl">
           <AlertDialogHeader>
