@@ -9,6 +9,11 @@ export default function DocumentosAdiantamento() {
       icone={<FileText className="size-6 text-primary" />}
       descricao="Importe e gerencie adiantamentos salariais dos colaboradores."
       importTitle="Importar Adiantamentos"
+      favorito={{ 
+        rota: "/admin/documentos/adiantamento", 
+        label: "Adiantamentos", 
+        icone: "FileText" 
+      }}
     />
   );
 }
