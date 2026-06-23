@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { Plus, Building2, Pencil, Trash2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
 
 interface Unidade {
   id: string;
@@ -168,120 +169,123 @@ export default function Unidades() {
           </h1>
           <p className="text-muted-foreground mt-1">Cadastre e gerencie as unidades da loja.</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="rounded-full px-6">
-              <Plus className="size-4 mr-2" /> Nova Unidade
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Nova unidade</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Nome da Unidade *</Label>
-                <Input
-                  value={form.nome}
-                  onChange={(e) => setForm({ ...form, nome: e.target.value })}
-                  placeholder="Ex: Pakerê Garavelo"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>CNPJ</Label>
-                <Input
-                  value={form.cnpj}
-                  onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
-                  placeholder="00.000.000/0000-00"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Endereço</Label>
-                <Input
-                  value={form.endereco}
-                  onChange={(e) => setForm({ ...form, endereco: e.target.value })}
-                  placeholder="Ex: R 9 A, SN"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Cidade</Label>
-                <Input
-                  value={form.cidade}
-                  onChange={(e) => setForm({ ...form, cidade: e.target.value })}
-                  placeholder="Ex: Aparecida de Goiânia"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Telefone</Label>
-                <Input
-                  value={form.telefone}
-                  onChange={(e) => setForm({ ...form, telefone: e.target.value })}
-                  placeholder="Ex: (62) 99999-9999"
-                />
-              </div>
-
-              {/* Switch: Possui relógio de ponto */}
-              <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
-                <Switch
-                  id="possui_relogio_ponto"
-                  checked={form.possui_relogio_ponto || false}
-                  onCheckedChange={(checked) =>
-                    setForm({ ...form, possui_relogio_ponto: checked })
-                  }
-                />
-                <Label htmlFor="possui_relogio_ponto">Possui relógio de ponto</Label>
-              </div>
-
-              {/* Switch: Tem adiantamento salarial */}
-              <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
-                <Switch
-                  id="tem_adiantamento"
-                  checked={form.tem_adiantamento || false}
-                  onCheckedChange={(checked) =>
-                    setForm({
-                      ...form,
-                      tem_adiantamento: checked,
-                      dia_adiantamento: checked ? form.dia_adiantamento : null,
-                    })
-                  }
-                />
-                <Label htmlFor="tem_adiantamento">Tem adiantamento salarial</Label>
-              </div>
-
-              {/* Dia do adiantamento (visível apenas se tem_adiantamento for true) */}
-              {form.tem_adiantamento && (
+        <div className="flex items-center gap-2">
+          <FavoritarBotao rota="/admin/unidades" label="Unidades" icone="Building2" /> {/* <-- botão adicionado */}
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button className="rounded-full px-6">
+                <Plus className="size-4 mr-2" /> Nova Unidade
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Nova unidade</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label>Dia do Adiantamento</Label>
-                  <Select
-                    value={form.dia_adiantamento?.toString() || ""}
-                    onValueChange={(value) =>
-                      setForm({ ...form, dia_adiantamento: parseInt(value) })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o dia" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 28 }, (_, i) => i + 1).map((dia) => (
-                        <SelectItem key={dia} value={dia.toString()}>
-                          {dia}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Nome da Unidade *</Label>
+                  <Input
+                    value={form.nome}
+                    onChange={(e) => setForm({ ...form, nome: e.target.value })}
+                    placeholder="Ex: Pakerê Garavelo"
+                  />
                 </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={create} disabled={busy}>
-                {busy ? "Salvando..." : "Cadastrar"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                <div className="space-y-2">
+                  <Label>CNPJ</Label>
+                  <Input
+                    value={form.cnpj}
+                    onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
+                    placeholder="00.000.000/0000-00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Endereço</Label>
+                  <Input
+                    value={form.endereco}
+                    onChange={(e) => setForm({ ...form, endereco: e.target.value })}
+                    placeholder="Ex: R 9 A, SN"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Cidade</Label>
+                  <Input
+                    value={form.cidade}
+                    onChange={(e) => setForm({ ...form, cidade: e.target.value })}
+                    placeholder="Ex: Aparecida de Goiânia"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Telefone</Label>
+                  <Input
+                    value={form.telefone}
+                    onChange={(e) => setForm({ ...form, telefone: e.target.value })}
+                    placeholder="Ex: (62) 99999-9999"
+                  />
+                </div>
+
+                {/* Switch: Possui relógio de ponto */}
+                <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
+                  <Switch
+                    id="possui_relogio_ponto"
+                    checked={form.possui_relogio_ponto || false}
+                    onCheckedChange={(checked) =>
+                      setForm({ ...form, possui_relogio_ponto: checked })
+                    }
+                  />
+                  <Label htmlFor="possui_relogio_ponto">Possui relógio de ponto</Label>
+                </div>
+
+                {/* Switch: Tem adiantamento salarial */}
+                <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
+                  <Switch
+                    id="tem_adiantamento"
+                    checked={form.tem_adiantamento || false}
+                    onCheckedChange={(checked) =>
+                      setForm({
+                        ...form,
+                        tem_adiantamento: checked,
+                        dia_adiantamento: checked ? form.dia_adiantamento : null,
+                      })
+                    }
+                  />
+                  <Label htmlFor="tem_adiantamento">Tem adiantamento salarial</Label>
+                </div>
+
+                {/* Dia do adiantamento (visível apenas se tem_adiantamento for true) */}
+                {form.tem_adiantamento && (
+                  <div className="space-y-2">
+                    <Label>Dia do Adiantamento</Label>
+                    <Select
+                      value={form.dia_adiantamento?.toString() || ""}
+                      onValueChange={(value) =>
+                        setForm({ ...form, dia_adiantamento: parseInt(value) })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o dia" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 28 }, (_, i) => i + 1).map((dia) => (
+                          <SelectItem key={dia} value={dia.toString()}>
+                            {dia}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={create} disabled={busy}>
+                  {busy ? "Salvando..." : "Cadastrar"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
