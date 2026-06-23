@@ -5,7 +5,6 @@ import { Star, Loader2 } from "lucide-react";
 import { useFavoritos, type Favorito } from "@/lib/useFavoritos";
 import { cn } from "@/lib/utils";
 
-// Importações do dnd-kit
 import {
   DndContext,
   closestCenter,
@@ -25,7 +24,6 @@ import {
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-// Mapeamento de ícones
 import {
   Users,
   Briefcase,
@@ -71,7 +69,6 @@ const iconMap: Record<string, any> = {
   Clock: Clock,
 };
 
-// Componente de card arrastável (sem o grip)
 function SortableFavoritoCard({ favorito }: { favorito: Favorito }) {
   const {
     attributes,
@@ -85,7 +82,8 @@ function SortableFavoritoCard({ favorito }: { favorito: Favorito }) {
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 1 : 0,
   };
 
   const IconComponent = iconMap[favorito.icone] || StarIcon;
@@ -109,11 +107,10 @@ function SortableFavoritoCard({ favorito }: { favorito: Favorito }) {
   );
 }
 
-// Componente que aparece enquanto está sendo arrastado (overlay)
 function DragOverlayCard({ favorito }: { favorito: Favorito }) {
   const IconComponent = iconMap[favorito.icone] || StarIcon;
   return (
-    <Card className="border-primary shadow-lg ring-2 ring-primary/50 bg-white">
+    <Card className="border-primary shadow-lg ring-2 ring-primary/50 bg-white scale-105">
       <CardContent className="p-4 flex items-center gap-3">
         <IconComponent className="size-5 text-primary shrink-0" />
         <span className="font-medium text-sm">{favorito.label}</span>
@@ -129,7 +126,7 @@ export function FavoritosGrid() {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        delay: 1000, // 1 segundo de pressione
+        delay: 1000,
         tolerance: 5,
       },
     }),
@@ -229,10 +226,11 @@ export function FavoritosGrid() {
           </SortableContext>
           <DragOverlay
             dropAnimation={{
+              duration: 300,
               sideEffects: defaultDropAnimationSideEffects({
                 styles: {
                   active: {
-                    opacity: '0.4',
+                    opacity: '0.3',
                   },
                 },
               }),
