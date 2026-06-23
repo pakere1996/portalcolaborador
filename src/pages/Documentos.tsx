@@ -64,8 +64,8 @@ export default function Documentos() {
 
   const [anos, setAnos] = useState<number[]>([]);
 
-  // Verifica se o usuário tem permissão para ver folha de ponto
-  const possuiFolhaPonto = profile?.possui_folha_ponto === true;
+  // 🔥 CORREÇÃO: acessa a propriedade com segurança, tratando como any ou usando tipo estendido
+  const possuiFolhaPonto = (profile as any)?.possui_folha_ponto === true;
 
   const load = async () => {
     if (!user) return;
