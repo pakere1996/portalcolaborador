@@ -16,6 +16,7 @@ export function useFavoritos() {
   const [favoritos, setFavoritos] = useState<Favorito[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Carregar favoritos do banco
   const carregarFavoritos = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -35,6 +36,7 @@ export function useFavoritos() {
     }
   }, [user]);
 
+  // Adicionar um favorito (recebe objeto com rota, label, icone)
   const adicionarFavorito = useCallback(async (item: { rota: string; label: string; icone: string }) => {
     if (!user) return;
     try {
@@ -59,24 +61,40 @@ export function useFavoritos() {
     }
   }, [user, favoritos.length]);
 
-  const removerFavorito = useCallback(async (rota: string) => {
+  // 🔥 NOVO: Reordenar favoritos (drag-and-drop)
+  const reordenarFavoritos = useCallback(async (novosFavoritos: Favorito[]) => {
     if (!user) return;
+
+    // Atualiza estado local imediatamente para feedback visual
+    setFavoritos(novosFavoritos);
+
+    // Prepara os updates com a nova ordem
+    const updates = novosFavoritos.map((fav, index) => ({
+      id: fav.id,
+      ordem: index,
+    }));
+
     try {
-      const { error } = await supabase
-        .from("admin_favoritos")
-        .delete()
-        .eq("admin_id", user.id)
-        .eq("rota", rota);
-
-      if (error) throw error;
-      setFavoritos((prev) => prev.filter((f) => f.rota !== rota));
-      toast.success("Favorito removido!");
+      // Executa todas as atualizações em lote
+      await Promise.all(
+        updates.map(({ id, ordem }) =>
+          supabase
+            .from("admin_favoritos")
+            .update({ ordem })
+            .eq("id", id)
+        )
+      );
     } catch (error) {
-      console.error("Erro ao remover favorito:", error);
-      toast.error("Erro ao remover favorito");
+      console.error("Erro ao reordenar favoritos:", error);
+      toast.error("Erro ao salvar nova ordem");
+      // Recarrega para restaurar consistência
+      carregarFavoritos();
     }
-  }, [user]);
+  }, [user, carregarFavoritos]);
 
+  // 🔥 REMOVIDO: removerFavorito – não será mais usado no grid
+
+  // Verifica se uma rota já está favoritada
   const isFavorito = useCallback((rota: string) => {
     return favoritos.some((f) => f.rota === rota);
   }, [favoritos]);
@@ -89,8 +107,8 @@ export function useFavoritos() {
     favoritos,
     loading,
     adicionarFavorito,
-    removerFavorito,
     isFavorito,
     carregarFavoritos,
+    reordenarFavoritos, // 🔥 exporta a nova função
   };
 }
