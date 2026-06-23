@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { FileText, FileWarning, ShieldAlert, Clock } from "lucide-react";
+import { FileText, FileWarning, ShieldAlert, Clock, Coins } from "lucide-react";
 
 const modulos = [
   {
@@ -17,6 +17,14 @@ const modulos = [
     to: "/admin/documentos/ponto",
     cor: "text-emerald-600",
     bg: "bg-emerald-50",
+  },
+  {
+    title: "Adiantamentos",
+    description: "Importe e gerencie adiantamentos salariais dos colaboradores.",
+    icon: Coins,
+    to: "/admin/documentos/adiantamento",
+    cor: "text-cyan-600",
+    bg: "bg-cyan-50",
   },
   {
     title: "Atestados",
