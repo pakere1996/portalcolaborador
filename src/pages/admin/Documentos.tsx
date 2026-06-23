@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { FileText, FileWarning, ShieldAlert, Clock, Coins } from "lucide-react";
+import { FileText, FileWarning, ShieldAlert, Clock, Coins, ListChecks } from "lucide-react";
 
 const modulos = [
   {
@@ -25,6 +25,14 @@ const modulos = [
     to: "/admin/documentos/adiantamento",
     cor: "text-cyan-600",
     bg: "bg-cyan-50",
+  },
+  {
+    title: "Histórico Completo",
+    description: "Visualize todos os documentos de todos os colaboradores em uma única tela.",
+    icon: ListChecks,
+    to: "/admin/documentos/historico",
+    cor: "text-purple-600",
+    bg: "bg-purple-50",
   },
   {
     title: "Atestados",
