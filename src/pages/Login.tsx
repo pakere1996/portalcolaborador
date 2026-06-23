@@ -11,11 +11,12 @@ import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
   const { session, loading } = useAuth();
+  const navigate = useNavigate();
   const [cpf, setCpf] = useState("");
   const [senha, setSenha] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // 🔥 Função para buscar role e redirecionar com replace forçado
+  // 🔥 Função para buscar role e redirecionar
   const redirectUser = async (userId: string) => {
     try {
       const { data: rolesData, error: rolesError } = await supabase
@@ -39,11 +40,11 @@ export default function LoginPage() {
         localStorage.removeItem('user_role');
       }
 
-      // 🔥 Força o redirecionamento com reload da página para garantir que o contexto seja atualizado
+      // 🔥 Redireciona com replace para não permitir voltar
       if (role === "admin") {
-        window.location.replace("/admin/home");
+        navigate("/admin/home", { replace: true });
       } else {
-        window.location.replace("/home");
+        navigate("/home", { replace: true });
       }
     } catch (error) {
       console.error("Erro ao redirecionar:", error);
@@ -60,15 +61,15 @@ export default function LoginPage() {
       if (savedRole) {
         console.log('🔍 Role do localStorage:', savedRole);
         if (savedRole === "admin") {
-          window.location.replace("/admin/home");
+          navigate("/admin/home", { replace: true });
         } else {
-          window.location.replace("/home");
+          navigate("/home", { replace: true });
         }
         return;
       }
       redirectUser(session.user.id);
     }
-  }, [session, loading]);
+  }, [session, loading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,11 +80,38 @@ export default function LoginPage() {
     setBusy(true);
     try {
       const cleanCpf = cpf.replace(/\D/g, "");
+      
+      // 🔥 Chama a Edge Function
       const { data, error } = await supabase.functions.invoke("login-with-cpf", {
         body: { cpf: cleanCpf, senha },
       });
-      if (error) throw error;
 
+      // 🔥 Tratamento de erro da Edge Function
+      if (error) {
+        console.error("Erro da Edge Function:", error);
+        
+        // Tenta extrair mensagem do corpo da resposta
+        let errorMessage = "Falha ao fazer login. Tente novamente.";
+        
+        if (data?.message) {
+          errorMessage = data.message;
+        } else if (error.message) {
+          // Verifica se a mensagem contém indicação de erro específico
+          if (error.message.includes("Invalid login credentials")) {
+            errorMessage = "Senha incorreta. Verifique e tente novamente.";
+          } else if (error.message.includes("User not found") || error.message.includes("CPF")) {
+            errorMessage = "CPF não encontrado. Verifique se está correto.";
+          } else {
+            errorMessage = error.message;
+          }
+        }
+        
+        toast.error(errorMessage);
+        setBusy(false);
+        return;
+      }
+
+      // 🔥 Verifica se a resposta contém a sessão
       if (data?.session) {
         await supabase.auth.setSession(data.session);
         toast.success("Login realizado com sucesso!");
@@ -91,13 +119,33 @@ export default function LoginPage() {
         if (data.user?.id) {
           await redirectUser(data.user.id);
         } else {
-          window.location.replace("/home");
+          navigate("/home", { replace: true });
         }
       } else {
-        toast.error("Resposta inválida do servidor");
+        // Se não veio sessão, verifica se veio mensagem de erro
+        if (data?.message) {
+          toast.error(data.message);
+        } else {
+          toast.error("Resposta inválida do servidor.");
+        }
       }
     } catch (err: any) {
-      toast.error(err.message || "Falha ao fazer login");
+      console.error("Erro no login:", err);
+      
+      // 🔥 Tratamento de erro genérico
+      let errorMessage = "Erro ao fazer login. Tente novamente.";
+      
+      if (err.message) {
+        if (err.message.includes("Invalid login credentials")) {
+          errorMessage = "Senha incorreta. Verifique e tente novamente.";
+        } else if (err.message.includes("User not found") || err.message.includes("CPF")) {
+          errorMessage = "CPF não encontrado. Verifique se está correto.";
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setBusy(false);
     }
