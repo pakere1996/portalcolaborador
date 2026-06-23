@@ -29,12 +29,14 @@ export default function ComunicacaoHub() {
         </p>
       </div>
 
-      {/* Aniversariantes Widget */}
-      <AniversariantesWidget 
-        title="🎂 Aniversariantes dos Próximos 30 Dias" 
-        showMessageButton={true} 
-        maxItems={10} 
-      />
+      {/* Aniversariantes Widget - sem props extras não suportadas */}
+      <div className="space-y-2">
+        <h3 className="text-lg font-semibold">🎂 Aniversariantes dos Próximos 30 Dias</h3>
+        <AniversariantesWidget 
+          showSendButton={true} 
+          limit={10} 
+        />
+      </div>
 
       {/* Cards de Comunicação */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
