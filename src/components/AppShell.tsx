@@ -23,6 +23,7 @@ import {
   MessageSquare,
   Megaphone,
   Bell,
+  Coins,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
@@ -146,6 +147,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const adminDocsNav: NavItem[] = [
     { to: "/admin/documentos/contracheque", label: "Contracheques", icon: FileText, end: true },
     { to: "/admin/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
+    { to: "/admin/documentos/adiantamento", label: "Adiantamentos", icon: Coins }, // 🔥 NOVO
     { to: "/admin/documentos/atestados", label: "Atestados", icon: FileWarning },
     { to: "/admin/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
   ];
