@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { UserCheck, Check, X } from "lucide-react";
 import { formatCPF } from "@/lib/cpf";
 import { adminApi } from "@/lib/admin-api";
+import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
 
 interface Pend {
   id: string;
@@ -47,13 +48,18 @@ export default function AprovacoesPage() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-          <UserCheck className="size-6 text-primary" /> Aprovações de cadastro
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Novos usuários precisam ser aprovados antes de acessar o sistema.
-        </p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+            <UserCheck className="size-6 text-primary" /> Aprovações de cadastro
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Novos usuários precisam ser aprovados antes de acessar o sistema.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <FavoritarBotao rota="/admin/aprovacoes" label="Aprovações" icone="UserCheck" />
+        </div>
       </div>
 
       <div className="space-y-3">
