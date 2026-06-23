@@ -9,6 +9,11 @@ export default function DocumentosContracheque() {
       icone={<FileText className="size-6 text-primary" />}
       descricao="Importe e gerencie contracheques dos colaboradores."
       importTitle="Importar Contracheques"
+      favorito={{ 
+        rota: "/admin/documentos/contracheque", 
+        label: "Contracheques", 
+        icone: "FileText" 
+      }}
     />
   );
 }
