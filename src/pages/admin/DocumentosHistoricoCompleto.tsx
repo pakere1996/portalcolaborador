@@ -43,6 +43,7 @@ import {
   Search,
 } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
+import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
 
 interface DocumentoUnificado {
   id: string;
@@ -483,13 +484,21 @@ export default function DocumentosHistoricoCompleto() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-          <FileText className="size-6 text-primary" /> Histórico Completo de Documentos
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Visualize todos os documentos de todos os colaboradores em um único lugar.
-        </p>
+      {/* 🔥 Cabeçalho com botão favoritar */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+            <FileText className="size-6 text-primary" /> Histórico Completo de Documentos
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Visualize todos os documentos de todos os colaboradores em um único lugar.
+          </p>
+        </div>
+        <FavoritarBotao 
+          rota="/admin/documentos/historico" 
+          label="Histórico Completo" 
+          icone="ListChecks" 
+        />
       </div>
 
       {/* Filtros */}
