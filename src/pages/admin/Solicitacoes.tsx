@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { formatBR, parseYMD, dayType, monthKey } from "@/lib/folga-rules";
 import { ClipboardList, Check, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
 
 interface Solic {
   id: string; user_id: string; data: string; motivo: string;
@@ -68,11 +69,16 @@ export default function SolicPage() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-          <ClipboardList className="size-6 text-primary" /> Solicitações
-        </h1>
-        <p className="text-muted-foreground mt-1">Aprove ou recuse pedidos especiais.</p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+            <ClipboardList className="size-6 text-primary" /> Solicitações
+          </h1>
+          <p className="text-muted-foreground mt-1">Aprove ou recuse pedidos especiais.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <FavoritarBotao rota="/admin/solicitacoes" label="Solicitações" icone="ClipboardList" />
+        </div>
       </div>
 
       <section>
