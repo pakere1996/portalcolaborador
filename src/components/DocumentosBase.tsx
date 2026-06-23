@@ -57,7 +57,7 @@ interface Unidade {
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 interface DocumentosBaseProps {
-  tipo: "contracheque" | "ponto";
+  tipo: "contracheque" | "ponto" | "adiantamento";
   titulo: string;
   icone: React.ReactNode;
   descricao: string;
