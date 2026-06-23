@@ -20,7 +20,7 @@ import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
+  rectSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -70,6 +70,7 @@ const iconMap: Record<string, any> = {
   Clock: Clock,
 };
 
+// 🔥 Card arrastável (com transição suave da versão que funcionava)
 function SortableFavoritoCard({ favorito }: { favorito: Favorito }) {
   const {
     attributes,
@@ -82,7 +83,7 @@ function SortableFavoritoCard({ favorito }: { favorito: Favorito }) {
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: transition || 'transform 200ms ease',
     opacity: isDragging ? 0.4 : 1,
     zIndex: isDragging ? 1 : 0,
   };
@@ -108,6 +109,7 @@ function SortableFavoritoCard({ favorito }: { favorito: Favorito }) {
   );
 }
 
+// 🔥 Overlay do card arrastado
 function DragOverlayCard({ favorito }: { favorito: Favorito }) {
   const IconComponent = iconMap[favorito.icone] || StarIcon;
   return (
@@ -120,7 +122,7 @@ function DragOverlayCard({ favorito }: { favorito: Favorito }) {
   );
 }
 
-// 🔥 Componente da lixeira (droppable) - agora posicionado dentro do card
+// 🔥 Lixeira (droppable) – posicionada dentro do card
 function TrashZone({ isDragging }: { isDragging: boolean }) {
   const { setNodeRef, isOver } = useDroppable({
     id: "trash",
@@ -130,13 +132,12 @@ function TrashZone({ isDragging }: { isDragging: boolean }) {
     <div
       ref={setNodeRef}
       className={cn(
-        // 🔥 Mudança: absolute dentro do card, no canto superior direito
-        "absolute top-3 right-3 z-10 rounded-full p-2 transition-all duration-300 shadow-md",
+        "absolute top-3 right-3 z-10 rounded-full p-2 transition-all duration-300",
         isDragging
-          ? "scale-100 opacity-100 pointer-events-auto"
-          : "scale-0 opacity-0 pointer-events-none",
+          ? "opacity-100 scale-100 pointer-events-auto"
+          : "opacity-0 scale-0 pointer-events-none",
         isOver
-          ? "bg-red-500 text-white scale-110 ring-4 ring-red-300"
+          ? "bg-red-500 text-white scale-110 ring-4 ring-red-300 shadow-lg"
           : "bg-red-100 text-red-600"
       )}
     >
@@ -177,6 +178,7 @@ export function FavoritosGrid() {
     setActiveId(null);
     setIsDragging(false);
 
+    // 🔥 Se soltou sobre a lixeira, remover o favorito
     if (over?.id === "trash") {
       const favorito = favoritos.find((f) => f.id === active.id);
       if (favorito) {
@@ -185,6 +187,7 @@ export function FavoritosGrid() {
       return;
     }
 
+    // 🔥 Reordenação normal (com rectSortingStrategy)
     if (active.id !== over?.id && over) {
       const oldIndex = favoritos.findIndex((f) => f.id === active.id);
       const newIndex = favoritos.findIndex((f) => f.id === over.id);
@@ -240,53 +243,54 @@ export function FavoritosGrid() {
   }
 
   return (
-    <>
-      <Card className="border-border shadow-sm relative">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Star className="size-5 text-yellow-500" />
-            Atalhos Favoritos
-            <span className="text-xs font-normal text-muted-foreground ml-2">
-              (pressione para reordenar)
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragCancel={handleDragCancel}
+    <Card className="border-border shadow-sm relative">
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Star className="size-5 text-yellow-500" />
+          Atalhos Favoritos
+          <span className="text-xs font-normal text-muted-foreground ml-2">
+            (pressione para reordenar)
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          <SortableContext
+            items={favoritos.map((f) => f.id)}
+            strategy={rectSortingStrategy} // 🔥 Mantido da versão que funcionava
           >
-            <SortableContext
-              items={favoritos.map((f) => f.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                {favoritos.map((fav) => (
-                  <SortableFavoritoCard key={fav.id} favorito={fav} />
-                ))}
-              </div>
-            </SortableContext>
-            <DragOverlay
-              dropAnimation={{
-                duration: 300,
-                sideEffects: defaultDropAnimationSideEffects({
-                  styles: {
-                    active: {
-                      opacity: '0.3',
-                    },
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+              {favoritos.map((fav) => (
+                <SortableFavoritoCard key={fav.id} favorito={fav} />
+              ))}
+            </div>
+          </SortableContext>
+
+          {/* 🔥 Lixeira dentro do card */}
+          <TrashZone isDragging={isDragging} />
+
+          <DragOverlay
+            dropAnimation={{
+              duration: 300,
+              sideEffects: defaultDropAnimationSideEffects({
+                styles: {
+                  active: {
+                    opacity: '0.3',
                   },
-                }),
-              }}
-            >
-              {activeFavorito ? <DragOverlayCard favorito={activeFavorito} /> : null}
-            </DragOverlay>
-            <TrashZone isDragging={isDragging} />
-          </DndContext>
-        </CardContent>
-      </Card>
-    </>
+                },
+              }),
+            }}
+          >
+            {activeFavorito ? <DragOverlayCard favorito={activeFavorito} /> : null}
+          </DragOverlay>
+        </DndContext>
+      </CardContent>
+    </Card>
   );
 }
