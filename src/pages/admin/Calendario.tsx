@@ -59,6 +59,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Tables } from "@/integrations/supabase/types";
+import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
 
 type Unidade = Tables<'unidades'>;
 type Profile = Tables<'profiles'> & { unidade_id?: string | null };
@@ -507,6 +508,9 @@ export default function AdminCalendar() {
             Calendário Geral
           </h1>
           <p className="text-slate-500 mt-2 font-medium">Gestão centralizada de escalas e folgas da equipe.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <FavoritarBotao rota="/admin/calendario" label="Calendário" icone="Calendar" />
         </div>
       </div>
 
