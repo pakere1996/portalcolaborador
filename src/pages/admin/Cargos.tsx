@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { Plus, Briefcase, Pencil, Trash2 } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
+import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
 
 type Cargo = Tables<'cargos'>;
 
@@ -149,28 +150,31 @@ export default function Cargos() {
           </h1>
           <p className="text-muted-foreground mt-1">Gerencie os cargos disponíveis na empresa.</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="rounded-full px-6"><Plus className="size-4 mr-2" /> Novo Cargo</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Novo Cargo</DialogTitle></DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="nome">Nome do Cargo</Label>
-                <Input id="nome" value={form.nome} onChange={handleFormChange} placeholder="Ex: Pizzaiolo Sênior" />
+        <div className="flex items-center gap-2">
+          <FavoritarBotao rota="/admin/cargos" label="Cargos" icone="Briefcase" /> {/* <-- botão adicionado */}
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button className="rounded-full px-6"><Plus className="size-4 mr-2" /> Novo Cargo</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader><DialogTitle>Novo Cargo</DialogTitle></DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="nome">Nome do Cargo</Label>
+                  <Input id="nome" value={form.nome} onChange={handleFormChange} placeholder="Ex: Pizzaiolo Sênior" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="descricao">Descrição (Opcional)</Label>
+                  <textarea id="descricao" value={form.descricao} onChange={handleFormChange} rows={3} className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" placeholder="Breve descrição das responsabilidades." />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="descricao">Descrição (Opcional)</Label>
-                <textarea id="descricao" value={form.descricao} onChange={handleFormChange} rows={3} className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" placeholder="Breve descrição das responsabilidades." />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => { setOpen(false); setForm(blankForm); }}>Cancelar</Button>
-              <Button onClick={create} disabled={busy}>{busy ? "Salvando..." : "Cadastrar"}</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => { setOpen(false); setForm(blankForm); }}>Cancelar</Button>
+                <Button onClick={create} disabled={busy}>{busy ? "Salvando..." : "Cadastrar"}</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
