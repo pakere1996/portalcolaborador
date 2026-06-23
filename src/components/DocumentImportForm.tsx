@@ -106,7 +106,12 @@ export function DocumentImportForm() {
   const [avisoPendentes, setAvisoPendentes] = useState(false);
   const { user } = useAuth();
 
-  const documentType = window.location.pathname.includes("ponto") ? "ponto" : "contracheque";
+  // 🔥 Atualizado: detecta "ponto", "adiantamento" ou "contracheque"
+  const documentType = window.location.pathname.includes("ponto") 
+    ? "ponto" 
+    : window.location.pathname.includes("adiantamento") 
+      ? "adiantamento" 
+      : "contracheque";
 
   // Carregar dados em paralelo com Promise.all
   useEffect(() => {
@@ -168,7 +173,9 @@ export function DocumentImportForm() {
 
   const cleanCNPJ = (cnpj: string) => cnpj.replace(/\D/g, "");
 
+  // 🔥 FUNÇÃO EXTRACT PERIODO ATUALIZADA com suporte a ADIANTAMENTO
   const extractPeriodo = (text: string): { mes: number; ano: number } | null => {
+    // 1. Folha de Ponto
     const regexPonto = /Per[ií]odo de refer[eê]ncia:\s*de\s*(\d{2}\/\d{2}\/\d{4})\s+(?:a|à)\s+(\d{2}\/\d{2}\/\d{4})/i;
     const matchPonto = text.match(regexPonto);
     if (matchPonto) {
@@ -176,15 +183,35 @@ export function DocumentImportForm() {
       const [, mes, ano] = dataInicio.split("/");
       return { mes: parseInt(mes), ano: parseInt(ano) };
     }
+
     const meses: Record<string, number> = {
       janeiro: 1, fevereiro: 2, março: 3, abril: 4, maio: 5, junho: 6,
       julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
     };
+
+    // 2. Contracheque
     const regexContracheque = /\b(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})\b/i;
     const matchContracheque = text.match(regexContracheque);
     if (matchContracheque) {
       return { mes: meses[matchContracheque[1].toLowerCase()], ano: parseInt(matchContracheque[2]) };
     }
+
+    // 🔥 3. NOVO: Adiantamento - padrão detalhado
+    const regexAdiantamento = /Adiantamento\s+(?:salarial\s+)?referente\s+(?:a|ao)\s+m(ê|e)s\s+de\s+(\w+)\s+de\s+(\d{4})/i;
+    const matchAdiantamento = text.match(regexAdiantamento);
+    if (matchAdiantamento) {
+      const mes = meses[matchAdiantamento[2].toLowerCase()];
+      const ano = parseInt(matchAdiantamento[3]);
+      if (mes && ano) return { mes, ano };
+    }
+
+    // 🔥 4. NOVO: Adiantamento - padrão simplificado (MM/YYYY)
+    const regexAdiantamentoSimples = /Adiantamento\s+(\d{2})\/(\d{4})/i;
+    const matchSimples = text.match(regexAdiantamentoSimples);
+    if (matchSimples) {
+      return { mes: parseInt(matchSimples[1]), ano: parseInt(matchSimples[2]) };
+    }
+
     return null;
   };
 
