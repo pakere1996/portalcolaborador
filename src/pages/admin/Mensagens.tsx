@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { MessageSquare, Plus, Pencil, Trash2, Send, Loader2, Copy, Mail, Phone } from "lucide-react";
+import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
 
 interface ModeloMensagem {
   id: string;
@@ -301,6 +302,11 @@ export default function MensagensAdmin() {
             Envie mensagens para colaboradores via WhatsApp e/ou E-mail usando modelos pré-definidos.
           </p>
         </div>
+        <FavoritarBotao 
+          rota="/admin/mensagens" 
+          label="Mensagens" 
+          icone="MessageSquare" 
+        />
       </div>
 
       {/* Modelos Rápidos */}
