@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeftRight, Calendar, User, MessageSquare } from "lucide-react";
 import { formatBR, parseYMD } from "@/lib/folga-rules";
 import { cn } from "@/lib/utils";
+import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
 
 interface Row {
   id: string;
@@ -45,17 +46,20 @@ export default function AdminTrocas() {
           </h1>
           <p className="text-muted-foreground mt-1">Acompanhe as permutas temporárias entre colaboradores.</p>
         </div>
-        <select
-          className="bg-input border border-border rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-          value={filtro}
-          onChange={(e) => setFiltro(e.target.value)}
-        >
-          <option value="todos">Todos os Status</option>
-          <option value="pendente">Pendentes</option>
-          <option value="aprovada">Aprovadas</option>
-          <option value="recusada">Recusadas</option>
-          <option value="cancelada">Canceladas</option>
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            className="bg-input border border-border rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+            value={filtro}
+            onChange={(e) => setFiltro(e.target.value)}
+          >
+            <option value="todos">Todos os Status</option>
+            <option value="pendente">Pendentes</option>
+            <option value="aprovada">Aprovadas</option>
+            <option value="recusada">Recusadas</option>
+            <option value="cancelada">Canceladas</option>
+          </select>
+          <FavoritarBotao rota="/admin/trocas" label="Trocas" icone="ArrowLeftRight" />
+        </div>
       </div>
 
       <div className="grid gap-4">
