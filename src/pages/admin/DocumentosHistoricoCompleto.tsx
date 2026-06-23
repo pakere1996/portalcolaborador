@@ -542,7 +542,6 @@ export default function DocumentosHistoricoCompleto() {
               <Select value={filtroMes} onValueChange={setFiltroMes}>
                 <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
                   {MESES.map(m => (
                     <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
                   ))}
