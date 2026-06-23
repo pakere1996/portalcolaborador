@@ -9,6 +9,11 @@ export default function DocumentosPontoAdmin() {
       icone={<Clock className="size-6 text-primary" />}
       descricao="Importe e gerencie as folhas de ponto dos colaboradores."
       importTitle="Importar Folhas de Ponto"
+      favorito={{ 
+        rota: "/admin/documentos/ponto", 
+        label: "Folhas de Ponto", 
+        icone: "Clock" 
+      }}
     />
   );
 }
