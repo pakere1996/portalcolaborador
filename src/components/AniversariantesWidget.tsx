@@ -52,8 +52,6 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
       const now = new Date();
       const anoAtual = now.getFullYear();
       const hoje = new Date(anoAtual, now.getMonth(), now.getDate());
-      const limite = new Date(hoje);
-      limite.setDate(limite.getDate() + 30);
 
       const { data: profiles, error } = await supabase
         .from("profiles")
@@ -70,10 +68,20 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
 
       if (error) throw error;
 
+      // 🔥 CORREÇÃO: tratar unidades como objeto ou array
       const unidadeMap = new Map();
       profiles?.forEach(p => {
-        if (p.unidades) {
-          unidadeMap.set(p.unidade_id, p.unidades.nome);
+        let unidadeNome = null;
+        // Se for objeto (mais comum)
+        if (p.unidades && typeof p.unidades === 'object' && !Array.isArray(p.unidades)) {
+          unidadeNome = (p.unidades as any).nome;
+        }
+        // Se for array (caso raro)
+        else if (Array.isArray(p.unidades) && p.unidades.length > 0) {
+          unidadeNome = p.unidades[0]?.nome;
+        }
+        if (unidadeNome) {
+          unidadeMap.set(p.unidade_id, unidadeNome);
         }
       });
 
@@ -246,7 +254,6 @@ Equipe Pakerê`;
         </CardContent>
       </Card>
 
-      {/* Modal de envio de mensagem */}
       <Dialog open={msgDialog.open} onOpenChange={(open) => !open && setMsgDialog({ open: false, colaborador: null, mensagem: "" })}>
         <DialogContent className="max-w-lg rounded-2xl">
           <DialogHeader>
