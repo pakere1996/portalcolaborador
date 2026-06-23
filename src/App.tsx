@@ -27,13 +27,14 @@ import Bloqueios from "./pages/admin/Bloqueios";
 import DocumentosHub from "./pages/admin/Documentos";
 import DocumentosContracheque from "./pages/admin/DocumentosContracheque";
 import DocumentosPontoAdmin from "./pages/admin/DocumentosPontoAdmin";
+import DocumentosAdiantamento from "./pages/admin/DocumentosAdiantamento"; // 🔥 NOVO
 import AtestadosAdmin from "./pages/admin/AtestadosAdmin";
 import RegistrosDisciplinaresAdmin from "./pages/admin/RegistrosDisciplinaresAdmin";
 import SetupAdmin from "./pages/SetupAdmin";
 import MensagensAdmin from "./pages/admin/Mensagens";
 import QuadroAvisosAdmin from "./pages/admin/QuadroAvisos";
 
-// 🔥 NOVOS HUBS
+// HUBS
 import CadastroHub from "./pages/admin/CadastroHub";
 import ComunicacaoHub from "./pages/admin/ComunicacaoHub";
 
@@ -87,7 +88,7 @@ function AuthenticatedRoutes() {
               <Route path="/admin" element={<Navigate to="/admin/home" replace />} />
               <Route path="/admin/home" element={<HomeAdmin />} />
               
-              {/* 🔥 HUBS (novos) */}
+              {/* HUBS */}
               <Route path="/admin/cadastro" element={<CadastroHub />} />
               <Route path="/admin/comunicacao" element={<ComunicacaoHub />} />
 
@@ -107,6 +108,7 @@ function AuthenticatedRoutes() {
               <Route path="/admin/documentos" element={<DocumentosHub />} />
               <Route path="/admin/documentos/contracheque" element={<DocumentosContracheque />} />
               <Route path="/admin/documentos/ponto" element={<DocumentosPontoAdmin />} />
+              <Route path="/admin/documentos/adiantamento" element={<DocumentosAdiantamento />} /> {/* 🔥 NOVA ROTA */}
               <Route path="/admin/documentos/atestados" element={<AtestadosAdmin />} />
               <Route path="/admin/documentos/disciplinar" element={<RegistrosDisciplinaresAdmin />} />
               
