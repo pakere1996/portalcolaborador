@@ -102,7 +102,7 @@ export const extractSinglePageAsBlob = async (
 };
 
 /**
- * 🔥 Nova função: conta quantas páginas tem um Blob PDF
+ * 🔥 Conta quantas páginas tem um Blob PDF
  * Útil para validar se a extração de página única foi bem-sucedida
  */
 export const getPdfPageCount = async (blob: Blob): Promise<number> => {
