@@ -64,7 +64,7 @@ export default function Documentos() {
 
   const [anos, setAnos] = useState<number[]>([]);
 
-  // 🔥 Verifica se o usuário tem permissão para ver folha de ponto
+  // Verifica se o usuário tem permissão para ver folha de ponto
   const possuiFolhaPonto = profile?.possui_folha_ponto === true;
 
   const load = async () => {
@@ -76,7 +76,7 @@ export default function Documentos() {
         .select("*")
         .eq("colaborador_id", user.id);
 
-      // 🔥 Se o usuário NÃO possui folha de ponto, NUNCA mostra documentos do tipo "ponto"
+      // Se o usuário NÃO possui folha de ponto, NUNCA mostra documentos do tipo "ponto"
       if (!possuiFolhaPonto) {
         query = query.neq("tipo", "ponto");
       }
@@ -112,7 +112,7 @@ export default function Documentos() {
     load();
   }, [user, filtroTipo, filtroAno, filtroMes, possuiFolhaPonto]);
 
-  // 🔥 Se o filtro atual for "ponto" e o usuário não tem permissão, força "todos"
+  // Se o filtro atual for "ponto" e o usuário não tem permissão, força "todos"
   useEffect(() => {
     if (!possuiFolhaPonto && filtroTipo === "ponto") {
       setFiltroTipo("todos");
@@ -168,9 +168,11 @@ export default function Documentos() {
     }
   };
 
+  // 🔥 Atualizado: inclui "Adiantamento"
   const getTipoLabel = (tipo: string) => {
     if (tipo === "contracheque") return "Contracheque";
     if (tipo === "ponto") return "Folha de Ponto";
+    if (tipo === "adiantamento") return "Adiantamento Salarial";
     return tipo;
   };
 
@@ -188,10 +190,11 @@ export default function Documentos() {
     );
   }
 
-  // 🔥 Filtra as opções de tipo para exibir no select
+  // 🔥 Filtra as opções de tipo para exibir no select – adiciona "adiantamento" para todos
   const tiposDisponiveis = [
     { value: "todos", label: "Todos" },
     { value: "contracheque", label: "Contracheque" },
+    { value: "adiantamento", label: "Adiantamento" },
     ...(possuiFolhaPonto ? [{ value: "ponto", label: "Folha de Ponto" }] : []),
   ];
 
