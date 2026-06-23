@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2, ChevronRight, Eye } from "lucide-react";
 import { toast } from "sonner";
+import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
 
 interface Documento {
   id: string;
@@ -61,6 +62,7 @@ interface DocumentosBaseProps {
   icone: React.ReactNode;
   descricao: string;
   importTitle: string;
+  favorito?: { rota: string; label: string; icone: string }; // <-- nova prop opcional
 }
 
 const useMediaQuery = (query: string) => {
@@ -75,7 +77,14 @@ const useMediaQuery = (query: string) => {
   return matches;
 };
 
-export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: DocumentosBaseProps) {
+export function DocumentosBase({ 
+  tipo, 
+  titulo, 
+  icone, 
+  descricao, 
+  importTitle,
+  favorito // <-- nova prop
+}: DocumentosBaseProps) {
   const [aba, setAba] = useState<"importar" | "historico">("importar");
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -280,11 +289,21 @@ export function DocumentosBase({ tipo, titulo, icone, descricao, importTitle }: 
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-          {icone} {titulo}
-        </h1>
-        <p className="text-muted-foreground mt-1">{descricao}</p>
+      {/* 🔥 Cabeçalho com botão favoritar */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+            {icone} {titulo}
+          </h1>
+          <p className="text-muted-foreground mt-1">{descricao}</p>
+        </div>
+        {favorito && (
+          <FavoritarBotao 
+            rota={favorito.rota} 
+            label={favorito.label} 
+            icone={favorito.icone} 
+          />
+        )}
       </div>
 
       <div className="flex gap-2 border-b border-border">
