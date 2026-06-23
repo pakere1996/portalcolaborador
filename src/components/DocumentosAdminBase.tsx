@@ -20,6 +20,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
 
 interface Profile {
   id: string;
@@ -67,6 +68,7 @@ interface DocumentosAdminBaseProps {
   beforeInsert?: (form: any, path: string, kind: string) => Promise<any> | any;
   acoesExtras?: (doc: DocumentoAdmin) => React.ReactNode;
   onColaboradorChange?: (colaboradorId: string, setForm: any) => void;
+  favorito?: { rota: string; label: string; icone: string }; // <-- nova prop
 }
 
 export function DocumentosAdminBase({
@@ -86,6 +88,7 @@ export function DocumentosAdminBase({
   beforeInsert,
   acoesExtras,
   onColaboradorChange,
+  favorito, // <-- nova prop
 }: DocumentosAdminBaseProps) {
   const [aba, setAba] = useState<"importar" | "historico">("importar");
   const [documentos, setDocumentos] = useState<DocumentoAdmin[]>([]);
@@ -349,11 +352,21 @@ export function DocumentosAdminBase({
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-          {icone} {titulo}
-        </h1>
-        <p className="text-muted-foreground mt-1">{descricao}</p>
+      {/* 🔥 Cabeçalho com botão favoritar */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+            {icone} {titulo}
+          </h1>
+          <p className="text-muted-foreground mt-1">{descricao}</p>
+        </div>
+        {favorito && (
+          <FavoritarBotao 
+            rota={favorito.rota} 
+            label={favorito.label} 
+            icone={favorito.icone} 
+          />
+        )}
       </div>
 
       <div className="flex gap-2 border-b border-border">
