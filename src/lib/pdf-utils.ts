@@ -12,6 +12,9 @@ export interface PageText {
   text: string;
 }
 
+/**
+ * Extrai o texto de todas as páginas de um arquivo PDF
+ */
 export const extractTextFromPDF = async (file: File): Promise<PageText[]> => {
   try {
     console.log("🔍 Iniciando extração de texto do PDF:", file.name);
@@ -38,6 +41,9 @@ export const extractTextFromPDF = async (file: File): Promise<PageText[]> => {
   }
 };
 
+/**
+ * Renderiza uma página específica do PDF como imagem (data URL PNG)
+ */
 export const renderPdfPageAsImage = async (file: File, pageNumber: number): Promise<string> => {
   try {
     console.log(`🖼️ Renderizando página ${pageNumber} do PDF:`, file.name);
@@ -68,6 +74,9 @@ export const renderPdfPageAsImage = async (file: File, pageNumber: number): Prom
   }
 };
 
+/**
+ * Extrai uma única página do PDF como um Blob (PDF de página única)
+ */
 export const extractSinglePageAsBlob = async (
   pdfBytes: ArrayBuffer,
   pageNumber: number
@@ -89,5 +98,20 @@ export const extractSinglePageAsBlob = async (
   } catch (error) {
     console.error("❌ Erro ao extrair página individual do PDF:", error);
     throw new Error(`Falha ao extrair página do PDF: ${(error as Error).message}`);
+  }
+};
+
+/**
+ * 🔥 Nova função: conta quantas páginas tem um Blob PDF
+ * Útil para validar se a extração de página única foi bem-sucedida
+ */
+export const getPdfPageCount = async (blob: Blob): Promise<number> => {
+  try {
+    const arrayBuffer = await blob.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    return pdf.numPages;
+  } catch (error) {
+    console.error("❌ Erro ao contar páginas do PDF:", error);
+    return 0;
   }
 };
