@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 import { Bell, Plus, Pencil, Trash2, Loader2, CalendarDays, Users, Building2, User, X, FileText, Image } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
+import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
 
 interface Aviso {
   id: string;
@@ -261,9 +262,16 @@ export default function QuadroAvisosAdmin() {
             Crie avisos que aparecerão para os colaboradores ao fazerem login.
           </p>
         </div>
-        <Button onClick={() => { setEditando(null); setForm({ titulo: "", mensagem: "", data_inicio: "", data_fim: "", destinatario_tipo: "todos", unidade_id: "", colaborador_id: "", arquivo: null }); setDialogOpen(true); }}>
-          <Plus className="size-4 mr-2" /> Novo Aviso
-        </Button>
+        <div className="flex items-center gap-2">
+          <FavoritarBotao 
+            rota="/admin/avisos" 
+            label="Quadro de Avisos" 
+            icone="Bell" 
+          />
+          <Button onClick={() => { setEditando(null); setForm({ titulo: "", mensagem: "", data_inicio: "", data_fim: "", destinatario_tipo: "todos", unidade_id: "", colaborador_id: "", arquivo: null }); setDialogOpen(true); }}>
+            <Plus className="size-4 mr-2" /> Novo Aviso
+          </Button>
+        </div>
       </div>
 
       {loading ? (
