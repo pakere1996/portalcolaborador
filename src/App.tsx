@@ -27,7 +27,8 @@ import Bloqueios from "./pages/admin/Bloqueios";
 import DocumentosHub from "./pages/admin/Documentos";
 import DocumentosContracheque from "./pages/admin/DocumentosContracheque";
 import DocumentosPontoAdmin from "./pages/admin/DocumentosPontoAdmin";
-import DocumentosAdiantamento from "./pages/admin/DocumentosAdiantamento"; // 🔥 NOVO
+import DocumentosAdiantamento from "./pages/admin/DocumentosAdiantamento";
+import DocumentosHistoricoCompleto from "./pages/admin/DocumentosHistoricoCompleto";
 import AtestadosAdmin from "./pages/admin/AtestadosAdmin";
 import RegistrosDisciplinaresAdmin from "./pages/admin/RegistrosDisciplinaresAdmin";
 import SetupAdmin from "./pages/SetupAdmin";
@@ -48,8 +49,6 @@ function AuthenticatedRoutes() {
   const { session, role, loading } = useAuth();
   const isAuthenticated = !!session;
   const isAdmin = isUserAdmin(role);
-
-  console.log('🔍 AuthenticatedRoutes - role:', role, 'isAdmin:', isAdmin, 'loading:', loading);
 
   if (loading) {
     return (
@@ -104,15 +103,17 @@ function AuthenticatedRoutes() {
               <Route path="/admin/trocas" element={<TrocasAdmin />} />
               <Route path="/admin/bloqueios" element={<Bloqueios />} />
 
-              {/* Documentos Group */}
+              {/* Documentos Group – ordem é importante */}
               <Route path="/admin/documentos" element={<DocumentosHub />} />
               <Route path="/admin/documentos/contracheque" element={<DocumentosContracheque />} />
               <Route path="/admin/documentos/ponto" element={<DocumentosPontoAdmin />} />
-              <Route path="/admin/documentos/adiantamento" element={<DocumentosAdiantamento />} /> {/* 🔥 NOVA ROTA */}
+              <Route path="/admin/documentos/adiantamento" element={<DocumentosAdiantamento />} />
+              {/* 🔥 A rota mais específica DEVE vir antes de rotas genéricas */}
+              <Route path="/admin/documentos/historico" element={<DocumentosHistoricoCompleto />} />
               <Route path="/admin/documentos/atestados" element={<AtestadosAdmin />} />
               <Route path="/admin/documentos/disciplinar" element={<RegistrosDisciplinaresAdmin />} />
               
-              {/* Comunicação Group (sub-páginas) */}
+              {/* Comunicação Group */}
               <Route path="/admin/mensagens" element={<MensagensAdmin />} />
               <Route path="/admin/avisos" element={<QuadroAvisosAdmin />} />
               
@@ -126,7 +127,6 @@ function AuthenticatedRoutes() {
             </>
           )}
 
-          {/* Fallback */}
           <Route path="*" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
         </Routes>
       </AppShell>
@@ -136,7 +136,6 @@ function AuthenticatedRoutes() {
 
 function App() {
   const { session, loading } = useAuth();
-  const isAuthenticated = !!session;
 
   if (loading) {
     return (
@@ -150,7 +149,7 @@ function App() {
     <>
       <Toaster richColors position="top-right" />
       <Routes>
-        <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} />
+        <Route path="/login" element={session ? <Navigate to="/" replace /> : <Login />} />
         <Route path="/setup" element={<SetupAdmin />} />
         <Route path="/*" element={<AuthenticatedRoutes />} />
       </Routes>
