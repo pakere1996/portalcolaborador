@@ -147,11 +147,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const adminDocsNav: NavItem[] = [
     { to: "/admin/documentos/contracheque", label: "Contracheques", icon: FileText, end: true },
-    { to: "/admin/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
     { to: "/admin/documentos/adiantamento", label: "Adiantamentos", icon: Coins },
-    { to: "/admin/documentos/historico", label: "Histórico Completo", icon: ListChecks }, // 🔥 NOVO
+    { to: "/admin/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
     { to: "/admin/documentos/atestados", label: "Atestados", icon: FileWarning },
     { to: "/admin/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
+    { to: "/admin/documentos/historico", label: "Histórico Completo", icon: ListChecks },
   ];
 
   const adminComunicacaoNav: NavItem[] = [
