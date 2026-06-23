@@ -19,7 +19,7 @@ import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
+  rectSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -81,7 +81,7 @@ function SortableFavoritoCard({ favorito }: { favorito: Favorito }) {
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: transition || 'transform 200ms ease',
     opacity: isDragging ? 0.4 : 1,
     zIndex: isDragging ? 1 : 0,
   };
@@ -126,7 +126,7 @@ export function FavoritosGrid() {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        delay: 1000,
+        delay: 500,
         tolerance: 5,
       },
     }),
@@ -216,7 +216,7 @@ export function FavoritosGrid() {
         >
           <SortableContext
             items={favoritos.map((f) => f.id)}
-            strategy={verticalListSortingStrategy}
+            strategy={rectSortingStrategy}
           >
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
               {favoritos.map((fav) => (
