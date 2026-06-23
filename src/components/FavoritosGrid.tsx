@@ -159,7 +159,7 @@ export function FavoritosGrid() {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        delay: 500,
+        delay: 200,
         tolerance: 5,
       },
     }),
