@@ -152,21 +152,23 @@ export function FavoritosGrid() {
     setActiveId(null);
     setIsDragging(false);
 
-    // Se soltou sobre a lixeira
+    // 🔥 Se soltou sobre a lixeira (verifica se over.id é "trash")
     if (over?.id === "trash") {
       const favorito = favoritos.find((f) => f.id === active.id);
       if (favorito) {
         removerFavorito(favorito.rota);
+        return; // Sai para não tentar reordenar
       }
-      return;
     }
 
-    // Reordenação normal
+    // Reordenação normal (se não foi na lixeira)
     if (active.id !== over?.id && over) {
       const oldIndex = favoritos.findIndex((f) => f.id === active.id);
       const newIndex = favoritos.findIndex((f) => f.id === over.id);
-      const novoArray = arrayMove(favoritos, oldIndex, newIndex);
-      reordenarFavoritos(novoArray);
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const novoArray = arrayMove(favoritos, oldIndex, newIndex);
+        reordenarFavoritos(novoArray);
+      }
     }
   };
 
@@ -246,13 +248,14 @@ export function FavoritosGrid() {
             </div>
           </SortableContext>
 
-          {/* 🔥 Lixeira posicionada dentro do card, canto superior direito */}
+          {/* 🔥 Lixeira posicionada no canto superior direito do card */}
           <div
             ref={setTrashRef}
             className={cn(
               "absolute top-3 right-3 z-10 rounded-full p-2 transition-all duration-300",
+              // 🔥 Só aparece durante o arrasto
               isDragging
-                ? "opacity-100 scale-100"
+                ? "opacity-100 scale-100 pointer-events-auto"
                 : "opacity-0 scale-0 pointer-events-none",
               isOver
                 ? "bg-red-500 text-white scale-110 ring-4 ring-red-300 shadow-lg"
