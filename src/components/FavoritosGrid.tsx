@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Star, Loader2 } from "lucide-react";
@@ -24,7 +25,7 @@ import {
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-// Mapeamento de ícones (já existente)
+// Mapeamento de ícones
 import {
   Users,
   Briefcase,
@@ -70,7 +71,7 @@ const iconMap: Record<string, any> = {
   Clock: Clock,
 };
 
-// 🔥 Componente de card arrastável (sem o grip)
+// Componente de card arrastável (sem o grip)
 function SortableFavoritoCard({ favorito }: { favorito: Favorito }) {
   const {
     attributes,
@@ -108,7 +109,7 @@ function SortableFavoritoCard({ favorito }: { favorito: Favorito }) {
   );
 }
 
-// 🔥 Componente que aparece enquanto está sendo arrastado (overlay)
+// Componente que aparece enquanto está sendo arrastado (overlay)
 function DragOverlayCard({ favorito }: { favorito: Favorito }) {
   const IconComponent = iconMap[favorito.icone] || StarIcon;
   return (
@@ -128,9 +129,8 @@ export function FavoritosGrid() {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        // 🔥 Atraso de 1 segundo para iniciar o arrasto
-        delay: 1000,
-        tolerance: 5, // tolerância de movimento durante o delay
+        delay: 1000, // 1 segundo de pressione
+        tolerance: 5,
       },
     }),
     useSensor(KeyboardSensor, {
@@ -157,7 +157,6 @@ export function FavoritosGrid() {
     setActiveId(null);
   };
 
-  // Encontra o favorito que está sendo arrastado
   const activeFavorito = favoritos.find((f) => f.id === activeId);
 
   if (loading) {
