@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { Plus, Calendar, Trash2, CalendarX, CalendarCheck, Filter } from "lucide-react";
 import { formatBR, parseYMD } from "@/lib/folga-rules";
 import { Tables } from "@/integrations/supabase/types";
+import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
 
 type BloqueioRegra = Tables<'bloqueio_regras'>;
 type DataBloqueada = Tables<'datas_bloqueadas'>;
@@ -214,6 +215,7 @@ export default function BloqueiosPage() {
           <p className="text-muted-foreground mt-1">Configure regras automáticas e bloqueios manuais de folgas.</p>
         </div>
         <div className="flex gap-2">
+          <FavoritarBotao rota="/admin/bloqueios" label="Bloqueios" icone="CalendarX" />
           <Button onClick={gerarBloqueios} disabled={busy} variant="outline">
             <Calendar className="size-4 mr-2" /> Gerar Bloqueios do Ano ({anoFiltro})
           </Button>
