@@ -49,7 +49,7 @@ const MESES = [
 ];
 
 export default function Documentos() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [loading, setLoading] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -64,6 +64,9 @@ export default function Documentos() {
 
   const [anos, setAnos] = useState<number[]>([]);
 
+  // 🔥 Verifica se o usuário tem permissão para ver folha de ponto
+  const possuiFolhaPonto = profile?.possui_folha_ponto === true;
+
   const load = async () => {
     if (!user) return;
     setLoading(true);
@@ -72,6 +75,11 @@ export default function Documentos() {
         .from("documentos")
         .select("*")
         .eq("colaborador_id", user.id);
+
+      // 🔥 Se o usuário NÃO possui folha de ponto, NUNCA mostra documentos do tipo "ponto"
+      if (!possuiFolhaPonto) {
+        query = query.neq("tipo", "ponto");
+      }
 
       if (filtroTipo !== "todos") {
         query = query.eq("tipo", filtroTipo);
@@ -102,7 +110,14 @@ export default function Documentos() {
 
   useEffect(() => {
     load();
-  }, [user, filtroTipo, filtroAno, filtroMes]);
+  }, [user, filtroTipo, filtroAno, filtroMes, possuiFolhaPonto]);
+
+  // 🔥 Se o filtro atual for "ponto" e o usuário não tem permissão, força "todos"
+  useEffect(() => {
+    if (!possuiFolhaPonto && filtroTipo === "ponto") {
+      setFiltroTipo("todos");
+    }
+  }, [possuiFolhaPonto, filtroTipo]);
 
   const handleDownload = async (doc: Documento) => {
     const { data } = await supabase.storage
@@ -115,7 +130,6 @@ export default function Documentos() {
     }
   };
 
-  // 🔥 Função para baixar todos os documentos do filtro
   const handleDownloadAll = async () => {
     if (documentos.length === 0) {
       toast.warning("Nenhum documento para baixar");
@@ -124,7 +138,6 @@ export default function Documentos() {
 
     setDownloadingAll(true);
     try {
-      // Baixa um por um (abre em novas abas)
       for (const doc of documentos) {
         const { data } = await supabase.storage
           .from("documentos")
@@ -132,7 +145,6 @@ export default function Documentos() {
         if (data?.signedUrl) {
           window.open(data.signedUrl, "_blank");
         }
-        // Pequeno delay para não sobrecarregar o navegador
         await new Promise(resolve => setTimeout(resolve, 300));
       }
       toast.success(`${documentos.length} documento(s) baixado(s)!`);
@@ -176,6 +188,13 @@ export default function Documentos() {
     );
   }
 
+  // 🔥 Filtra as opções de tipo para exibir no select
+  const tiposDisponiveis = [
+    { value: "todos", label: "Todos" },
+    { value: "contracheque", label: "Contracheque" },
+    ...(possuiFolhaPonto ? [{ value: "ponto", label: "Folha de Ponto" }] : []),
+  ];
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
@@ -194,11 +213,13 @@ export default function Documentos() {
             <div className="space-y-1">
               <Label className="text-xs font-bold uppercase text-muted-foreground">Tipo</Label>
               <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-                <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectTrigger className="w-[140px] h-9">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  <SelectItem value="contracheque">Contracheque</SelectItem>
-                  <SelectItem value="ponto">Folha de Ponto</SelectItem>
+                  {tiposDisponiveis.map(t => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -237,7 +258,6 @@ export default function Documentos() {
             </div>
           ) : (
             <div className="space-y-3">
-              {/* 🔥 Botão de download múltiplo */}
               <div className="flex justify-end">
                 <Button
                   variant="outline"
@@ -294,7 +314,6 @@ export default function Documentos() {
         </CardContent>
       </Card>
 
-      {/* Dialog de visualização */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
