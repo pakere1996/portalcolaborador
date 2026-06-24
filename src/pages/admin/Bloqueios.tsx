@@ -42,17 +42,36 @@ export default function BloqueiosPage() {
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-
+  const [reprocessando, setReprocessando] = useState(false);
+  
   // Filtros
   const [anoFiltro, setAnoFiltro] = useState(new Date().getFullYear());
   const [mesFiltro, setMesFiltro] = useState<string>("all");
-  const [aplicacaoFiltro, setAplicacaoFiltro] = useState<string>("all"); // all, anual, unica
+  const [aplicacaoFiltro, setAplicacaoFiltro] = useState<string>("all");
   const [unidadeFiltro, setUnidadeFiltro] = useState<string>("all");
   const [showPast, setShowPast] = useState(false);
 
   const [isRegraDialogOpen, setIsRegraDialogOpen] = useState(false);
   const [isDataDialogOpen, setIsDataDialogOpen] = useState(false);
 
+  // --- Função para reprocessar bloqueios (gerar próximos 12 meses) ---
+  const reprocessarBloqueios = async () => {
+    if (reprocessando) return;
+    setReprocessando(true);
+    try {
+      const { data, error } = await supabase.rpc("gerar_bloqueios_proximos_meses");
+      if (error) throw error;
+      console.log(`${data} datas bloqueadas geradas`);
+      toast.success(`${data} datas bloqueadas geradas com sucesso`);
+    } catch (e) {
+      console.error("Erro ao reprocessar bloqueios:", e);
+      toast.error("Erro ao gerar bloqueios automáticos", { description: (e as Error).message });
+    } finally {
+      setReprocessando(false);
+    }
+  };
+
+  // --- Carregar dados ---
   const load = async () => {
     setLoading(true);
     try {
@@ -101,9 +120,23 @@ export default function BloqueiosPage() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  // --- Inicialização: carregar e depois reprocessar se necessário ---
+  useEffect(() => {
+    const inicializar = async () => {
+      await load();
+      // Verificar se há datas futuras. Se não houver, gerar automaticamente.
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      const temFuturas = datasBloqueadas.some(d => parseYMD(d.data) >= hoje);
+      if (!temFuturas && !reprocessando && !loading) {
+        await reprocessarBloqueios();
+        await load();
+      }
+    };
+    inicializar();
+  }, []);
 
-  // Filtros combinados
+  // --- Filtro de datas ---
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -112,20 +145,14 @@ export default function BloqueiosPage() {
     const yearMatch = date.getFullYear() === anoFiltro;
     const monthMatch = mesFiltro === "all" || date.getMonth() + 1 === Number(mesFiltro);
     const dateMatch = showPast ? true : date >= today;
-    return yearMatch && monthMatch && dateMatch;
+    const unidadeMatch = unidadeFiltro === "all" || d.unidade_id === unidadeFiltro;
+    return yearMatch && monthMatch && dateMatch && unidadeMatch;
   });
 
-  // Filtro para regras
+  // --- Filtro de regras por aplicação ---
   const filteredRegras = regras.filter(r => {
-    const aplicacaoMatch = aplicacaoFiltro === "all" || r.aplicacao === aplicacaoFiltro;
-    // Filtro de unidade: se "all", mostra todas; senão, verifica se a regra tem a unidade selecionada
-    let unidadeMatch = true;
-    if (unidadeFiltro !== "all") {
-      const hasUnidade = r.unidades?.some(u => u.id === unidadeFiltro) ?? false;
-      const isGlobal = r.unidades?.length === 0; // regra global (aplica a todas)
-      unidadeMatch = hasUnidade || isGlobal;
-    }
-    return aplicacaoMatch && unidadeMatch;
+    if (aplicacaoFiltro === "all") return true;
+    return r.aplicacao === aplicacaoFiltro;
   });
 
   // --- Estado do formulário de regras ---
@@ -283,7 +310,8 @@ export default function BloqueiosPage() {
 
       toast.success(editRegraId ? "Regra atualizada" : "Regra criada");
       closeRegraDialog();
-      load();
+      await reprocessarBloqueios();
+      await load();
     } catch (e) {
       toast.error("Erro ao salvar", { description: (e as Error).message });
     } finally {
@@ -295,7 +323,8 @@ export default function BloqueiosPage() {
     const { error } = await supabase.from("bloqueio_regras").delete().eq("id", id);
     if (error) return toast.error(error.message);
     toast.success("Regra excluída");
-    load();
+    await reprocessarBloqueios();
+    await load();
   };
 
   // --- Diálogo de Data Manual ---
@@ -350,7 +379,7 @@ export default function BloqueiosPage() {
         toast.success("Data bloqueada");
       }
       closeDataDialog();
-      load();
+      await load();
     } catch (e) {
       toast.error("Erro ao salvar", { description: (e as Error).message });
     } finally {
@@ -365,7 +394,7 @@ export default function BloqueiosPage() {
       .eq("id", id);
     if (error) return toast.error(error.message);
     toast.success("Data liberada");
-    load();
+    await load();
   };
 
   const deleteManualBlock = async (id: string) => {
@@ -375,21 +404,7 @@ export default function BloqueiosPage() {
       .eq("id", id);
     if (error) return toast.error(error.message);
     toast.success("Bloqueio removido");
-    load();
-  };
-
-  const gerarBloqueios = async () => {
-    setBusy(true);
-    try {
-      const { data, error } = await supabase.rpc("gerar_bloqueios_ano", { _ano: anoFiltro });
-      if (error) throw error;
-      toast.success(`${data} datas bloqueadas geradas para ${anoFiltro}`);
-      load();
-    } catch (e) {
-      toast.error("Erro ao gerar bloqueios", { description: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
+    await load();
   };
 
   const getTipoLabel = (tipo: string) => {
@@ -423,17 +438,20 @@ export default function BloqueiosPage() {
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
             <CalendarX className="size-6 text-primary" /> Datas Bloqueadas
           </h1>
-          <p className="text-muted-foreground mt-1">Configure regras automáticas e bloqueios manuais de folgas.</p>
+          <p className="text-muted-foreground mt-1">
+            Configure regras automáticas e bloqueios manuais. As alterações geram automaticamente os próximos 12 meses.
+            {reprocessando && <span className="ml-2 text-amber-600">⏳ Regenerando bloqueios...</span>}
+          </p>
         </div>
         <div className="flex gap-2">
           <FavoritarBotao rota="/admin/bloqueios" label="Bloqueios" icone="CalendarX" />
-          <Button onClick={gerarBloqueios} disabled={busy} variant="outline">
-            <Calendar className="size-4 mr-2" /> Gerar Bloqueios do Ano ({anoFiltro})
+          <Button onClick={() => { reprocessarBloqueios(); }} disabled={reprocessando} variant="outline">
+            <Calendar className="size-4 mr-2" /> Regenerar 12 meses
           </Button>
         </div>
       </div>
 
-      {/* ===== FILTROS ===== */}
+      {/* Filtros */}
       <div className="bg-card border border-border rounded-2xl p-4 flex flex-wrap gap-4 items-end">
         <div className="space-y-2">
           <Label className="text-xs font-bold uppercase text-muted-foreground">Ano</Label>
@@ -442,7 +460,7 @@ export default function BloqueiosPage() {
         <div className="space-y-2">
           <Label className="text-xs font-bold uppercase text-muted-foreground">Mês</Label>
           <select value={mesFiltro} onChange={(e) => setMesFiltro(e.target.value)} className="bg-input border border-border rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary w-[180px]">
-            <option value="all">Todos os meses</option>
+            <option value="all">Todos</option>
             {MESES.map(m => (
               <option key={m} value={m}>{getMonthName(m)}</option>
             ))}
@@ -452,28 +470,24 @@ export default function BloqueiosPage() {
           <Label className="text-xs font-bold uppercase text-muted-foreground">Aplicação</Label>
           <select value={aplicacaoFiltro} onChange={(e) => setAplicacaoFiltro(e.target.value)} className="bg-input border border-border rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary w-[160px]">
             <option value="all">Todas</option>
-            <option value="anual">Anual</option>
-            <option value="unica">Única vez</option>
+            <option value="anual">🔄 Anual</option>
+            <option value="unica">🔹 Única vez</option>
           </select>
         </div>
         <div className="space-y-2">
           <Label className="text-xs font-bold uppercase text-muted-foreground">Unidade</Label>
-          <select value={unidadeFiltro} onChange={(e) => setUnidadeFiltro(e.target.value)} className="bg-input border border-border rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary w-[200px]">
-            <option value="all">Todas as unidades</option>
+          <select value={unidadeFiltro} onChange={(e) => setUnidadeFiltro(e.target.value)} className="bg-input border border-border rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary w-[180px]">
+            <option value="all">Todas</option>
+            <option value="">Global</option>
             {unidades.map(u => (
               <option key={u.id} value={u.id}>{u.nome}</option>
             ))}
           </select>
         </div>
-        <div className="flex items-center gap-2 h-10">
-          <Button
-            variant={showPast ? "default" : "outline"}
-            size="sm"
-            onClick={() => setShowPast(!showPast)}
-            className="flex items-center gap-2"
-          >
+        <div className="space-y-2 flex items-end">
+          <Button variant="ghost" size="sm" onClick={() => setShowPast(!showPast)} className="flex items-center gap-2">
             {showPast ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
-            {showPast ? "Mostrando passadas" : "Ocultar passadas"}
+            {showPast ? "Ocultar passadas" : "Mostrar passadas"}
           </Button>
         </div>
       </div>
@@ -483,7 +497,6 @@ export default function BloqueiosPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Calendar className="size-5 text-primary" /> Regras de Bloqueio
-            <Badge variant="secondary" className="ml-2">{filteredRegras.length}</Badge>
           </h2>
           <div className="flex gap-2">
             <Button className="rounded-full px-6" onClick={() => openRegraDialog()}>
@@ -497,7 +510,7 @@ export default function BloqueiosPage() {
 
         <div className="bg-card border border-border rounded-2xl overflow-hidden">
           {filteredRegras.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">Nenhuma regra encontrada com os filtros atuais.</div>
+            <div className="p-8 text-center text-muted-foreground">Nenhuma regra configurada.</div>
           ) : (
             <div className="divide-y divide-border">
               {filteredRegras.map((r) => (
@@ -585,13 +598,11 @@ export default function BloqueiosPage() {
       <section className="space-y-4">
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <CalendarX className="size-5 text-rose-500" /> Próximas Datas Bloqueadas
-          <Badge variant="secondary" className="ml-2">{filteredDatas.length}</Badge>
+          <span className="text-sm font-normal text-muted-foreground">({filteredDatas.length} datas)</span>
         </h2>
         <div className="bg-card border border-border rounded-2xl overflow-hidden">
           {filteredDatas.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              {showPast ? "Nenhuma data bloqueada encontrada com os filtros atuais." : "Nenhuma data futura bloqueada."}
-            </div>
+            <div className="p-8 text-center text-muted-foreground">Nenhuma data bloqueada neste período.</div>
           ) : (
             <div className="divide-y divide-border">
               {filteredDatas.map((d) => (
@@ -642,7 +653,7 @@ export default function BloqueiosPage() {
         </div>
       </section>
 
-      {/* ===== DIALOG DE REGRAS (mesmo de antes) ===== */}
+      {/* ===== DIALOG DE REGRAS ===== */}
       <Dialog open={isRegraDialogOpen} onOpenChange={(o) => !o && closeRegraDialog()}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -854,7 +865,9 @@ export default function BloqueiosPage() {
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={closeRegraDialog}>Cancelar</Button>
-            <Button onClick={saveRegra} disabled={busy}>{busy ? "Salvando..." : "Salvar"}</Button>
+            <Button onClick={saveRegra} disabled={busy || reprocessando}>
+              {busy ? "Salvando..." : reprocessando ? "Regenerando..." : "Salvar"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
