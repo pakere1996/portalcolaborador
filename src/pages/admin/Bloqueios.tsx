@@ -15,17 +15,24 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Plus, Calendar, Trash2, CalendarX, CalendarCheck, Filter } from "lucide-react";
+import { Plus, Calendar, Trash2, CalendarX, CalendarCheck, Filter, Building2, Check } from "lucide-react";
 import { formatBR, parseYMD } from "@/lib/folga-rules";
 import { Tables } from "@/integrations/supabase/types";
-import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
+import { FavoritarBotao } from "@/components/FavoritarBotao";
+import { cn } from "@/lib/utils";
 
 type BloqueioRegra = Tables<'bloqueio_regras'>;
 type DataBloqueada = Tables<'datas_bloqueadas'>;
+type Unidade = { id: string; nome: string };
+
+interface RegraComUnidades extends BloqueioRegra {
+  unidades?: Unidade[];
+}
 
 export default function BloqueiosPage() {
-  const [regras, setRegras] = useState<BloqueioRegra[]>([]);
+  const [regras, setRegras] = useState<RegraComUnidades[]>([]);
   const [datasBloqueadas, setDatasBloqueadas] = useState<DataBloqueada[]>([]);
+  const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [anoFiltro, setAnoFiltro] = useState(new Date().getFullYear());
@@ -38,12 +45,46 @@ export default function BloqueiosPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [rRes, dRes] = await Promise.all([
-        supabase.from("bloqueio_regras").select("*").order("created_at", { ascending: false }),
-        supabase.from("datas_bloqueadas").select("*").order("data", { ascending: true }),
-      ]);
-      setRegras(rRes.data ?? []);
-      setDatasBloqueadas(dRes.data ?? []);
+      // Carregar unidades ativas
+      const { data: unidadesData } = await supabase
+        .from("unidades")
+        .select("id, nome")
+        .eq("ativo", true)
+        .order("nome");
+      setUnidades(unidadesData ?? []);
+
+      // Carregar regras com seus vínculos de unidades
+      const { data: regrasData, error: regrasError } = await supabase
+        .from("bloqueio_regras")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (regrasError) throw regrasError;
+
+      // Para cada regra, buscar suas unidades
+      const regrasComUnidades = await Promise.all(
+        (regrasData ?? []).map(async (regra) => {
+          const { data: vincData } = await supabase
+            .from("bloqueio_regra_unidades")
+            .select("unidade_id")
+            .eq("regra_id", regra.id);
+          const unidadeIds = vincData?.map(v => v.unidade_id) ?? [];
+          const unidadesVinculadas = unidadesData?.filter(u => unidadeIds.includes(u.id)) ?? [];
+          return {
+            ...regra,
+            unidades: unidadesVinculadas,
+          };
+        })
+      );
+      setRegras(regrasComUnidades);
+
+      // Carregar datas bloqueadas
+      const { data: datasData, error: datasError } = await supabase
+        .from("datas_bloqueadas")
+        .select("*")
+        .order("data", { ascending: true });
+      if (datasError) throw datasError;
+      setDatasBloqueadas(datasData ?? []);
+
     } catch (e) {
       toast.error("Erro ao carregar dados", { description: (e as Error).message });
     } finally {
@@ -64,15 +105,23 @@ export default function BloqueiosPage() {
   const [regraForm, setRegraForm] = useState<Partial<BloqueioRegra>>({
     descricao: "", tipo: "fixa_anual", mes: null, dia: null, ordinal: null, dia_semana: null, ativo: true,
   });
+  const [regraUnidadesSelecionadas, setRegraUnidadesSelecionadas] = useState<string[]>([]);
   const [editRegraId, setEditRegraId] = useState<string | null>(null);
 
-  const openRegraDialog = (r?: BloqueioRegra) => {
+  const openRegraDialog = async (r?: RegraComUnidades) => {
     if (r) {
       setEditRegraId(r.id);
       setRegraForm({ ...r });
+      // Carregar unidades vinculadas
+      const { data: vincData } = await supabase
+        .from("bloqueio_regra_unidades")
+        .select("unidade_id")
+        .eq("regra_id", r.id);
+      setRegraUnidadesSelecionadas(vincData?.map(v => v.unidade_id) ?? []);
     } else {
       setEditRegraId(null);
       setRegraForm({ descricao: "", tipo: "fixa_anual", mes: null, dia: null, ordinal: null, dia_semana: null, ativo: true });
+      setRegraUnidadesSelecionadas([]);
     }
     setIsRegraDialogOpen(true);
   };
@@ -80,21 +129,61 @@ export default function BloqueiosPage() {
   const closeRegraDialog = () => {
     setIsRegraDialogOpen(false);
     setEditRegraId(null);
+    setRegraUnidadesSelecionadas([]);
+  };
+
+  const toggleUnidade = (unidadeId: string) => {
+    setRegraUnidadesSelecionadas(prev =>
+      prev.includes(unidadeId)
+        ? prev.filter(id => id !== unidadeId)
+        : [...prev, unidadeId]
+    );
   };
 
   const saveRegra = async () => {
     if (!regraForm.descricao?.trim()) return toast.error("Descrição é obrigatória");
     setBusy(true);
     try {
+      let regraId = editRegraId;
+
       if (editRegraId) {
-        const { error } = await supabase.from("bloqueio_regras").update(regraForm).eq("id", editRegraId);
+        // Atualizar regra
+        const { error } = await supabase
+          .from("bloqueio_regras")
+          .update(regraForm)
+          .eq("id", editRegraId);
         if (error) throw error;
-        toast.success("Regra atualizada");
       } else {
-        const { error } = await supabase.from("bloqueio_regras").insert(regraForm);
+        // Criar nova regra
+        const { data, error } = await supabase
+          .from("bloqueio_regras")
+          .insert(regraForm)
+          .select("id")
+          .single();
         if (error) throw error;
-        toast.success("Regra criada");
+        regraId = data.id;
       }
+
+      // Atualizar vínculos com unidades (deleta todos e insere os selecionados)
+      if (regraId) {
+        await supabase
+          .from("bloqueio_regra_unidades")
+          .delete()
+          .eq("regra_id", regraId);
+
+        if (regraUnidadesSelecionadas.length > 0) {
+          const inserts = regraUnidadesSelecionadas.map(unidade_id => ({
+            regra_id: regraId,
+            unidade_id,
+          }));
+          const { error } = await supabase
+            .from("bloqueio_regra_unidades")
+            .insert(inserts);
+          if (error) throw error;
+        }
+      }
+
+      toast.success(editRegraId ? "Regra atualizada" : "Regra criada");
       closeRegraDialog();
       load();
     } catch (e) {
@@ -105,6 +194,7 @@ export default function BloqueiosPage() {
   };
 
   const deleteRegra = async (id: string) => {
+    // Os vínculos serão deletados em cascata (ON DELETE CASCADE)
     const { error } = await supabase.from("bloqueio_regras").delete().eq("id", id);
     if (error) return toast.error(error.message);
     toast.success("Regra excluída");
@@ -200,11 +290,11 @@ export default function BloqueiosPage() {
     }
   };
 
-  // Helper para nome do mês
   const getMonthName = (month: number) => {
     return new Date(2000, month - 1, 1).toLocaleString('pt-BR', { month: 'long' });
   };
 
+  // --- Renderização ---
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -270,6 +360,20 @@ export default function BloqueiosPage() {
                         {r.tipo === "pos_pagamento" && <span>1º Sábado após dia 5 de {getMonthName(r.mes ?? 1)}</span>}
                         {!r.ativo && <span className="text-red-500 font-medium">Inativa</span>}
                       </div>
+                      {/* Exibir unidades vinculadas */}
+                      {r.unidades && r.unidades.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          <Building2 className="size-3 text-muted-foreground" />
+                          {r.unidades.map(u => (
+                            <Badge key={u.id} variant="outline" className="text-xs">{u.nome}</Badge>
+                          ))}
+                        </div>
+                      )}
+                      {r.unidades && r.unidades.length === 0 && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          <Badge variant="secondary" className="text-xs">Global (todas as unidades)</Badge>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -369,7 +473,7 @@ export default function BloqueiosPage() {
 
       {/* Dialog de Regras */}
       <Dialog open={isRegraDialogOpen} onOpenChange={(o) => !o && closeRegraDialog()}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editRegraId ? "Editar Regra" : "Nova Regra"}</DialogTitle>
           </DialogHeader>
@@ -451,6 +555,34 @@ export default function BloqueiosPage() {
                 </select>
               </div>
             )}
+
+            {/* Seleção de Unidades */}
+            <div className="space-y-2">
+              <Label className="text-base font-semibold">Unidades (opcional)</Label>
+              <p className="text-sm text-muted-foreground">
+                Se nenhuma unidade for selecionada, a regra será aplicada a <strong>todas</strong> as unidades.
+              </p>
+              <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-border rounded-lg p-3">
+                {unidades.map((un) => (
+                  <div key={un.id} className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleUnidade(un.id)}
+                      className={cn(
+                        "size-5 rounded border-2 flex items-center justify-center transition-all",
+                        regraUnidadesSelecionadas.includes(un.id)
+                          ? "bg-primary border-primary text-white"
+                          : "border-muted-foreground/30 hover:border-primary/50"
+                      )}
+                    >
+                      {regraUnidadesSelecionadas.includes(un.id) && <Check className="size-3" />}
+                    </button>
+                    <Label className="text-sm cursor-pointer">{un.nome}</Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="flex items-center gap-2">
               <input type="checkbox" id="ativo" checked={regraForm.ativo ?? true} onChange={(e) => setRegraForm({ ...regraForm, ativo: e.target.checked })} className="size-4" />
               <Label htmlFor="ativo">Ativa</Label>
