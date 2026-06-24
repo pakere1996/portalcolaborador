@@ -96,6 +96,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         path.startsWith("/admin/colaboradores") ||
         path.startsWith("/admin/cargos") ||
         path.startsWith("/admin/unidades") ||
+        path.startsWith("/admin/sindicatos") ||
         path === "/admin/cadastro",
       docs: path.startsWith("/admin/documentos") || path === "/admin/documentos",
       comunicacao:
@@ -135,6 +136,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/colaboradores", label: "Colaboradores", icon: Users },
     { to: "/admin/cargos", label: "Cargos", icon: Briefcase },
     { to: "/admin/unidades", label: "Unidades", icon: Building2 },
+    { to: "/admin/sindicatos", label: "Sindicatos", icon: FileText }, // 🔥 NOVO
   ];
 
   const adminFolgaNav: NavItem[] = [
