@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Users, Briefcase, Building2 } from "lucide-react";
+import { Users, Briefcase, Building2, FileText } from "lucide-react";
 
 const modules = [
   {
@@ -20,6 +20,12 @@ const modules = [
     icon: Building2,
     to: "/admin/unidades",
   },
+  {
+    title: "Sindicatos",
+    description: "Gerencie sindicatos, ACTs e CCTs.",
+    icon: FileText,
+    to: "/admin/sindicatos",
+  },
 ];
 
 export default function CadastroHub() {
@@ -30,7 +36,7 @@ export default function CadastroHub() {
           <Users className="size-6 text-primary" /> Cadastro
         </h1>
         <p className="text-muted-foreground mt-1">
-          Gerencie colaboradores, cargos e unidades da empresa.
+          Gerencie colaboradores, cargos, unidades e sindicatos.
         </p>
       </div>
 
