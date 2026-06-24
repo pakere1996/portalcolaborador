@@ -115,6 +115,7 @@ export default function Sindicatos() {
     laboral: null,
   });
 
+  // Dados do patronal
   const [patronalForm, setPatronalForm] = useState({
     nome: "",
     cnpj: "",
@@ -122,6 +123,7 @@ export default function Sindicatos() {
   });
   const [unidadesSelecionadas, setUnidadesSelecionadas] = useState<string[]>([]);
 
+  // Dados do laboral
   const [laboralForm, setLaboralForm] = useState({
     nome: "",
     cnpj: "",
@@ -129,7 +131,7 @@ export default function Sindicatos() {
   });
   const [cargosSelecionados, setCargosSelecionados] = useState<string[]>([]);
 
-  // --- Diálogo de documentos ---
+  // --- Documentos (diálogo separado) ---
   const [docDialogOpen, setDocDialogOpen] = useState(false);
   const [sindicatoSelecionado, setSindicatoSelecionado] = useState<Sindicato | null>(null);
   const [documentos, setDocumentos] = useState<DocumentoSindicato[]>([]);
@@ -237,7 +239,6 @@ export default function Sindicatos() {
       const patronal = sindicato.tipo === "patronal" ? sindicato : outro;
       const laboral = sindicato.tipo === "patronal" ? outro : sindicato;
       if (patronal && laboral) {
-        // Gerar novo grupo_id e atualizar ambos
         grupoId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
         await supabase.from("sindicatos").update({ grupo_id: grupoId }).eq("id", patronal.id);
         await supabase.from("sindicatos").update({ grupo_id: grupoId }).eq("id", laboral.id);
@@ -246,7 +247,6 @@ export default function Sindicatos() {
         const p = updated?.find((s: any) => s.tipo === "patronal") || null;
         const l = updated?.find((s: any) => s.tipo === "laboral") || null;
         setEditando({ grupoId, patronal: p, laboral: l });
-        // Preencher forms (mesmo código abaixo)
         if (p) {
           setPatronalForm({
             nome: p.nome,
@@ -327,7 +327,7 @@ export default function Sindicatos() {
     }
   };
 
-  // --- Salvar ficha unificada (sem documento) ---
+  // --- Salvar ficha unificada (com RLS corrigido) ---
   const salvarFichaUnificada = async () => {
     if (!patronalForm.nome.trim()) {
       toast.error("Nome do sindicato patronal é obrigatório");
@@ -348,13 +348,10 @@ export default function Sindicatos() {
 
     setBusy(true);
     try {
-      // Gerar grupo_id (se não tiver)
       let grupoId = editando.grupoId;
       if (!grupoId) {
         grupoId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
       }
-
-      console.log("🟢 Iniciando salvamento da ficha - grupoId:", grupoId);
 
       // 1. Salvar/atualizar patronal
       const patronalDados = {
@@ -374,7 +371,6 @@ export default function Sindicatos() {
           .eq("id", editando.patronal.id);
         if (error) throw error;
         patronalId = editando.patronal.id;
-        console.log("✅ Patronal atualizado - ID:", patronalId);
       } else {
         const { data, error } = await supabase
           .from("sindicatos")
@@ -383,21 +379,32 @@ export default function Sindicatos() {
           .single();
         if (error) throw error;
         patronalId = data.id;
-        console.log("✅ Patronal criado - ID:", patronalId);
       }
 
-      // 2. Vínculos patronal
-      await supabase.from("sindicato_unidades").delete().eq("sindicato_id", patronalId);
+      // 2. Vínculos patronal (FORÇA BRUTA)
+      // Deletar vínculos existentes
+      const { error: delUniErr } = await supabase
+        .from("sindicato_unidades")
+        .delete()
+        .eq("sindicato_id", patronalId);
+      if (delUniErr) {
+        console.error("Erro ao deletar vínculos de unidades:", delUniErr);
+        throw new Error("Erro ao deletar vínculos de unidades: " + delUniErr.message);
+      }
+
+      // Inserir novos vínculos
       if (unidadesSelecionadas.length > 0) {
         const inserts = unidadesSelecionadas.map(unidade_id => ({
           sindicato_id: patronalId,
           unidade_id,
         }));
-        const { error: insertUnidadesError } = await supabase
+        const { error: insUniErr } = await supabase
           .from("sindicato_unidades")
           .insert(inserts);
-        if (insertUnidadesError) throw insertUnidadesError;
-        console.log("✅ Vínculos de unidades inseridos:", inserts.length);
+        if (insUniErr) {
+          console.error("Erro ao inserir vínculos de unidades:", insUniErr);
+          throw new Error("Erro ao inserir vínculos de unidades: " + insUniErr.message);
+        }
       }
 
       // 3. Salvar/atualizar laboral
@@ -418,7 +425,6 @@ export default function Sindicatos() {
           .eq("id", editando.laboral.id);
         if (error) throw error;
         laboralId = editando.laboral.id;
-        console.log("✅ Laboral atualizado - ID:", laboralId);
       } else {
         const { data, error } = await supabase
           .from("sindicatos")
@@ -427,21 +433,30 @@ export default function Sindicatos() {
           .single();
         if (error) throw error;
         laboralId = data.id;
-        console.log("✅ Laboral criado - ID:", laboralId);
       }
 
-      // 4. Vínculos laboral
-      await supabase.from("sindicato_cargos").delete().eq("sindicato_id", laboralId);
+      // 4. Vínculos laboral (FORÇA BRUTA)
+      const { error: delCargoErr } = await supabase
+        .from("sindicato_cargos")
+        .delete()
+        .eq("sindicato_id", laboralId);
+      if (delCargoErr) {
+        console.error("Erro ao deletar vínculos de cargos:", delCargoErr);
+        throw new Error("Erro ao deletar vínculos de cargos: " + delCargoErr.message);
+      }
+
       if (cargosSelecionados.length > 0) {
         const inserts = cargosSelecionados.map(cargo_id => ({
           sindicato_id: laboralId,
           cargo_id,
         }));
-        const { error: insertCargosError } = await supabase
+        const { error: insCargoErr } = await supabase
           .from("sindicato_cargos")
           .insert(inserts);
-        if (insertCargosError) throw insertCargosError;
-        console.log("✅ Vínculos de cargos inseridos:", inserts.length);
+        if (insCargoErr) {
+          console.error("Erro ao inserir vínculos de cargos:", insCargoErr);
+          throw new Error("Erro ao inserir vínculos de cargos: " + insCargoErr.message);
+        }
       }
 
       toast.success("Ficha salva com sucesso!");
@@ -640,13 +655,12 @@ export default function Sindicatos() {
           {gruposFiltrados.map((g, idx) => {
             const p = g.patronal;
             const l = g.laboral;
-            // 🔥 Título combinado: Patronal / Laboral
-            const titulo = p && l ? `${p.nome} / ${l.nome}` : (p?.nome || l?.nome || "Sem nome");
+            const nomeGrupo = p ? p.nome : l ? l.nome : "Sem nome";
             return (
               <Card key={idx} className="border-border shadow-sm hover:shadow-md transition-all">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
-                    <CardTitle className="text-lg truncate">{titulo}</CardTitle>
+                    <CardTitle className="text-lg truncate">{nomeGrupo}</CardTitle>
                     <div className="flex gap-1">
                       <Badge variant={p ? "secondary" : "outline"}>{p ? "Patronal" : "—"}</Badge>
                       <Badge variant={l ? "default" : "outline"}>{l ? "Laboral" : "—"}</Badge>
@@ -707,11 +721,22 @@ export default function Sindicatos() {
         </div>
       )}
 
-      {/* === DIALOG UNIFICADO (sem documento) === */}
+      {/* === DIALOG UNIFICADO (sem upload de documentos) === */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editando.patronal || editando.laboral ? "Editar Ficha" : "Nova Ficha"}</DialogTitle>
+            <DialogTitle>
+              {editando.patronal || editando.laboral ? (
+                <div className="flex items-center gap-2">
+                  <span>Editar Ficha</span>
+                  <Badge variant="outline" className="ml-2">
+                    {editando.patronal?.nome || "Patronal"} / {editando.laboral?.nome || "Laboral"}
+                  </Badge>
+                </div>
+              ) : (
+                "Nova Ficha - Patronal / Laboral"
+              )}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-6 py-4">
             {/* ---- Patronal ---- */}
@@ -739,7 +764,7 @@ export default function Sindicatos() {
             </div>
 
             {/* ---- Laboral ---- */}
-            <div className="space-y-4 pb-6">
+            <div className="space-y-4">
               <h3 className="text-lg font-semibold text-primary">Sindicato Laboral</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2"><Label>Nome *</Label><Input value={laboralForm.nome} onChange={e => setLaboralForm({ ...laboralForm, nome: e.target.value })} placeholder="Nome" /></div>
@@ -760,11 +785,6 @@ export default function Sindicatos() {
                 </div>
                 {cargosSelecionados.length === 0 && <p className="text-xs text-red-500">* Selecione pelo menos um cargo</p>}
               </div>
-            </div>
-
-            {/* 🔥 Mensagem sobre documentos (apenas informativo) */}
-            <div className="border-t border-border pt-4 text-sm text-muted-foreground">
-              📎 Os documentos (ACT/CCT) podem ser anexados após o cadastro, através do botão "Documentos" em cada ficha.
             </div>
           </div>
 
