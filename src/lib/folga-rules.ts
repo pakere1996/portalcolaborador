@@ -157,13 +157,14 @@ export function calculateDateStatus(params: {
   }
 
   const manual = manualBlocked.get(iso);
-  if (manual && !manual.liberada) {
-    if (isAdmin) {
-      // admin vê mas não bloqueia
-    } else {
-      return { status: "blocked", reason: manual.reason };
-    }
+if (manual && !manual.liberada) {
+  if (isAdmin) {
+    // Admin vê o bloqueio, mas pode interagir
+    return { status: "blocked", reason: manual.reason, adminCanOverride: true };
+  } else {
+    return { status: "blocked", reason: manual.reason };
   }
+}
 
   const myFolga = myUserId && allFolgas.find(f => f.user_id === myUserId && f.data === iso);
   if (!isAdmin && myFolga) {
