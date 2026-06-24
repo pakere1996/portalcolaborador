@@ -20,10 +20,9 @@ import Colaboradores from "./pages/admin/Colaboradores";
 import Cargos from "./pages/admin/Cargos";
 import Unidades from "./pages/admin/Unidades";
 
-// Sindicatos – módulo com submenus
-import SindicatosCadastro from "./pages/admin/SindicatosCadastro"; // renomeado
+// Sindicatos – agora como subpáginas do Cadastro (Opção A)
+import SindicatosCadastro from "./pages/admin/SindicatosCadastro";
 import SindicatosNegociacoes from "./pages/admin/SindicatosNegociacoes";
-import SindicatosHub from "./pages/admin/SindicatosHub";
 
 // Outras páginas admin
 import FolgasDashboard from "./pages/admin/FolgasHub";
@@ -98,15 +97,19 @@ function AuthenticatedRoutes() {
               <Route path="/admin/cadastro" element={<CadastroHub />} />
               <Route path="/admin/comunicacao" element={<ComunicacaoHub />} />
 
-              {/* Cadastro Group (sub-páginas) */}
+              {/* Cadastro Group – itens planos (Opção A) */}
               <Route path="/admin/colaboradores" element={<Colaboradores />} />
               <Route path="/admin/cargos" element={<Cargos />} />
               <Route path="/admin/unidades" element={<Unidades />} />
 
-              {/* Sindicatos – módulo próprio com submenus */}
-              <Route path="/admin/sindicatos" element={<SindicatosHub />} />
-              <Route path="/admin/sindicatos/cadastro" element={<SindicatosCadastro />} />
-              <Route path="/admin/sindicatos/negociacoes" element={<SindicatosNegociacoes />} />
+              {/* Sindicatos – agora como subpáginas do Cadastro (rotas planas) */}
+              <Route path="/admin/cadastro/sindicatos" element={<SindicatosCadastro />} />
+              <Route path="/admin/cadastro/act-cct" element={<SindicatosNegociacoes />} />
+
+              {/* Redirecionamentos para rotas antigas (evitar quebra) */}
+              <Route path="/admin/sindicatos/cadastro" element={<Navigate to="/admin/cadastro/sindicatos" replace />} />
+              <Route path="/admin/sindicatos/negociacoes" element={<Navigate to="/admin/cadastro/act-cct" replace />} />
+              <Route path="/admin/sindicatos" element={<Navigate to="/admin/cadastro" replace />} />
 
               {/* Folgas Group */}
               <Route path="/admin/folgas" element={<FolgasDashboard />} />
