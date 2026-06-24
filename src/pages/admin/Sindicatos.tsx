@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -129,7 +130,7 @@ export default function Sindicatos() {
   });
   const [cargosSelecionados, setCargosSelecionados] = useState<string[]>([]);
 
-  // --- Diálogo de documentos (SEM upload na ficha) ---
+  // --- Diálogo de documentos ---
   const [docDialogOpen, setDocDialogOpen] = useState(false);
   const [sindicatoSelecionado, setSindicatoSelecionado] = useState<Sindicato | null>(null);
   const [documentos, setDocumentos] = useState<DocumentoSindicato[]>([]);
@@ -141,7 +142,7 @@ export default function Sindicatos() {
   });
   const [uploadingDoc, setUploadingDoc] = useState(false);
 
-  // --- 🔥 NOVO: Estado para edição de documento ---
+  // --- Edição de documento ---
   const [editDocDialogOpen, setEditDocDialogOpen] = useState(false);
   const [editandoDoc, setEditandoDoc] = useState<DocumentoSindicato | null>(null);
   const [editDocForm, setEditDocForm] = useState({
@@ -219,7 +220,7 @@ export default function Sindicatos() {
     setter((prev: any) => ({ ...prev, [field]: formatWhatsApp(e.target.value) }));
   };
 
-  // --- Abrir diálogo de documentos (gerenciamento) ---
+  // --- Abrir diálogo de documentos ---
   const abrirDocDialog = (sindicato: Sindicato) => {
     setSindicatoSelecionado(sindicato);
     setDocForm({
@@ -231,8 +232,9 @@ export default function Sindicatos() {
     loadDocumentos(sindicato.id);
   };
 
-  // --- 🔥 NOVO: Abrir edição de documento ---
+  // --- Edição de documento (com logs) ---
   const abrirEdicaoDoc = (doc: DocumentoSindicato) => {
+    console.log("📝 Abrindo edição do documento:", doc);
     setEditandoDoc(doc);
     setEditDocForm({
       ano: doc.ano,
@@ -241,30 +243,56 @@ export default function Sindicatos() {
     setEditDocDialogOpen(true);
   };
 
-  // --- 🔥 NOVO: Salvar edição de documento ---
   const salvarEdicaoDoc = async () => {
-    if (!editandoDoc) return;
+    if (!editandoDoc) {
+      console.error("❌ Nenhum documento selecionado para editar");
+      toast.error("Erro: documento não selecionado");
+      return;
+    }
+
+    console.log("💾 Salvando edição do documento:", {
+      id: editandoDoc.id,
+      novoAno: editDocForm.ano,
+      novoTipo: editDocForm.tipo_documento,
+    });
+
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("documentos_sindicato")
         .update({
           ano: editDocForm.ano,
           tipo_documento: editDocForm.tipo_documento,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", editandoDoc.id);
-      if (error) throw error;
+        .eq("id", editandoDoc.id)
+        .select();
+
+      if (error) {
+        console.error("❌ Erro no update:", error);
+        toast.error("Erro ao atualizar documento: " + error.message);
+        return;
+      }
+
+      console.log("✅ Documento atualizado com sucesso:", data);
       toast.success("Documento atualizado!");
+
       setEditDocDialogOpen(false);
       setEditandoDoc(null);
-      if (sindicatoSelecionado) loadDocumentos(sindicatoSelecionado.id);
+
+      if (sindicatoSelecionado) {
+        console.log("🔄 Recarregando documentos do sindicato:", sindicatoSelecionado.id);
+        await loadDocumentos(sindicatoSelecionado.id);
+      } else {
+        console.warn("⚠️ Nenhum sindicato selecionado para recarregar documentos");
+        await loadData();
+      }
     } catch (error) {
-      console.error("Erro ao editar documento:", error);
+      console.error("❌ Erro inesperado:", error);
       toast.error("Erro ao editar documento");
     }
   };
 
-  // --- Abrir edição com carregamento correto dos vínculos ---
+  // --- Abrir edição da ficha ---
   const abrirEdicao = async (sindicato: Sindicato) => {
     setBusy(true);
     try {
@@ -273,7 +301,6 @@ export default function Sindicatos() {
       let laboral: Sindicato | null = null;
 
       if (grupoId) {
-        // Buscar ambos pelo grupo_id
         const { data: grupo } = await supabase
           .from("sindicatos")
           .select("*")
@@ -281,7 +308,6 @@ export default function Sindicatos() {
         patronal = grupo?.find((s: any) => s.tipo === "patronal") || null;
         laboral = grupo?.find((s: any) => s.tipo === "laboral") || null;
       } else {
-        // Fallback: buscar par por nome ou CNPJ
         const { data } = await supabase
           .from("sindicatos")
           .select("*")
@@ -290,12 +316,10 @@ export default function Sindicatos() {
         const outro = data?.find((s: any) => s.tipo !== sindicato.tipo) || null;
         patronal = sindicato.tipo === "patronal" ? sindicato : outro;
         laboral = sindicato.tipo === "patronal" ? outro : sindicato;
-        // Se não tiver grupo_id, gerar um para vincular
         if (patronal && laboral) {
           grupoId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
           await supabase.from("sindicatos").update({ grupo_id: grupoId }).eq("id", patronal.id);
           await supabase.from("sindicatos").update({ grupo_id: grupoId }).eq("id", laboral.id);
-          // Recarregar dados atualizados
           const { data: updated } = await supabase.from("sindicatos").select("*").eq("grupo_id", grupoId);
           patronal = updated?.find((s: any) => s.tipo === "patronal") || null;
           laboral = updated?.find((s: any) => s.tipo === "laboral") || null;
@@ -304,45 +328,33 @@ export default function Sindicatos() {
 
       setEditando({ grupoId, patronal, laboral });
 
-      // Carregar dados do patronal
       if (patronal) {
         setPatronalForm({
           nome: patronal.nome,
           cnpj: patronal.cnpj ? formatCNPJ(patronal.cnpj) : "",
           contato_whatsapp: patronal.contato_whatsapp ? formatWhatsApp(patronal.contato_whatsapp) : "",
         });
-        // Buscar vínculos de unidades
-        const { data: vinculos, error } = await supabase
+        const { data: vinculos } = await supabase
           .from("sindicato_unidades")
           .select("unidade_id")
           .eq("sindicato_id", patronal.id);
-        if (error) {
-          console.error("Erro ao buscar vínculos de unidades:", error);
-        } else {
-          setUnidadesSelecionadas(vinculos?.map(v => v.unidade_id) ?? []);
-        }
+        setUnidadesSelecionadas(vinculos?.map(v => v.unidade_id) ?? []);
       } else {
         setPatronalForm({ nome: "", cnpj: "", contato_whatsapp: "" });
         setUnidadesSelecionadas([]);
       }
 
-      // Carregar dados do laboral
       if (laboral) {
         setLaboralForm({
           nome: laboral.nome,
           cnpj: laboral.cnpj ? formatCNPJ(laboral.cnpj) : "",
           contato_whatsapp: laboral.contato_whatsapp ? formatWhatsApp(laboral.contato_whatsapp) : "",
         });
-        // Buscar vínculos de cargos
-        const { data: vinculos, error } = await supabase
+        const { data: vinculos } = await supabase
           .from("sindicato_cargos")
           .select("cargo_id")
           .eq("sindicato_id", laboral.id);
-        if (error) {
-          console.error("Erro ao buscar vínculos de cargos:", error);
-        } else {
-          setCargosSelecionados(vinculos?.map(v => v.cargo_id) ?? []);
-        }
+        setCargosSelecionados(vinculos?.map(v => v.cargo_id) ?? []);
       } else {
         setLaboralForm({ nome: "", cnpj: "", contato_whatsapp: "" });
         setCargosSelecionados([]);
@@ -383,7 +395,7 @@ export default function Sindicatos() {
         grupoId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
       }
 
-      // 1. Salvar/atualizar patronal
+      // 1. Patronal
       const patronalDados = {
         nome: patronalForm.nome.trim(),
         cnpj: patronalForm.cnpj ? onlyNumbers(patronalForm.cnpj) : null,
@@ -411,7 +423,6 @@ export default function Sindicatos() {
         patronalId = data.id;
       }
 
-      // 2. Atualizar vínculos de unidades
       await supabase.from("sindicato_unidades").delete().eq("sindicato_id", patronalId);
       if (unidadesSelecionadas.length > 0) {
         const inserts = unidadesSelecionadas.map(unidade_id => ({
@@ -419,13 +430,10 @@ export default function Sindicatos() {
           unidade_id,
         }));
         const { error } = await supabase.from("sindicato_unidades").insert(inserts);
-        if (error) {
-          console.error("Erro ao inserir vínculos de unidades:", error);
-          throw error;
-        }
+        if (error) throw error;
       }
 
-      // 3. Salvar/atualizar laboral
+      // 2. Laboral
       const laboralDados = {
         nome: laboralForm.nome.trim(),
         cnpj: laboralForm.cnpj ? onlyNumbers(laboralForm.cnpj) : null,
@@ -453,7 +461,6 @@ export default function Sindicatos() {
         laboralId = data.id;
       }
 
-      // 4. Atualizar vínculos de cargos
       await supabase.from("sindicato_cargos").delete().eq("sindicato_id", laboralId);
       if (cargosSelecionados.length > 0) {
         const inserts = cargosSelecionados.map(cargo_id => ({
@@ -461,10 +468,7 @@ export default function Sindicatos() {
           cargo_id,
         }));
         const { error } = await supabase.from("sindicato_cargos").insert(inserts);
-        if (error) {
-          console.error("Erro ao inserir vínculos de cargos:", error);
-          throw error;
-        }
+        if (error) throw error;
       }
 
       toast.success("Ficha salva com sucesso!");
@@ -564,6 +568,7 @@ export default function Sindicatos() {
     if (data?.signedUrl) window.open(data.signedUrl, "_blank");
     else toast.error("Erro ao gerar link");
   };
+
   const handlePreview = async (doc: DocumentoSindicato) => {
     const { data } = await supabase.storage.from("sindicatos").createSignedUrl(doc.storage_path, 60);
     if (data?.signedUrl) {
@@ -581,7 +586,7 @@ export default function Sindicatos() {
   const toggleCargo = (id: string) =>
     setCargosSelecionados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
-  // --- Agrupamento por grupo_id ---
+  // --- Agrupamento ---
   const grupos = useMemo(() => {
     const map = new Map<string, { patronal: Sindicato | null; laboral: Sindicato | null }>();
     for (const s of sindicatos) {
@@ -806,7 +811,7 @@ export default function Sindicatos() {
         </DialogContent>
       </Dialog>
 
-      {/* === DIÁLOGO DE DOCUMENTOS === */}
+      {/* === DIÁLOGO DE DOCUMENTOS (gerenciamento) === */}
       <Dialog open={docDialogOpen} onOpenChange={open => !open && setDocDialogOpen(false)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -832,13 +837,12 @@ export default function Sindicatos() {
               <div key={doc.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                 <div><div className="font-medium">{getDocTipoLabel(doc.tipo_documento)}</div><div className="text-sm text-muted-foreground">{doc.ano} • {doc.nome_pdf || "PDF"}</div></div>
                 <div className="flex gap-1">
-                  {/* 🔥 NOVO: Botão Editar */}
-                  <Button variant="ghost" size="icon" className="size-8" title="Editar documento" onClick={() => abrirEdicaoDoc(doc)}>
+                  <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={() => abrirEdicaoDoc(doc)}>
                     <Pencil className="size-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="size-8" onClick={() => handlePreview(doc)}><Eye className="size-4" /></Button>
-                  <Button variant="ghost" size="icon" className="size-8" onClick={() => handleDownload(doc)}><Download className="size-4" /></Button>
-                  <Button variant="ghost" size="icon" className="size-8 text-red-500" onClick={() => setDeletingDoc(doc)}><Trash2 className="size-4" /></Button>
+                  <Button variant="ghost" size="icon" onClick={() => handlePreview(doc)}><Eye className="size-4" /></Button>
+                  <Button variant="ghost" size="icon" onClick={() => handleDownload(doc)}><Download className="size-4" /></Button>
+                  <Button variant="ghost" size="icon" className="text-red-500" onClick={() => setDeletingDoc(doc)}><Trash2 className="size-4" /></Button>
                 </div>
               </div>
             ))}
@@ -847,11 +851,19 @@ export default function Sindicatos() {
         </DialogContent>
       </Dialog>
 
-      {/* 🔥 NOVO: Diálogo de edição de documento */}
-      <Dialog open={editDocDialogOpen} onOpenChange={setEditDocDialogOpen}>
+      {/* === DIÁLOGO DE EDIÇÃO DE DOCUMENTO (com logs e correção) === */}
+      <Dialog open={editDocDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setEditandoDoc(null);
+          setEditDocDialogOpen(false);
+        }
+      }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Editar Documento</DialogTitle>
+            <DialogDescription>
+              Altere o ano ou o tipo do documento. O arquivo permanece o mesmo.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -868,13 +880,19 @@ export default function Sindicatos() {
                 value={editDocForm.tipo_documento}
                 onValueChange={(v: any) => setEditDocForm({ ...editDocForm, tipo_documento: v })}
               >
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
                 <SelectContent>
-                  {TIPOS_DOCUMENTO.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                  {TIPOS_DOCUMENTO.map(t => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-            <p className="text-xs text-muted-foreground">O arquivo em si não é alterado, apenas os metadados.</p>
+            <p className="text-xs text-muted-foreground">
+              O arquivo em si não é alterado, apenas os metadados.
+            </p>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setEditDocDialogOpen(false)}>Cancelar</Button>
