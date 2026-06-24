@@ -70,7 +70,7 @@ interface Sindicato {
   cnpj: string | null;
   tipo: "laboral" | "patronal" | null;
   contato_whatsapp: string | null;
-  grupo_id: string | null; // 🔥 NOVO
+  grupo_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -115,7 +115,6 @@ export default function Sindicatos() {
     laboral: null,
   });
 
-  // Dados do patronal
   const [patronalForm, setPatronalForm] = useState({
     nome: "",
     cnpj: "",
@@ -123,7 +122,6 @@ export default function Sindicatos() {
   });
   const [unidadesSelecionadas, setUnidadesSelecionadas] = useState<string[]>([]);
 
-  // Dados do laboral
   const [laboralForm, setLaboralForm] = useState({
     nome: "",
     cnpj: "",
@@ -131,14 +129,7 @@ export default function Sindicatos() {
   });
   const [cargosSelecionados, setCargosSelecionados] = useState<string[]>([]);
 
-  // --- Documento único (ACT/CCT) ---
-  const [documentoForm, setDocumentoForm] = useState({
-    ano: new Date().getFullYear(),
-    tipo_documento: "act" as "act" | "cct",
-    arquivo: null as File | null,
-  });
-
-  // --- Documentos (diálogo para gerenciar) ---
+  // --- Diálogo de documentos ---
   const [docDialogOpen, setDocDialogOpen] = useState(false);
   const [sindicatoSelecionado, setSindicatoSelecionado] = useState<Sindicato | null>(null);
   const [documentos, setDocumentos] = useState<DocumentoSindicato[]>([]);
@@ -232,12 +223,11 @@ export default function Sindicatos() {
     loadDocumentos(sindicato.id);
   };
 
-  // --- Abrir ficha para edição (pelo grupo_id) ---
+  // --- Abrir edição (com suporte a grupo) ---
   const abrirEdicao = async (sindicato: Sindicato) => {
-    // Buscar o grupo completo
     let grupoId = sindicato.grupo_id;
     if (!grupoId) {
-      // Fallback: se não tiver grupo_id, tenta buscar pelo nome/CNPJ (legado)
+      // Fallback: buscar par por nome/CNPJ
       const { data } = await supabase
         .from("sindicatos")
         .select("*")
@@ -246,28 +236,17 @@ export default function Sindicatos() {
       const outro = data?.find((s: any) => s.tipo !== sindicato.tipo) || null;
       const patronal = sindicato.tipo === "patronal" ? sindicato : outro;
       const laboral = sindicato.tipo === "patronal" ? outro : sindicato;
-      grupoId = patronal?.grupo_id || laboral?.grupo_id || null;
-      if (!grupoId) {
-        // Se não tiver grupo_id, geramos um novo para agrupar na edição
+      if (patronal && laboral) {
+        // Gerar novo grupo_id e atualizar ambos
         grupoId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
-        // Atualizar ambos com o novo grupo_id
-        if (patronal) {
-          await supabase.from("sindicatos").update({ grupo_id: grupoId }).eq("id", patronal.id);
-        }
-        if (laboral) {
-          await supabase.from("sindicatos").update({ grupo_id: grupoId }).eq("id", laboral.id);
-        }
-        // Recarregar dados
+        await supabase.from("sindicatos").update({ grupo_id: grupoId }).eq("id", patronal.id);
+        await supabase.from("sindicatos").update({ grupo_id: grupoId }).eq("id", laboral.id);
         await loadData();
-        // Reobter os sindicatos atualizados
-        const { data: updated } = await supabase
-          .from("sindicatos")
-          .select("*")
-          .eq("grupo_id", grupoId);
+        const { data: updated } = await supabase.from("sindicatos").select("*").eq("grupo_id", grupoId);
         const p = updated?.find((s: any) => s.tipo === "patronal") || null;
         const l = updated?.find((s: any) => s.tipo === "laboral") || null;
         setEditando({ grupoId, patronal: p, laboral: l });
-        // Preencher forms
+        // Preencher forms (mesmo código abaixo)
         if (p) {
           setPatronalForm({
             nome: p.nome,
@@ -303,53 +282,52 @@ export default function Sindicatos() {
       }
     }
 
-    // Buscar ambos pelo grupo_id
-    const { data: grupo } = await supabase
-      .from("sindicatos")
-      .select("*")
-      .eq("grupo_id", grupoId);
+    // Se tem grupoId, buscar ambos
+    if (grupoId) {
+      const { data: grupo } = await supabase
+        .from("sindicatos")
+        .select("*")
+        .eq("grupo_id", grupoId);
+      const patronal = grupo?.find((s: any) => s.tipo === "patronal") || null;
+      const laboral = grupo?.find((s: any) => s.tipo === "laboral") || null;
+      setEditando({ grupoId, patronal, laboral });
 
-    const patronal = grupo?.find((s: any) => s.tipo === "patronal") || null;
-    const laboral = grupo?.find((s: any) => s.tipo === "laboral") || null;
+      if (patronal) {
+        setPatronalForm({
+          nome: patronal.nome,
+          cnpj: patronal.cnpj ? formatCNPJ(patronal.cnpj) : "",
+          contato_whatsapp: patronal.contato_whatsapp ? formatWhatsApp(patronal.contato_whatsapp) : "",
+        });
+        const { data: vinculos } = await supabase
+          .from("sindicato_unidades")
+          .select("unidade_id")
+          .eq("sindicato_id", patronal.id);
+        setUnidadesSelecionadas(vinculos?.map(v => v.unidade_id) ?? []);
+      } else {
+        setPatronalForm({ nome: "", cnpj: "", contato_whatsapp: "" });
+        setUnidadesSelecionadas([]);
+      }
 
-    setEditando({ grupoId, patronal, laboral });
-
-    if (patronal) {
-      setPatronalForm({
-        nome: patronal.nome,
-        cnpj: patronal.cnpj ? formatCNPJ(patronal.cnpj) : "",
-        contato_whatsapp: patronal.contato_whatsapp ? formatWhatsApp(patronal.contato_whatsapp) : "",
-      });
-      const { data: vinculos } = await supabase
-        .from("sindicato_unidades")
-        .select("unidade_id")
-        .eq("sindicato_id", patronal.id);
-      setUnidadesSelecionadas(vinculos?.map(v => v.unidade_id) ?? []);
-    } else {
-      setPatronalForm({ nome: "", cnpj: "", contato_whatsapp: "" });
-      setUnidadesSelecionadas([]);
+      if (laboral) {
+        setLaboralForm({
+          nome: laboral.nome,
+          cnpj: laboral.cnpj ? formatCNPJ(laboral.cnpj) : "",
+          contato_whatsapp: laboral.contato_whatsapp ? formatWhatsApp(laboral.contato_whatsapp) : "",
+        });
+        const { data: vinculos } = await supabase
+          .from("sindicato_cargos")
+          .select("cargo_id")
+          .eq("sindicato_id", laboral.id);
+        setCargosSelecionados(vinculos?.map(v => v.cargo_id) ?? []);
+      } else {
+        setLaboralForm({ nome: "", cnpj: "", contato_whatsapp: "" });
+        setCargosSelecionados([]);
+      }
+      setDialogOpen(true);
     }
-
-    if (laboral) {
-      setLaboralForm({
-        nome: laboral.nome,
-        cnpj: laboral.cnpj ? formatCNPJ(laboral.cnpj) : "",
-        contato_whatsapp: laboral.contato_whatsapp ? formatWhatsApp(laboral.contato_whatsapp) : "",
-      });
-      const { data: vinculos } = await supabase
-        .from("sindicato_cargos")
-        .select("cargo_id")
-        .eq("sindicato_id", laboral.id);
-      setCargosSelecionados(vinculos?.map(v => v.cargo_id) ?? []);
-    } else {
-      setLaboralForm({ nome: "", cnpj: "", contato_whatsapp: "" });
-      setCargosSelecionados([]);
-    }
-
-    setDialogOpen(true);
   };
 
-  // --- Salvar ficha unificada com grupo ---
+  // --- Salvar ficha unificada (sem documento) ---
   const salvarFichaUnificada = async () => {
     if (!patronalForm.nome.trim()) {
       toast.error("Nome do sindicato patronal é obrigatório");
@@ -376,6 +354,8 @@ export default function Sindicatos() {
         grupoId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
       }
 
+      console.log("🟢 Iniciando salvamento da ficha - grupoId:", grupoId);
+
       // 1. Salvar/atualizar patronal
       const patronalDados = {
         nome: patronalForm.nome.trim(),
@@ -394,6 +374,7 @@ export default function Sindicatos() {
           .eq("id", editando.patronal.id);
         if (error) throw error;
         patronalId = editando.patronal.id;
+        console.log("✅ Patronal atualizado - ID:", patronalId);
       } else {
         const { data, error } = await supabase
           .from("sindicatos")
@@ -402,6 +383,7 @@ export default function Sindicatos() {
           .single();
         if (error) throw error;
         patronalId = data.id;
+        console.log("✅ Patronal criado - ID:", patronalId);
       }
 
       // 2. Vínculos patronal
@@ -411,7 +393,11 @@ export default function Sindicatos() {
           sindicato_id: patronalId,
           unidade_id,
         }));
-        await supabase.from("sindicato_unidades").insert(inserts);
+        const { error: insertUnidadesError } = await supabase
+          .from("sindicato_unidades")
+          .insert(inserts);
+        if (insertUnidadesError) throw insertUnidadesError;
+        console.log("✅ Vínculos de unidades inseridos:", inserts.length);
       }
 
       // 3. Salvar/atualizar laboral
@@ -432,6 +418,7 @@ export default function Sindicatos() {
           .eq("id", editando.laboral.id);
         if (error) throw error;
         laboralId = editando.laboral.id;
+        console.log("✅ Laboral atualizado - ID:", laboralId);
       } else {
         const { data, error } = await supabase
           .from("sindicatos")
@@ -440,6 +427,7 @@ export default function Sindicatos() {
           .single();
         if (error) throw error;
         laboralId = data.id;
+        console.log("✅ Laboral criado - ID:", laboralId);
       }
 
       // 4. Vínculos laboral
@@ -449,59 +437,23 @@ export default function Sindicatos() {
           sindicato_id: laboralId,
           cargo_id,
         }));
-        await supabase.from("sindicato_cargos").insert(inserts);
-      }
-
-      // 5. Documento único (ACT/CCT) – associado a ambos ou a um dos sindicatos?
-      // Como a ACT é única, vamos associá-la ao sindicato patronal (ou criar uma tabela separada, mas vamos manter em documentos_sindicato)
-      // Para simplificar, vamos salvar o documento vinculado ao patronal (ou criar uma tabela de documentos_grupo, mas isso exigiria mais alterações).
-      // Vou salvar no patronal, mas com um campo indicando que é do grupo.
-      if (documentoForm.arquivo) {
-        const path = `grupo_${grupoId}/${documentoForm.tipo_documento}_${documentoForm.ano}.pdf`;
-        const { error: uploadError } = await supabase.storage
-          .from("sindicatos")
-          .upload(path, documentoForm.arquivo, { upsert: true });
-        if (uploadError) throw uploadError;
-
-        // Verificar se já existe documento para este ano/tipo no grupo (patronal)
-        const { data: existing } = await supabase
-          .from("documentos_sindicato")
-          .select("id")
-          .eq("sindicato_id", patronalId)
-          .eq("ano", documentoForm.ano)
-          .eq("tipo_documento", documentoForm.tipo_documento)
-          .maybeSingle();
-
-        if (existing) {
-          // Atualizar
-          await supabase
-            .from("documentos_sindicato")
-            .update({ storage_path: path, nome_pdf: documentoForm.arquivo.name })
-            .eq("id", existing.id);
-        } else {
-          // Inserir
-          await supabase.from("documentos_sindicato").insert({
-            sindicato_id: patronalId,
-            ano: documentoForm.ano,
-            tipo_documento: documentoForm.tipo_documento,
-            storage_path: path,
-            nome_pdf: documentoForm.arquivo.name,
-          });
-        }
+        const { error: insertCargosError } = await supabase
+          .from("sindicato_cargos")
+          .insert(inserts);
+        if (insertCargosError) throw insertCargosError;
+        console.log("✅ Vínculos de cargos inseridos:", inserts.length);
       }
 
       toast.success("Ficha salva com sucesso!");
       setDialogOpen(false);
       setEditando({ grupoId: null, patronal: null, laboral: null });
-      // Reset forms
       setPatronalForm({ nome: "", cnpj: "", contato_whatsapp: "" });
       setLaboralForm({ nome: "", cnpj: "", contato_whatsapp: "" });
       setUnidadesSelecionadas([]);
       setCargosSelecionados([]);
-      setDocumentoForm({ ano: new Date().getFullYear(), tipo_documento: "act", arquivo: null });
       loadData();
     } catch (error) {
-      console.error("Erro ao salvar ficha:", error);
+      console.error("❌ Erro ao salvar ficha:", error);
       toast.error("Erro ao salvar ficha", { description: (error as Error).message });
     } finally {
       setBusy(false);
@@ -517,7 +469,6 @@ export default function Sindicatos() {
 
     setBusy(true);
     try {
-      // Remover documentos do storage para ambos
       for (const id of ids) {
         const { data: docs } = await supabase
           .from("documentos_sindicato")
@@ -610,31 +561,18 @@ export default function Sindicatos() {
   // --- Agrupamento por grupo_id ---
   const grupos = useMemo(() => {
     const map = new Map<string, { patronal: Sindicato | null; laboral: Sindicato | null }>();
-    // Agrupar por grupo_id
     for (const s of sindicatos) {
-      if (!s.grupo_id) {
-        // Se não tiver grupo_id, criar um grupo fictício com o id do próprio sindicato
-        const key = s.id;
-        if (!map.has(key)) {
-          map.set(key, { patronal: null, laboral: null });
-        }
-        const grupo = map.get(key)!;
-        if (s.tipo === "patronal") grupo.patronal = s;
-        else if (s.tipo === "laboral") grupo.laboral = s;
-      } else {
-        const key = s.grupo_id;
-        if (!map.has(key)) {
-          map.set(key, { patronal: null, laboral: null });
-        }
-        const grupo = map.get(key)!;
-        if (s.tipo === "patronal") grupo.patronal = s;
-        else if (s.tipo === "laboral") grupo.laboral = s;
+      const key = s.grupo_id || s.id;
+      if (!map.has(key)) {
+        map.set(key, { patronal: null, laboral: null });
       }
+      const grupo = map.get(key)!;
+      if (s.tipo === "patronal") grupo.patronal = s;
+      else if (s.tipo === "laboral") grupo.laboral = s;
     }
     return Array.from(map.values());
   }, [sindicatos]);
 
-  // Filtro por nome ou tipo
   const gruposFiltrados = useMemo(() => {
     return grupos.filter(g => {
       const p = g.patronal;
@@ -666,7 +604,6 @@ export default function Sindicatos() {
             setLaboralForm({ nome: "", cnpj: "", contato_whatsapp: "" });
             setUnidadesSelecionadas([]);
             setCargosSelecionados([]);
-            setDocumentoForm({ ano: new Date().getFullYear(), tipo_documento: "act", arquivo: null });
             setDialogOpen(true);
           }}>
             <Plus className="size-4 mr-2" /> Nova Ficha
@@ -703,13 +640,13 @@ export default function Sindicatos() {
           {gruposFiltrados.map((g, idx) => {
             const p = g.patronal;
             const l = g.laboral;
+            // 🔥 Título combinado: Patronal / Laboral
+            const titulo = p && l ? `${p.nome} / ${l.nome}` : (p?.nome || l?.nome || "Sem nome");
             return (
               <Card key={idx} className="border-border shadow-sm hover:shadow-md transition-all">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
-                    <CardTitle className="text-lg truncate">
-                      {(p?.nome || l?.nome) || "Sem nome"}
-                    </CardTitle>
+                    <CardTitle className="text-lg truncate">{titulo}</CardTitle>
                     <div className="flex gap-1">
                       <Badge variant={p ? "secondary" : "outline"}>{p ? "Patronal" : "—"}</Badge>
                       <Badge variant={l ? "default" : "outline"}>{l ? "Laboral" : "—"}</Badge>
@@ -770,7 +707,7 @@ export default function Sindicatos() {
         </div>
       )}
 
-      {/* === DIALOG UNIFICADO === */}
+      {/* === DIALOG UNIFICADO (sem documento) === */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -802,7 +739,7 @@ export default function Sindicatos() {
             </div>
 
             {/* ---- Laboral ---- */}
-            <div className="space-y-4 border-b border-border pb-6">
+            <div className="space-y-4 pb-6">
               <h3 className="text-lg font-semibold text-primary">Sindicato Laboral</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2"><Label>Nome *</Label><Input value={laboralForm.nome} onChange={e => setLaboralForm({ ...laboralForm, nome: e.target.value })} placeholder="Nome" /></div>
@@ -825,30 +762,9 @@ export default function Sindicatos() {
               </div>
             </div>
 
-            {/* ---- ACT/CCT único ---- */}
-            <div className="space-y-4 border-t border-border pt-4">
-              <h3 className="text-lg font-semibold text-primary">Acordo Coletivo (ACT/CCT)</h3>
-              <p className="text-sm text-muted-foreground">Anexe o documento que representa a negociação entre os dois sindicatos para o ano selecionado.</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs">Ano</Label>
-                  <Input type="number" value={documentoForm.ano} onChange={e => setDocumentoForm({ ...documentoForm, ano: parseInt(e.target.value) || new Date().getFullYear() })} />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Tipo</Label>
-                  <Select value={documentoForm.tipo_documento} onValueChange={(v: any) => setDocumentoForm({ ...documentoForm, tipo_documento: v })}>
-                    <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
-                    <SelectContent>
-                      {TIPOS_DOCUMENTO.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Arquivo (PDF)</Label>
-                <Input type="file" accept=".pdf" onChange={e => setDocumentoForm({ ...documentoForm, arquivo: e.target.files?.[0] || null })} />
-                {documentoForm.arquivo && <p className="text-xs text-muted-foreground">{documentoForm.arquivo.name}</p>}
-              </div>
+            {/* 🔥 Mensagem sobre documentos (apenas informativo) */}
+            <div className="border-t border-border pt-4 text-sm text-muted-foreground">
+              📎 Os documentos (ACT/CCT) podem ser anexados após o cadastro, através do botão "Documentos" em cada ficha.
             </div>
           </div>
 
