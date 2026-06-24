@@ -126,15 +126,33 @@ export default function SindicatosNegociacoes() {
     setLoading(true);
     try {
       const [negRes, sindRes] = await Promise.all([
-        supabase.from("negociacoes").select("*").order("ano", { ascending: false }),
+        supabase.from("negociacoes").select("*"),
         supabase.from("sindicatos").select("id, nome, tipo").order("nome"),
       ]);
 
       if (negRes.error) throw negRes.error;
       if (sindRes.error) throw sindRes.error;
 
-      setNegociacoes(negRes.data ?? []);
-      setSindicatos(sindRes.data ?? []);
+      const sindicatosData = sindRes.data ?? [];
+
+      // Ordenar no frontend: ano desc, mes desc, patronal, laboral
+      const sorted = (negRes.data ?? []).sort((a, b) => {
+        // Primeiro por ano (mais recente primeiro)
+        if (a.ano !== b.ano) return b.ano - a.ano;
+        // Depois por mês (mais recente primeiro)
+        if (a.mes !== b.mes) return b.mes - a.mes;
+        // Depois por nome do sindicato patronal
+        const patronalA = sindicatosData.find(s => s.id === a.sindicato_patronal_id)?.nome || "";
+        const patronalB = sindicatosData.find(s => s.id === b.sindicato_patronal_id)?.nome || "";
+        if (patronalA !== patronalB) return patronalA.localeCompare(patronalB);
+        // Depois por nome do sindicato laboral
+        const laboralA = sindicatosData.find(s => s.id === a.sindicato_laboral_id)?.nome || "";
+        const laboralB = sindicatosData.find(s => s.id === b.sindicato_laboral_id)?.nome || "";
+        return laboralA.localeCompare(laboralB);
+      });
+
+      setNegociacoes(sorted);
+      setSindicatos(sindicatosData);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
       toast.error("Erro ao carregar dados");
@@ -327,16 +345,27 @@ export default function SindicatosNegociacoes() {
     return m ? m.label : mes;
   };
 
-  // --- Filtros ---
+  // --- Filtros com ordenação mantida ---
   const negociacoesFiltradas = useMemo(() => {
-    return negociacoes.filter(neg => {
+    const filtradas = negociacoes.filter(neg => {
       const matchPatronal = filtroPatronal === "todos" || neg.sindicato_patronal_id === filtroPatronal;
       const matchLaboral = filtroLaboral === "todos" || neg.sindicato_laboral_id === filtroLaboral;
       const matchAno = filtroAno === "todos" || neg.ano === parseInt(filtroAno);
       const matchTipo = filtroTipo === "todos" || neg.tipo_documento === filtroTipo;
       return matchPatronal && matchLaboral && matchAno && matchTipo;
     });
-  }, [negociacoes, filtroPatronal, filtroLaboral, filtroAno, filtroTipo]);
+    // Reaplica a mesma ordenação (já está ordenado, mas por segurança)
+    return filtradas.sort((a, b) => {
+      if (a.ano !== b.ano) return b.ano - a.ano;
+      if (a.mes !== b.mes) return b.mes - a.mes;
+      const patronalA = sindicatos.find(s => s.id === a.sindicato_patronal_id)?.nome || "";
+      const patronalB = sindicatos.find(s => s.id === b.sindicato_patronal_id)?.nome || "";
+      if (patronalA !== patronalB) return patronalA.localeCompare(patronalB);
+      const laboralA = sindicatos.find(s => s.id === a.sindicato_laboral_id)?.nome || "";
+      const laboralB = sindicatos.find(s => s.id === b.sindicato_laboral_id)?.nome || "";
+      return laboralA.localeCompare(laboralB);
+    });
+  }, [negociacoes, filtroPatronal, filtroLaboral, filtroAno, filtroTipo, sindicatos]);
 
   const anosDisponiveis = useMemo(() => {
     const anos = new Set(negociacoes.map(n => n.ano));
@@ -469,7 +498,6 @@ export default function SindicatosNegociacoes() {
                     {getSindicatoNome(neg.sindicato_patronal_id)} / {getSindicatoNome(neg.sindicato_laboral_id)}
                   </CardTitle>
                   <div className="flex items-center gap-2">
-                    {/* 🔥 Data Base: Mês/Ano */}
                     <Badge variant="secondary" className="flex items-center gap-1">
                       <Calendar className="size-3" />
                       Data Base: {getMesLabel(neg.mes || 1)}/{neg.ano}
@@ -530,7 +558,7 @@ export default function SindicatosNegociacoes() {
         </div>
       )}
 
-      {/* Dialog de cadastro/edição */}
+      {/* Dialog de cadastro/edição (mesmo código) – mantido */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -659,7 +687,7 @@ export default function SindicatosNegociacoes() {
         </DialogContent>
       </Dialog>
 
-      {/* Preview */}
+      {/* Preview (mesmo código) */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
