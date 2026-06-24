@@ -42,6 +42,8 @@ import {
   Building2,
   Upload,
   Check,
+  Filter,
+  X,
 } from "lucide-react";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
 import { cn } from "@/lib/utils";
@@ -76,7 +78,13 @@ export default function SindicatosNegociacoes() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  // Dialog de cadastro/edição
+  // --- Filtros ---
+  const [filtroPatronal, setFiltroPatronal] = useState<string>("todos");
+  const [filtroLaboral, setFiltroLaboral] = useState<string>("todos");
+  const [filtroAno, setFiltroAno] = useState<string>("todos");
+  const [filtroTipo, setFiltroTipo] = useState<string>("todos");
+
+  // --- Dialog de cadastro/edição ---
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando, setEditando] = useState<Negociacao | null>(null);
   const [form, setForm] = useState({
@@ -87,12 +95,12 @@ export default function SindicatosNegociacoes() {
     arquivo: null as File | null,
   });
 
-  // Preview
+  // --- Preview ---
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedNegociacao, setSelectedNegociacao] = useState<Negociacao | null>(null);
 
-  // Exclusão
+  // --- Exclusão ---
   const [confirmDelete, setConfirmDelete] = useState<Negociacao | null>(null);
 
   // --- Loaders ---
@@ -127,25 +135,44 @@ export default function SindicatosNegociacoes() {
     if (file) setForm({ ...form, arquivo: file });
   };
 
+  const abrirEdicao = (negociacao: Negociacao) => {
+    setEditando(negociacao);
+    setForm({
+      sindicato_patronal_id: negociacao.sindicato_patronal_id,
+      sindicato_laboral_id: negociacao.sindicato_laboral_id,
+      ano: negociacao.ano,
+      tipo_documento: negociacao.tipo_documento,
+      arquivo: null, // não carregamos o arquivo para edição
+    });
+    setDialogOpen(true);
+  };
+
   const salvarNegociacao = async () => {
     if (form.sindicato_patronal_id === "none" || form.sindicato_laboral_id === "none") {
       toast.error("Selecione os sindicatos patronal e laboral");
       return;
     }
-    if (!form.arquivo) {
+    if (!form.arquivo && !editando) {
       toast.error("Selecione um arquivo PDF");
       return;
     }
 
     setBusy(true);
     try {
-      // Upload do PDF
-      const path = `negociacoes/${form.sindicato_patronal_id}_${form.sindicato_laboral_id}_${form.ano}.pdf`;
-      const { error: uploadError } = await supabase.storage
-        .from("sindicatos")
-        .upload(path, form.arquivo, { upsert: true });
-
-      if (uploadError) throw uploadError;
+      let path = "";
+      // Se houver novo arquivo, faz upload; se for edição e não houver novo arquivo, mantém o existente
+      if (form.arquivo) {
+        path = `negociacoes/${form.sindicato_patronal_id}_${form.sindicato_laboral_id}_${form.ano}.pdf`;
+        const { error: uploadError } = await supabase.storage
+          .from("sindicatos")
+          .upload(path, form.arquivo, { upsert: true });
+        if (uploadError) throw uploadError;
+      } else if (editando) {
+        // Mantém o path existente
+        path = editando.storage_path;
+      } else {
+        throw new Error("Arquivo é obrigatório para nova negociação");
+      }
 
       const dados = {
         sindicato_patronal_id: form.sindicato_patronal_id,
@@ -153,7 +180,7 @@ export default function SindicatosNegociacoes() {
         ano: form.ano,
         tipo_documento: form.tipo_documento,
         storage_path: path,
-        nome_pdf: form.arquivo.name,
+        nome_pdf: form.arquivo ? form.arquivo.name : editando?.nome_pdf,
       };
 
       if (editando) {
@@ -247,6 +274,27 @@ export default function SindicatosNegociacoes() {
     return s?.tipo === "patronal" ? "Patronal" : "Laboral";
   };
 
+  // --- Filtros ---
+  const negociacoesFiltradas = useMemo(() => {
+    return negociacoes.filter(neg => {
+      const matchPatronal = filtroPatronal === "todos" || neg.sindicato_patronal_id === filtroPatronal;
+      const matchLaboral = filtroLaboral === "todos" || neg.sindicato_laboral_id === filtroLaboral;
+      const matchAno = filtroAno === "todos" || neg.ano === parseInt(filtroAno);
+      const matchTipo = filtroTipo === "todos" || neg.tipo_documento === filtroTipo;
+      return matchPatronal && matchLaboral && matchAno && matchTipo;
+    });
+  }, [negociacoes, filtroPatronal, filtroLaboral, filtroAno, filtroTipo]);
+
+  // Lista de anos disponíveis para filtro
+  const anosDisponiveis = useMemo(() => {
+    const anos = new Set(negociacoes.map(n => n.ano));
+    return Array.from(anos).sort((a, b) => b - a);
+  }, [negociacoes]);
+
+  // Lista de sindicatos patronais e laborais para filtros
+  const sindicatosPatronais = sindicatos.filter(s => s.tipo === "patronal");
+  const sindicatosLaborais = sindicatos.filter(s => s.tipo === "laboral");
+
   // --- Renderização ---
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -277,35 +325,119 @@ export default function SindicatosNegociacoes() {
         </div>
       </div>
 
+      {/* Filtros */}
+      <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+        <div className="space-y-1">
+          <Label className="text-xs font-bold uppercase text-muted-foreground">Patronal</Label>
+          <Select value={filtroPatronal} onValueChange={setFiltroPatronal}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Todos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              {sindicatosPatronais.map(s => (
+                <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs font-bold uppercase text-muted-foreground">Laboral</Label>
+          <Select value={filtroLaboral} onValueChange={setFiltroLaboral}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Todos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              {sindicatosLaborais.map(s => (
+                <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs font-bold uppercase text-muted-foreground">Ano</Label>
+          <Select value={filtroAno} onValueChange={setFiltroAno}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Todos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              {anosDisponiveis.map(a => (
+                <SelectItem key={a} value={String(a)}>{a}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs font-bold uppercase text-muted-foreground">Tipo</Label>
+          <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Todos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              {TIPOS_DOCUMENTO.map(t => (
+                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2 self-end">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setFiltroPatronal("todos");
+              setFiltroLaboral("todos");
+              setFiltroAno("todos");
+              setFiltroTipo("todos");
+            }}
+          >
+            <X className="size-4 mr-1" /> Limpar
+          </Button>
+        </div>
+      </div>
+
       {loading ? (
         <div className="flex items-center justify-center p-12">
           <Loader2 className="size-8 animate-spin text-muted-foreground" />
         </div>
-      ) : negociacoes.length === 0 ? (
+      ) : negociacoesFiltradas.length === 0 ? (
         <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
-          Nenhuma negociação cadastrada.
+          Nenhuma negociação encontrada com os filtros selecionados.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {negociacoes.map((neg) => (
+        // Lista vertical (um abaixo do outro)
+        <div className="space-y-4">
+          {negociacoesFiltradas.map((neg) => (
             <Card key={neg.id} className="border-border shadow-sm hover:shadow-md transition-all">
               <CardHeader className="pb-2">
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between flex-wrap gap-2">
                   <CardTitle className="text-lg truncate">
                     {getSindicatoNome(neg.sindicato_patronal_id)} / {getSindicatoNome(neg.sindicato_laboral_id)}
                   </CardTitle>
-                  <Badge variant="secondary">{neg.ano}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">{neg.ano}</Badge>
+                    <Badge variant="outline">
+                      {TIPOS_DOCUMENTO.find(t => t.value === neg.tipo_documento)?.label || neg.tipo_documento}
+                    </Badge>
+                  </div>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="text-sm text-muted-foreground">
-                  <span className="font-medium">Patronal:</span> {getSindicatoNome(neg.sindicato_patronal_id)}
-                  <br />
-                  <span className="font-medium">Laboral:</span> {getSindicatoNome(neg.sindicato_laboral_id)}
-                  <br />
-                  <span className="font-medium">Documento:</span> {TIPOS_DOCUMENTO.find(t => t.value === neg.tipo_documento)?.label || neg.tipo_documento}
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-muted-foreground mb-3">
+                  <div>
+                    <span className="font-medium">Patronal:</span> {getSindicatoNome(neg.sindicato_patronal_id)}
+                  </div>
+                  <div>
+                    <span className="font-medium">Laboral:</span> {getSindicatoNome(neg.sindicato_laboral_id)}
+                  </div>
+                  <div>
+                    <span className="font-medium">Documento:</span> {neg.nome_pdf || "PDF"}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2 mt-3">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -322,12 +454,19 @@ export default function SindicatosNegociacoes() {
                     <Download className="size-4 mr-1" /> Baixar
                   </Button>
                   <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => abrirEdicao(neg)}
+                  >
+                    <Pencil className="size-4 mr-1" /> Editar
+                  </Button>
+                  <Button
                     variant="ghost"
-                    size="icon"
-                    className="size-8 text-red-500"
+                    size="sm"
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
                     onClick={() => setConfirmDelete(neg)}
                   >
-                    <Trash2 className="size-4" />
+                    <Trash2 className="size-4 mr-1" /> Excluir
                   </Button>
                 </div>
               </CardContent>
@@ -341,6 +480,11 @@ export default function SindicatosNegociacoes() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{editando ? "Editar Negociação" : "Nova Negociação"}</DialogTitle>
+            {editando && (
+              <DialogDescription>
+                Atualize os dados da negociação. Para substituir o arquivo, selecione um novo PDF.
+              </DialogDescription>
+            )}
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -353,12 +497,10 @@ export default function SindicatosNegociacoes() {
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  {sindicatos
-                    .filter(s => s.tipo === "patronal")
-                    .map(s => (
-                      <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
-                    ))}
-                  {sindicatos.filter(s => s.tipo === "patronal").length === 0 && (
+                  {sindicatosPatronais.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                  ))}
+                  {sindicatosPatronais.length === 0 && (
                     <div className="px-2 py-1.5 text-sm text-muted-foreground text-center">
                       Nenhum sindicato patronal cadastrado
                     </div>
@@ -377,12 +519,10 @@ export default function SindicatosNegociacoes() {
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  {sindicatos
-                    .filter(s => s.tipo === "laboral")
-                    .map(s => (
-                      <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
-                    ))}
-                  {sindicatos.filter(s => s.tipo === "laboral").length === 0 && (
+                  {sindicatosLaborais.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                  ))}
+                  {sindicatosLaborais.length === 0 && (
                     <div className="px-2 py-1.5 text-sm text-muted-foreground text-center">
                       Nenhum sindicato laboral cadastrado
                     </div>
@@ -419,7 +559,7 @@ export default function SindicatosNegociacoes() {
             </div>
 
             <div className="space-y-2">
-              <Label>Arquivo (PDF) *</Label>
+              <Label>{editando ? "Novo arquivo (PDF) - opcional" : "Arquivo (PDF) *"}</Label>
               <Input
                 type="file"
                 accept=".pdf"
@@ -428,6 +568,11 @@ export default function SindicatosNegociacoes() {
               {form.arquivo && (
                 <p className="text-xs text-muted-foreground">
                   {form.arquivo.name} ({(form.arquivo.size / 1024).toFixed(1)} KB)
+                </p>
+              )}
+              {editando && !form.arquivo && (
+                <p className="text-xs text-muted-foreground">
+                  Mantendo o arquivo atual: {editando.nome_pdf || "PDF"}
                 </p>
               )}
             </div>
