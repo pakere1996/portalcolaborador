@@ -115,7 +115,6 @@ export default function Sindicatos() {
     laboral: null,
   });
 
-  // Dados do patronal
   const [patronalForm, setPatronalForm] = useState({
     nome: "",
     cnpj: "",
@@ -123,7 +122,6 @@ export default function Sindicatos() {
   });
   const [unidadesSelecionadas, setUnidadesSelecionadas] = useState<string[]>([]);
 
-  // Dados do laboral
   const [laboralForm, setLaboralForm] = useState({
     nome: "",
     cnpj: "",
@@ -131,7 +129,7 @@ export default function Sindicatos() {
   });
   const [cargosSelecionados, setCargosSelecionados] = useState<string[]>([]);
 
-  // --- Documentos (diálogo separado) ---
+  // --- Diálogo de documentos (SEM upload na ficha) ---
   const [docDialogOpen, setDocDialogOpen] = useState(false);
   const [sindicatoSelecionado, setSindicatoSelecionado] = useState<Sindicato | null>(null);
   const [documentos, setDocumentos] = useState<DocumentoSindicato[]>([]);
@@ -213,7 +211,7 @@ export default function Sindicatos() {
     setter((prev: any) => ({ ...prev, [field]: formatWhatsApp(e.target.value) }));
   };
 
-  // --- Abrir diálogo de documentos ---
+  // --- Abrir diálogo de documentos (gerenciamento) ---
   const abrirDocDialog = (sindicato: Sindicato) => {
     setSindicatoSelecionado(sindicato);
     setDocForm({
@@ -225,109 +223,100 @@ export default function Sindicatos() {
     loadDocumentos(sindicato.id);
   };
 
-  // --- Abrir edição (com suporte a grupo) ---
+  // --- Abrir edição com carregamento correto dos vínculos ---
   const abrirEdicao = async (sindicato: Sindicato) => {
-    let grupoId = sindicato.grupo_id;
-    if (!grupoId) {
-      // Fallback: buscar par por nome/CNPJ
-      const { data } = await supabase
-        .from("sindicatos")
-        .select("*")
-        .or(`nome.eq.${sindicato.nome},cnpj.eq.${sindicato.cnpj}`)
-        .neq("id", sindicato.id);
-      const outro = data?.find((s: any) => s.tipo !== sindicato.tipo) || null;
-      const patronal = sindicato.tipo === "patronal" ? sindicato : outro;
-      const laboral = sindicato.tipo === "patronal" ? outro : sindicato;
-      if (patronal && laboral) {
-        grupoId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
-        await supabase.from("sindicatos").update({ grupo_id: grupoId }).eq("id", patronal.id);
-        await supabase.from("sindicatos").update({ grupo_id: grupoId }).eq("id", laboral.id);
-        await loadData();
-        const { data: updated } = await supabase.from("sindicatos").select("*").eq("grupo_id", grupoId);
-        const p = updated?.find((s: any) => s.tipo === "patronal") || null;
-        const l = updated?.find((s: any) => s.tipo === "laboral") || null;
-        setEditando({ grupoId, patronal: p, laboral: l });
-        if (p) {
-          setPatronalForm({
-            nome: p.nome,
-            cnpj: p.cnpj ? formatCNPJ(p.cnpj) : "",
-            contato_whatsapp: p.contato_whatsapp ? formatWhatsApp(p.contato_whatsapp) : "",
-          });
-          const { data: vinculos } = await supabase
-            .from("sindicato_unidades")
-            .select("unidade_id")
-            .eq("sindicato_id", p.id);
-          setUnidadesSelecionadas(vinculos?.map(v => v.unidade_id) ?? []);
-        } else {
-          setPatronalForm({ nome: "", cnpj: "", contato_whatsapp: "" });
-          setUnidadesSelecionadas([]);
-        }
-        if (l) {
-          setLaboralForm({
-            nome: l.nome,
-            cnpj: l.cnpj ? formatCNPJ(l.cnpj) : "",
-            contato_whatsapp: l.contato_whatsapp ? formatWhatsApp(l.contato_whatsapp) : "",
-          });
-          const { data: vinculos } = await supabase
-            .from("sindicato_cargos")
-            .select("cargo_id")
-            .eq("sindicato_id", l.id);
-          setCargosSelecionados(vinculos?.map(v => v.cargo_id) ?? []);
-        } else {
-          setLaboralForm({ nome: "", cnpj: "", contato_whatsapp: "" });
-          setCargosSelecionados([]);
-        }
-        setDialogOpen(true);
-        return;
-      }
-    }
+    setBusy(true);
+    try {
+      let grupoId = sindicato.grupo_id;
+      let patronal: Sindicato | null = null;
+      let laboral: Sindicato | null = null;
 
-    // Se tem grupoId, buscar ambos
-    if (grupoId) {
-      const { data: grupo } = await supabase
-        .from("sindicatos")
-        .select("*")
-        .eq("grupo_id", grupoId);
-      const patronal = grupo?.find((s: any) => s.tipo === "patronal") || null;
-      const laboral = grupo?.find((s: any) => s.tipo === "laboral") || null;
+      if (grupoId) {
+        // Buscar ambos pelo grupo_id
+        const { data: grupo } = await supabase
+          .from("sindicatos")
+          .select("*")
+          .eq("grupo_id", grupoId);
+        patronal = grupo?.find((s: any) => s.tipo === "patronal") || null;
+        laboral = grupo?.find((s: any) => s.tipo === "laboral") || null;
+      } else {
+        // Fallback: buscar par por nome ou CNPJ
+        const { data } = await supabase
+          .from("sindicatos")
+          .select("*")
+          .or(`nome.eq.${sindicato.nome},cnpj.eq.${sindicato.cnpj}`)
+          .neq("id", sindicato.id);
+        const outro = data?.find((s: any) => s.tipo !== sindicato.tipo) || null;
+        patronal = sindicato.tipo === "patronal" ? sindicato : outro;
+        laboral = sindicato.tipo === "patronal" ? outro : sindicato;
+        // Se não tiver grupo_id, gerar um para vincular
+        if (patronal && laboral) {
+          grupoId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
+          await supabase.from("sindicatos").update({ grupo_id: grupoId }).eq("id", patronal.id);
+          await supabase.from("sindicatos").update({ grupo_id: grupoId }).eq("id", laboral.id);
+          // Recarregar dados atualizados
+          const { data: updated } = await supabase.from("sindicatos").select("*").eq("grupo_id", grupoId);
+          patronal = updated?.find((s: any) => s.tipo === "patronal") || null;
+          laboral = updated?.find((s: any) => s.tipo === "laboral") || null;
+        }
+      }
+
       setEditando({ grupoId, patronal, laboral });
 
+      // Carregar dados do patronal
       if (patronal) {
         setPatronalForm({
           nome: patronal.nome,
           cnpj: patronal.cnpj ? formatCNPJ(patronal.cnpj) : "",
           contato_whatsapp: patronal.contato_whatsapp ? formatWhatsApp(patronal.contato_whatsapp) : "",
         });
-        const { data: vinculos } = await supabase
+        // Buscar vínculos de unidades
+        const { data: vinculos, error } = await supabase
           .from("sindicato_unidades")
           .select("unidade_id")
           .eq("sindicato_id", patronal.id);
-        setUnidadesSelecionadas(vinculos?.map(v => v.unidade_id) ?? []);
+        if (error) {
+          console.error("Erro ao buscar vínculos de unidades:", error);
+        } else {
+          setUnidadesSelecionadas(vinculos?.map(v => v.unidade_id) ?? []);
+        }
       } else {
         setPatronalForm({ nome: "", cnpj: "", contato_whatsapp: "" });
         setUnidadesSelecionadas([]);
       }
 
+      // Carregar dados do laboral
       if (laboral) {
         setLaboralForm({
           nome: laboral.nome,
           cnpj: laboral.cnpj ? formatCNPJ(laboral.cnpj) : "",
           contato_whatsapp: laboral.contato_whatsapp ? formatWhatsApp(laboral.contato_whatsapp) : "",
         });
-        const { data: vinculos } = await supabase
+        // Buscar vínculos de cargos
+        const { data: vinculos, error } = await supabase
           .from("sindicato_cargos")
           .select("cargo_id")
           .eq("sindicato_id", laboral.id);
-        setCargosSelecionados(vinculos?.map(v => v.cargo_id) ?? []);
+        if (error) {
+          console.error("Erro ao buscar vínculos de cargos:", error);
+        } else {
+          setCargosSelecionados(vinculos?.map(v => v.cargo_id) ?? []);
+        }
       } else {
         setLaboralForm({ nome: "", cnpj: "", contato_whatsapp: "" });
         setCargosSelecionados([]);
       }
+
       setDialogOpen(true);
+    } catch (error) {
+      console.error("Erro ao abrir edição:", error);
+      toast.error("Erro ao carregar dados para edição");
+    } finally {
+      setBusy(false);
     }
   };
 
-  // --- Salvar ficha unificada (com RLS corrigido) ---
+  // --- Salvar ficha unificada ---
   const salvarFichaUnificada = async () => {
     if (!patronalForm.nome.trim()) {
       toast.error("Nome do sindicato patronal é obrigatório");
@@ -381,29 +370,17 @@ export default function Sindicatos() {
         patronalId = data.id;
       }
 
-      // 2. Vínculos patronal (FORÇA BRUTA)
-      // Deletar vínculos existentes
-      const { error: delUniErr } = await supabase
-        .from("sindicato_unidades")
-        .delete()
-        .eq("sindicato_id", patronalId);
-      if (delUniErr) {
-        console.error("Erro ao deletar vínculos de unidades:", delUniErr);
-        throw new Error("Erro ao deletar vínculos de unidades: " + delUniErr.message);
-      }
-
-      // Inserir novos vínculos
+      // 2. Atualizar vínculos de unidades
+      await supabase.from("sindicato_unidades").delete().eq("sindicato_id", patronalId);
       if (unidadesSelecionadas.length > 0) {
         const inserts = unidadesSelecionadas.map(unidade_id => ({
           sindicato_id: patronalId,
           unidade_id,
         }));
-        const { error: insUniErr } = await supabase
-          .from("sindicato_unidades")
-          .insert(inserts);
-        if (insUniErr) {
-          console.error("Erro ao inserir vínculos de unidades:", insUniErr);
-          throw new Error("Erro ao inserir vínculos de unidades: " + insUniErr.message);
+        const { error } = await supabase.from("sindicato_unidades").insert(inserts);
+        if (error) {
+          console.error("Erro ao inserir vínculos de unidades:", error);
+          throw error;
         }
       }
 
@@ -435,27 +412,17 @@ export default function Sindicatos() {
         laboralId = data.id;
       }
 
-      // 4. Vínculos laboral (FORÇA BRUTA)
-      const { error: delCargoErr } = await supabase
-        .from("sindicato_cargos")
-        .delete()
-        .eq("sindicato_id", laboralId);
-      if (delCargoErr) {
-        console.error("Erro ao deletar vínculos de cargos:", delCargoErr);
-        throw new Error("Erro ao deletar vínculos de cargos: " + delCargoErr.message);
-      }
-
+      // 4. Atualizar vínculos de cargos
+      await supabase.from("sindicato_cargos").delete().eq("sindicato_id", laboralId);
       if (cargosSelecionados.length > 0) {
         const inserts = cargosSelecionados.map(cargo_id => ({
           sindicato_id: laboralId,
           cargo_id,
         }));
-        const { error: insCargoErr } = await supabase
-          .from("sindicato_cargos")
-          .insert(inserts);
-        if (insCargoErr) {
-          console.error("Erro ao inserir vínculos de cargos:", insCargoErr);
-          throw new Error("Erro ao inserir vínculos de cargos: " + insCargoErr.message);
+        const { error } = await supabase.from("sindicato_cargos").insert(inserts);
+        if (error) {
+          console.error("Erro ao inserir vínculos de cargos:", error);
+          throw error;
         }
       }
 
@@ -468,7 +435,7 @@ export default function Sindicatos() {
       setCargosSelecionados([]);
       loadData();
     } catch (error) {
-      console.error("❌ Erro ao salvar ficha:", error);
+      console.error("Erro ao salvar ficha:", error);
       toast.error("Erro ao salvar ficha", { description: (error as Error).message });
     } finally {
       setBusy(false);
@@ -655,12 +622,17 @@ export default function Sindicatos() {
           {gruposFiltrados.map((g, idx) => {
             const p = g.patronal;
             const l = g.laboral;
-            const nomeGrupo = p ? p.nome : l ? l.nome : "Sem nome";
             return (
               <Card key={idx} className="border-border shadow-sm hover:shadow-md transition-all">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
-                    <CardTitle className="text-lg truncate">{nomeGrupo}</CardTitle>
+                    <CardTitle className="text-lg truncate">
+                      {p?.nome && l?.nome ? (
+                        <span>{p.nome} / {l.nome}</span>
+                      ) : (
+                        p?.nome || l?.nome || "Sem nome"
+                      )}
+                    </CardTitle>
                     <div className="flex gap-1">
                       <Badge variant={p ? "secondary" : "outline"}>{p ? "Patronal" : "—"}</Badge>
                       <Badge variant={l ? "default" : "outline"}>{l ? "Laboral" : "—"}</Badge>
@@ -721,20 +693,15 @@ export default function Sindicatos() {
         </div>
       )}
 
-      {/* === DIALOG UNIFICADO (sem upload de documentos) === */}
+      {/* === DIALOG UNIFICADO === */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editando.patronal || editando.laboral ? (
-                <div className="flex items-center gap-2">
-                  <span>Editar Ficha</span>
-                  <Badge variant="outline" className="ml-2">
-                    {editando.patronal?.nome || "Patronal"} / {editando.laboral?.nome || "Laboral"}
-                  </Badge>
-                </div>
+              {editando.patronal?.nome && editando.laboral?.nome ? (
+                `${editando.patronal.nome} / ${editando.laboral.nome}`
               ) : (
-                "Nova Ficha - Patronal / Laboral"
+                editando.patronal?.nome || editando.laboral?.nome || "Nova Ficha"
               )}
             </DialogTitle>
           </DialogHeader>
@@ -798,7 +765,7 @@ export default function Sindicatos() {
         </DialogContent>
       </Dialog>
 
-      {/* === DIÁLOGO DE DOCUMENTOS (gerenciamento) === */}
+      {/* === DIÁLOGO DE DOCUMENTOS === */}
       <Dialog open={docDialogOpen} onOpenChange={open => !open && setDocDialogOpen(false)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
