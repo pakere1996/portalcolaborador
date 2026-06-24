@@ -42,7 +42,6 @@ import {
   Building2,
   Upload,
   Check,
-  Filter,
   X,
 } from "lucide-react";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
@@ -60,6 +59,7 @@ interface Negociacao {
   sindicato_patronal_id: string;
   sindicato_laboral_id: string;
   ano: number;
+  mes: number | null; // 🔥 NOVO
   tipo_documento: "act" | "cct";
   storage_path: string;
   nome_pdf: string | null;
@@ -72,6 +72,21 @@ const TIPOS_DOCUMENTO = [
   { value: "cct", label: "CCT (Convenção Coletiva de Trabalho)" },
 ];
 
+const MESES = [
+  { value: 1, label: "Janeiro" },
+  { value: 2, label: "Fevereiro" },
+  { value: 3, label: "Março" },
+  { value: 4, label: "Abril" },
+  { value: 5, label: "Maio" },
+  { value: 6, label: "Junho" },
+  { value: 7, label: "Julho" },
+  { value: 8, label: "Agosto" },
+  { value: 9, label: "Setembro" },
+  { value: 10, label: "Outubro" },
+  { value: 11, label: "Novembro" },
+  { value: 12, label: "Dezembro" },
+];
+
 export default function SindicatosNegociacoes() {
   const [negociacoes, setNegociacoes] = useState<Negociacao[]>([]);
   const [sindicatos, setSindicatos] = useState<Sindicato[]>([]);
@@ -82,6 +97,7 @@ export default function SindicatosNegociacoes() {
   const [filtroPatronal, setFiltroPatronal] = useState<string>("todos");
   const [filtroLaboral, setFiltroLaboral] = useState<string>("todos");
   const [filtroAno, setFiltroAno] = useState<string>("todos");
+  const [filtroMes, setFiltroMes] = useState<string>("todos"); // 🔥 NOVO
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
 
   // --- Dialog de cadastro/edição ---
@@ -91,6 +107,7 @@ export default function SindicatosNegociacoes() {
     sindicato_patronal_id: "none",
     sindicato_laboral_id: "none",
     ano: new Date().getFullYear(),
+    mes: new Date().getMonth() + 1, // 🔥 NOVO
     tipo_documento: "act" as "act" | "cct",
     arquivo: null as File | null,
   });
@@ -141,8 +158,9 @@ export default function SindicatosNegociacoes() {
       sindicato_patronal_id: negociacao.sindicato_patronal_id,
       sindicato_laboral_id: negociacao.sindicato_laboral_id,
       ano: negociacao.ano,
+      mes: negociacao.mes || new Date().getMonth() + 1,
       tipo_documento: negociacao.tipo_documento,
-      arquivo: null, // não carregamos o arquivo para edição
+      arquivo: null,
     });
     setDialogOpen(true);
   };
@@ -160,15 +178,13 @@ export default function SindicatosNegociacoes() {
     setBusy(true);
     try {
       let path = "";
-      // Se houver novo arquivo, faz upload; se for edição e não houver novo arquivo, mantém o existente
       if (form.arquivo) {
-        path = `negociacoes/${form.sindicato_patronal_id}_${form.sindicato_laboral_id}_${form.ano}.pdf`;
+        path = `negociacoes/${form.sindicato_patronal_id}_${form.sindicato_laboral_id}_${form.ano}_${form.mes}.pdf`;
         const { error: uploadError } = await supabase.storage
           .from("sindicatos")
           .upload(path, form.arquivo, { upsert: true });
         if (uploadError) throw uploadError;
       } else if (editando) {
-        // Mantém o path existente
         path = editando.storage_path;
       } else {
         throw new Error("Arquivo é obrigatório para nova negociação");
@@ -178,6 +194,7 @@ export default function SindicatosNegociacoes() {
         sindicato_patronal_id: form.sindicato_patronal_id,
         sindicato_laboral_id: form.sindicato_laboral_id,
         ano: form.ano,
+        mes: form.mes,
         tipo_documento: form.tipo_documento,
         storage_path: path,
         nome_pdf: form.arquivo ? form.arquivo.name : editando?.nome_pdf,
@@ -202,6 +219,7 @@ export default function SindicatosNegociacoes() {
         sindicato_patronal_id: "none",
         sindicato_laboral_id: "none",
         ano: new Date().getFullYear(),
+        mes: new Date().getMonth() + 1,
         tipo_documento: "act",
         arquivo: null,
       });
@@ -218,15 +236,12 @@ export default function SindicatosNegociacoes() {
     if (!confirmDelete) return;
     setBusy(true);
     try {
-      // Remover do storage
       await supabase.storage.from("sindicatos").remove([confirmDelete.storage_path]);
-
       const { error } = await supabase
         .from("negociacoes")
         .delete()
         .eq("id", confirmDelete.id);
       if (error) throw error;
-
       toast.success("Negociação excluída!");
       setConfirmDelete(null);
       loadData();
@@ -268,10 +283,10 @@ export default function SindicatosNegociacoes() {
     return s ? s.nome : "—";
   };
 
-  const getSindicatoTipo = (id: string) => {
-    if (id === "none") return "";
-    const s = sindicatos.find(s => s.id === id);
-    return s?.tipo === "patronal" ? "Patronal" : "Laboral";
+  const getMesLabel = (mes: number | null) => {
+    if (!mes) return "—";
+    const m = MESES.find(m => m.value === mes);
+    return m ? m.label : String(mes);
   };
 
   // --- Filtros ---
@@ -280,18 +295,22 @@ export default function SindicatosNegociacoes() {
       const matchPatronal = filtroPatronal === "todos" || neg.sindicato_patronal_id === filtroPatronal;
       const matchLaboral = filtroLaboral === "todos" || neg.sindicato_laboral_id === filtroLaboral;
       const matchAno = filtroAno === "todos" || neg.ano === parseInt(filtroAno);
+      const matchMes = filtroMes === "todos" || neg.mes === parseInt(filtroMes);
       const matchTipo = filtroTipo === "todos" || neg.tipo_documento === filtroTipo;
-      return matchPatronal && matchLaboral && matchAno && matchTipo;
+      return matchPatronal && matchLaboral && matchAno && matchMes && matchTipo;
     });
-  }, [negociacoes, filtroPatronal, filtroLaboral, filtroAno, filtroTipo]);
+  }, [negociacoes, filtroPatronal, filtroLaboral, filtroAno, filtroMes, filtroTipo]);
 
-  // Lista de anos disponíveis para filtro
   const anosDisponiveis = useMemo(() => {
     const anos = new Set(negociacoes.map(n => n.ano));
     return Array.from(anos).sort((a, b) => b - a);
   }, [negociacoes]);
 
-  // Lista de sindicatos patronais e laborais para filtros
+  const mesesDisponiveis = useMemo(() => {
+    const meses = new Set(negociacoes.map(n => n.mes).filter(m => m !== null));
+    return Array.from(meses).sort((a, b) => a - b);
+  }, [negociacoes]);
+
   const sindicatosPatronais = sindicatos.filter(s => s.tipo === "patronal");
   const sindicatosLaborais = sindicatos.filter(s => s.tipo === "laboral");
 
@@ -315,6 +334,7 @@ export default function SindicatosNegociacoes() {
               sindicato_patronal_id: "none",
               sindicato_laboral_id: "none",
               ano: new Date().getFullYear(),
+              mes: new Date().getMonth() + 1,
               tipo_documento: "act",
               arquivo: null,
             });
@@ -326,7 +346,7 @@ export default function SindicatosNegociacoes() {
       </div>
 
       {/* Filtros */}
-      <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+      <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 items-end">
         <div className="space-y-1">
           <Label className="text-xs font-bold uppercase text-muted-foreground">Patronal</Label>
           <Select value={filtroPatronal} onValueChange={setFiltroPatronal}>
@@ -370,6 +390,20 @@ export default function SindicatosNegociacoes() {
           </Select>
         </div>
         <div className="space-y-1">
+          <Label className="text-xs font-bold uppercase text-muted-foreground">Mês</Label> {/* 🔥 NOVO */}
+          <Select value={filtroMes} onValueChange={setFiltroMes}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Todos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              {mesesDisponiveis.map(m => (
+                <SelectItem key={m} value={String(m)}>{getMesLabel(m)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
           <Label className="text-xs font-bold uppercase text-muted-foreground">Tipo</Label>
           <Select value={filtroTipo} onValueChange={setFiltroTipo}>
             <SelectTrigger className="w-full">
@@ -391,6 +425,7 @@ export default function SindicatosNegociacoes() {
               setFiltroPatronal("todos");
               setFiltroLaboral("todos");
               setFiltroAno("todos");
+              setFiltroMes("todos");
               setFiltroTipo("todos");
             }}
           >
@@ -408,7 +443,6 @@ export default function SindicatosNegociacoes() {
           Nenhuma negociação encontrada com os filtros selecionados.
         </div>
       ) : (
-        // Lista vertical (um abaixo do outro)
         <div className="space-y-4">
           {negociacoesFiltradas.map((neg) => (
             <Card key={neg.id} className="border-border shadow-sm hover:shadow-md transition-all">
@@ -417,8 +451,9 @@ export default function SindicatosNegociacoes() {
                   <CardTitle className="text-lg truncate">
                     {getSindicatoNome(neg.sindicato_patronal_id)} / {getSindicatoNome(neg.sindicato_laboral_id)}
                   </CardTitle>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Badge variant="secondary">{neg.ano}</Badge>
+                    {neg.mes && <Badge variant="outline">{getMesLabel(neg.mes)}</Badge>}
                     <Badge variant="outline">
                       {TIPOS_DOCUMENTO.find(t => t.value === neg.tipo_documento)?.label || neg.tipo_documento}
                     </Badge>
@@ -426,12 +461,15 @@ export default function SindicatosNegociacoes() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-muted-foreground mb-3">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm text-muted-foreground mb-3">
                   <div>
                     <span className="font-medium">Patronal:</span> {getSindicatoNome(neg.sindicato_patronal_id)}
                   </div>
                   <div>
                     <span className="font-medium">Laboral:</span> {getSindicatoNome(neg.sindicato_laboral_id)}
+                  </div>
+                  <div>
+                    <span className="font-medium">Mês/Ano:</span> {getMesLabel(neg.mes)}/{neg.ano}
                   </div>
                   <div>
                     <span className="font-medium">Documento:</span> {neg.nome_pdf || "PDF"}
@@ -541,21 +579,38 @@ export default function SindicatosNegociacoes() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Tipo *</Label>
+                <Label>Mês *</Label> {/* 🔥 NOVO */}
                 <Select
-                  value={form.tipo_documento}
-                  onValueChange={(v) => setForm({ ...form, tipo_documento: v as "act" | "cct" })}
+                  value={String(form.mes)}
+                  onValueChange={(v) => setForm({ ...form, mes: parseInt(v) })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
-                    {TIPOS_DOCUMENTO.map(t => (
-                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    {MESES.map(m => (
+                      <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tipo *</Label>
+              <Select
+                value={form.tipo_documento}
+                onValueChange={(v) => setForm({ ...form, tipo_documento: v as "act" | "cct" })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIPOS_DOCUMENTO.map(t => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
@@ -594,7 +649,7 @@ export default function SindicatosNegociacoes() {
             <DialogTitle>Visualização do Documento</DialogTitle>
             <DialogDescription>
               {selectedNegociacao
-                ? `${getSindicatoNome(selectedNegociacao.sindicato_patronal_id)} / ${getSindicatoNome(selectedNegociacao.sindicato_laboral_id)} - ${selectedNegociacao.ano}`
+                ? `${getSindicatoNome(selectedNegociacao.sindicato_patronal_id)} / ${getSindicatoNome(selectedNegociacao.sindicato_laboral_id)} - ${getMesLabel(selectedNegociacao.mes)}/${selectedNegociacao.ano}`
                 : ""}
             </DialogDescription>
           </DialogHeader>
