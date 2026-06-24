@@ -39,17 +39,14 @@ import {
   Download,
   Eye,
   Building2,
-  Calendar,
   Upload,
   Check,
-  X,
 } from "lucide-react";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
 import { cn } from "@/lib/utils";
 
-// 🔥 Funções de formatação
+// Formatação
 const onlyNumbers = (value: string) => value.replace(/\D/g, "");
-
 const formatCNPJ = (value: string) => {
   const clean = onlyNumbers(value);
   if (clean.length <= 2) return clean;
@@ -58,7 +55,6 @@ const formatCNPJ = (value: string) => {
   if (clean.length <= 12) return clean.replace(/^(\d{2})(\d{3})(\d{3})(\d{0,4})/, "$1.$2.$3/$4");
   return clean.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, "$1.$2.$3/$4-$5");
 };
-
 const formatWhatsApp = (value: string) => {
   const clean = onlyNumbers(value);
   if (clean.length <= 2) return clean;
@@ -67,7 +63,6 @@ const formatWhatsApp = (value: string) => {
   return clean.replace(/^(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3");
 };
 
-// Interfaces
 interface Sindicato {
   id: string;
   nome: string;
@@ -98,11 +93,6 @@ interface Cargo {
   nome: string;
 }
 
-const TIPOS_SINDICATO = [
-  { value: "laboral", label: "Laboral" },
-  { value: "patronal", label: "Patronal" },
-];
-
 const TIPOS_DOCUMENTO = [
   { value: "act", label: "ACT (Acordo Coletivo de Trabalho)" },
   { value: "cct", label: "CCT (Convenção Coletiva de Trabalho)" },
@@ -115,19 +105,30 @@ export default function Sindicatos() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  // Dialog de cadastro/edição
+  // --- Estado do formulário unificado ---
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editando, setEditando] = useState<Sindicato | null>(null);
-  const [form, setForm] = useState({
+  const [editando, setEditando] = useState<{ patronal: Sindicato | null; laboral: Sindicato | null }>({
+    patronal: null,
+    laboral: null,
+  });
+
+  // Dados do patronal
+  const [patronalForm, setPatronalForm] = useState({
     nome: "",
     cnpj: "",
-    tipo: "" as "laboral" | "patronal" | "",
     contato_whatsapp: "",
   });
   const [unidadesSelecionadas, setUnidadesSelecionadas] = useState<string[]>([]);
+
+  // Dados do laboral
+  const [laboralForm, setLaboralForm] = useState({
+    nome: "",
+    cnpj: "",
+    contato_whatsapp: "",
+  });
   const [cargosSelecionados, setCargosSelecionados] = useState<string[]>([]);
 
-  // Dialog de documentos
+  // --- Documentos (diálogo separado) ---
   const [docDialogOpen, setDocDialogOpen] = useState(false);
   const [sindicatoSelecionado, setSindicatoSelecionado] = useState<Sindicato | null>(null);
   const [documentos, setDocumentos] = useState<DocumentoSindicato[]>([]);
@@ -139,11 +140,9 @@ export default function Sindicatos() {
   });
   const [uploadingDoc, setUploadingDoc] = useState(false);
 
-  // Dialog de confirmação de exclusão
+  // --- Exclusão e preview ---
   const [confirmDelete, setConfirmDelete] = useState<Sindicato | null>(null);
   const [deletingDoc, setDeletingDoc] = useState<DocumentoSindicato | null>(null);
-
-  // Preview do PDF
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
@@ -200,15 +199,15 @@ export default function Sindicatos() {
   }, []);
 
   // --- Handlers de formatação ---
-  const handleCNPJChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm({ ...form, cnpj: formatCNPJ(e.target.value) });
+  const handleCNPJChange = (setter: any, field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setter((prev: any) => ({ ...prev, [field]: formatCNPJ(e.target.value) }));
   };
 
-  const handleWhatsAppChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm({ ...form, contato_whatsapp: formatWhatsApp(e.target.value) });
+  const handleWhatsAppChange = (setter: any, field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setter((prev: any) => ({ ...prev, [field]: formatWhatsApp(e.target.value) }));
   };
 
-  // --- Abrir diálogos ---
+  // --- Abrir diálogo de documentos ---
   const abrirDocDialog = (sindicato: Sindicato) => {
     setSindicatoSelecionado(sindicato);
     setDocForm({
@@ -220,121 +219,170 @@ export default function Sindicatos() {
     loadDocumentos(sindicato.id);
   };
 
-  const abrirEdicao = async (s: Sindicato) => {
-    setEditando(s);
-    setForm({
-      nome: s.nome,
-      cnpj: s.cnpj ? formatCNPJ(s.cnpj) : "",
-      tipo: s.tipo || "",
-      contato_whatsapp: s.contato_whatsapp ? formatWhatsApp(s.contato_whatsapp) : "",
-    });
-    // Carregar vínculos existentes
-    await carregarVinculos(s.id, s.tipo);
+  // --- Abrir ficha unificada para edição (recebe um sindicato) ---
+  const abrirEdicao = async (sindicato: Sindicato) => {
+    // Buscar o outro sindicato do mesmo "grupo" (mesmo nome ou CNPJ?)
+    // Vamos usar uma heurística: procurar um sindicato com tipo diferente
+    // que tenha o mesmo nome ou CNPJ (para vincular dois que foram criados juntos)
+    // Mas como não temos um campo de grupo, vamos buscar por nome ou CNPJ.
+    const { data: outros } = await supabase
+      .from("sindicatos")
+      .select("*")
+      .or(`nome.eq.${sindicato.nome},cnpj.eq.${sindicato.cnpj}`)
+      .neq("id", sindicato.id);
+
+    const outro = outros?.find((s: any) => s.tipo !== sindicato.tipo) || null;
+
+    // Preencher patronal e laboral
+    const isPatronal = sindicato.tipo === "patronal";
+    const patronal = isPatronal ? sindicato : outro;
+    const laboral = isPatronal ? outro : sindicato;
+
+    setEditando({ patronal, laboral });
+
+    if (patronal) {
+      setPatronalForm({
+        nome: patronal.nome,
+        cnpj: patronal.cnpj ? formatCNPJ(patronal.cnpj) : "",
+        contato_whatsapp: patronal.contato_whatsapp ? formatWhatsApp(patronal.contato_whatsapp) : "",
+      });
+      // Carregar vínculos de unidades
+      const { data: vinculos } = await supabase
+        .from("sindicato_unidades")
+        .select("unidade_id")
+        .eq("sindicato_id", patronal.id);
+      setUnidadesSelecionadas(vinculos?.map(v => v.unidade_id) ?? []);
+    } else {
+      setPatronalForm({ nome: "", cnpj: "", contato_whatsapp: "" });
+      setUnidadesSelecionadas([]);
+    }
+
+    if (laboral) {
+      setLaboralForm({
+        nome: laboral.nome,
+        cnpj: laboral.cnpj ? formatCNPJ(laboral.cnpj) : "",
+        contato_whatsapp: laboral.contato_whatsapp ? formatWhatsApp(laboral.contato_whatsapp) : "",
+      });
+      const { data: vinculos } = await supabase
+        .from("sindicato_cargos")
+        .select("cargo_id")
+        .eq("sindicato_id", laboral.id);
+      setCargosSelecionados(vinculos?.map(v => v.cargo_id) ?? []);
+    } else {
+      setLaboralForm({ nome: "", cnpj: "", contato_whatsapp: "" });
+      setCargosSelecionados([]);
+    }
+
     setDialogOpen(true);
   };
 
-  const carregarVinculos = async (sindicatoId: string, tipo: string | null) => {
-    if (tipo === "patronal") {
-      const { data } = await supabase
-        .from("sindicato_unidades")
-        .select("unidade_id")
-        .eq("sindicato_id", sindicatoId);
-      setUnidadesSelecionadas(data?.map(d => d.unidade_id) ?? []);
-      setCargosSelecionados([]);
-    } else if (tipo === "laboral") {
-      const { data } = await supabase
-        .from("sindicato_cargos")
-        .select("cargo_id")
-        .eq("sindicato_id", sindicatoId);
-      setCargosSelecionados(data?.map(d => d.cargo_id) ?? []);
-      setUnidadesSelecionadas([]);
-    } else {
-      setUnidadesSelecionadas([]);
-      setCargosSelecionados([]);
-    }
-  };
-
-  // --- Salvar sindicato (unificado) ---
-  const salvarSindicato = async () => {
-    if (!form.nome.trim()) {
-      toast.error("Nome do sindicato é obrigatório");
+  // --- Salvar ficha unificada ---
+  const salvarFichaUnificada = async () => {
+    // Validar campos obrigatórios
+    if (!patronalForm.nome.trim()) {
+      toast.error("Nome do sindicato patronal é obrigatório");
       return;
     }
-    if (!form.tipo) {
-      toast.error("Selecione o tipo do sindicato (Laboral ou Patronal)");
-      return;
-    }
-
-    // Validações específicas
-    if (form.tipo === "patronal" && unidadesSelecionadas.length === 0) {
+    if (unidadesSelecionadas.length === 0) {
       toast.error("Selecione pelo menos uma unidade para o sindicato patronal");
       return;
     }
-    if (form.tipo === "laboral" && cargosSelecionados.length === 0) {
+    if (!laboralForm.nome.trim()) {
+      toast.error("Nome do sindicato laboral é obrigatório");
+      return;
+    }
+    if (cargosSelecionados.length === 0) {
       toast.error("Selecione pelo menos um cargo para o sindicato laboral");
       return;
     }
 
     setBusy(true);
     try {
-      const dados = {
-        nome: form.nome.trim(),
-        cnpj: form.cnpj ? onlyNumbers(form.cnpj) : null,
-        tipo: form.tipo,
-        contato_whatsapp: form.contato_whatsapp ? onlyNumbers(form.contato_whatsapp) : null,
+      // 1. Salvar ou atualizar patronal
+      const patronalDados = {
+        nome: patronalForm.nome.trim(),
+        cnpj: patronalForm.cnpj ? onlyNumbers(patronalForm.cnpj) : null,
+        tipo: "patronal" as const,
+        contato_whatsapp: patronalForm.contato_whatsapp ? onlyNumbers(patronalForm.contato_whatsapp) : null,
         updated_at: new Date().toISOString(),
       };
 
-      let id: string;
-      if (editando) {
+      let patronalId: string;
+      if (editando.patronal) {
         const { error } = await supabase
           .from("sindicatos")
-          .update(dados)
-          .eq("id", editando.id);
+          .update(patronalDados)
+          .eq("id", editando.patronal.id);
         if (error) throw error;
-        id = editando.id;
-        toast.success("Sindicato atualizado!");
+        patronalId = editando.patronal.id;
       } else {
         const { data, error } = await supabase
           .from("sindicatos")
-          .insert(dados)
+          .insert(patronalDados)
           .select("id")
           .single();
         if (error) throw error;
-        id = data.id;
-        toast.success("Sindicato criado!");
+        patronalId = data.id;
       }
 
-      // Atualizar vínculos
-      if (form.tipo === "patronal") {
-        await supabase.from("sindicato_unidades").delete().eq("sindicato_id", id);
-        if (unidadesSelecionadas.length > 0) {
-          const inserts = unidadesSelecionadas.map(unidade_id => ({
-            sindicato_id: id,
-            unidade_id,
-          }));
-          await supabase.from("sindicato_unidades").insert(inserts);
-        }
-      } else if (form.tipo === "laboral") {
-        await supabase.from("sindicato_cargos").delete().eq("sindicato_id", id);
-        if (cargosSelecionados.length > 0) {
-          const inserts = cargosSelecionados.map(cargo_id => ({
-            sindicato_id: id,
-            cargo_id,
-          }));
-          await supabase.from("sindicato_cargos").insert(inserts);
-        }
+      // 2. Atualizar vínculos de unidades
+      await supabase.from("sindicato_unidades").delete().eq("sindicato_id", patronalId);
+      if (unidadesSelecionadas.length > 0) {
+        const inserts = unidadesSelecionadas.map(unidade_id => ({
+          sindicato_id: patronalId,
+          unidade_id,
+        }));
+        await supabase.from("sindicato_unidades").insert(inserts);
       }
 
+      // 3. Salvar ou atualizar laboral
+      const laboralDados = {
+        nome: laboralForm.nome.trim(),
+        cnpj: laboralForm.cnpj ? onlyNumbers(laboralForm.cnpj) : null,
+        tipo: "laboral" as const,
+        contato_whatsapp: laboralForm.contato_whatsapp ? onlyNumbers(laboralForm.contato_whatsapp) : null,
+        updated_at: new Date().toISOString(),
+      };
+
+      let laboralId: string;
+      if (editando.laboral) {
+        const { error } = await supabase
+          .from("sindicatos")
+          .update(laboralDados)
+          .eq("id", editando.laboral.id);
+        if (error) throw error;
+        laboralId = editando.laboral.id;
+      } else {
+        const { data, error } = await supabase
+          .from("sindicatos")
+          .insert(laboralDados)
+          .select("id")
+          .single();
+        if (error) throw error;
+        laboralId = data.id;
+      }
+
+      // 4. Atualizar vínculos de cargos
+      await supabase.from("sindicato_cargos").delete().eq("sindicato_id", laboralId);
+      if (cargosSelecionados.length > 0) {
+        const inserts = cargosSelecionados.map(cargo_id => ({
+          sindicato_id: laboralId,
+          cargo_id,
+        }));
+        await supabase.from("sindicato_cargos").insert(inserts);
+      }
+
+      toast.success("Ficha salva com sucesso!");
       setDialogOpen(false);
-      setEditando(null);
-      setForm({ nome: "", cnpj: "", tipo: "", contato_whatsapp: "" });
+      setEditando({ patronal: null, laboral: null });
+      setPatronalForm({ nome: "", cnpj: "", contato_whatsapp: "" });
+      setLaboralForm({ nome: "", cnpj: "", contato_whatsapp: "" });
       setUnidadesSelecionadas([]);
       setCargosSelecionados([]);
       loadData();
     } catch (error) {
-      console.error("Erro ao salvar:", error);
-      toast.error("Erro ao salvar sindicato", { description: (error as Error).message });
+      console.error("Erro ao salvar ficha:", error);
+      toast.error("Erro ao salvar ficha", { description: (error as Error).message });
     } finally {
       setBusy(false);
     }
@@ -345,7 +393,6 @@ export default function Sindicatos() {
     if (!confirmDelete) return;
     setBusy(true);
     try {
-      // Remover documentos do storage
       const { data: docs } = await supabase
         .from("documentos_sindicato")
         .select("storage_path")
@@ -472,8 +519,7 @@ export default function Sindicatos() {
   // --- Helpers ---
   const getTipoLabel = (tipo: string | null) => {
     if (!tipo) return "—";
-    const found = TIPOS_SINDICATO.find(t => t.value === tipo);
-    return found ? found.label : tipo;
+    return tipo === "patronal" ? "Patronal" : "Laboral";
   };
 
   const getDocTipoLabel = (tipo: string) => {
@@ -514,19 +560,20 @@ export default function Sindicatos() {
             <Building2 className="size-6 text-primary" /> Sindicatos
           </h1>
           <p className="text-muted-foreground mt-1">
-            Gerencie sindicatos, vínculos com unidades/cargos e documentos.
+            Gerencie sindicatos patronais e laborais em uma única ficha.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <FavoritarBotao rota="/admin/sindicatos" label="Sindicatos" icone="Building2" />
           <Button onClick={() => {
-            setEditando(null);
-            setForm({ nome: "", cnpj: "", tipo: "", contato_whatsapp: "" });
+            setEditando({ patronal: null, laboral: null });
+            setPatronalForm({ nome: "", cnpj: "", contato_whatsapp: "" });
+            setLaboralForm({ nome: "", cnpj: "", contato_whatsapp: "" });
             setUnidadesSelecionadas([]);
             setCargosSelecionados([]);
             setDialogOpen(true);
           }}>
-            <Plus className="size-4 mr-2" /> Novo Sindicato
+            <Plus className="size-4 mr-2" /> Nova Ficha
           </Button>
         </div>
       </div>
@@ -547,8 +594,8 @@ export default function Sindicatos() {
             <SelectTrigger className="w-[180px]"><SelectValue placeholder="Todos" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos</SelectItem>
-              <SelectItem value="laboral">Laboral</SelectItem>
               <SelectItem value="patronal">Patronal</SelectItem>
+              <SelectItem value="laboral">Laboral</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -620,71 +667,45 @@ export default function Sindicatos() {
         </div>
       )}
 
-      {/* Dialog de cadastro/edição (UNIFICADO) */}
+      {/* === DIALOG UNIFICADO (Patronal + Laboral) === */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editando ? "Editar Sindicato" : "Novo Sindicato"}</DialogTitle>
+            <DialogTitle>{editando.patronal || editando.laboral ? "Editar Ficha" : "Nova Ficha de Sindicatos"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            {/* Dados básicos */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Nome *</Label>
-                <Input
-                  value={form.nome}
-                  onChange={(e) => setForm({ ...form, nome: e.target.value })}
-                  placeholder="Ex: Sindicato dos Pizzaiolos"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>CNPJ</Label>
-                <Input
-                  value={form.cnpj}
-                  onChange={handleCNPJChange}
-                  placeholder="00.000.000/0000-00"
-                  maxLength={18}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Tipo *</Label>
-                <Select
-                  value={form.tipo}
-                  onValueChange={(v) => {
-                    setForm({ ...form, tipo: v as "laboral" | "patronal" });
-                    setUnidadesSelecionadas([]);
-                    setCargosSelecionados([]);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TIPOS_SINDICATO.map(t => (
-                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {!form.tipo && (
-                  <p className="text-xs text-red-500 font-medium mt-1">* Obrigatório</p>
-                )}
+          <div className="space-y-6 py-4">
+            {/* ---- SINDICATO PATRONAL ---- */}
+            <div className="space-y-4 border-b border-border pb-6">
+              <h3 className="text-lg font-semibold text-primary">Sindicato Patronal</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nome *</Label>
+                  <Input
+                    value={patronalForm.nome}
+                    onChange={(e) => setPatronalForm({ ...patronalForm, nome: e.target.value })}
+                    placeholder="Ex: Sindicato Patronal"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>CNPJ</Label>
+                  <Input
+                    value={patronalForm.cnpj}
+                    onChange={handleCNPJChange(setPatronalForm, "cnpj")}
+                    placeholder="00.000.000/0000-00"
+                    maxLength={18}
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Contato WhatsApp</Label>
                 <Input
-                  value={form.contato_whatsapp}
-                  onChange={handleWhatsAppChange}
+                  value={patronalForm.contato_whatsapp}
+                  onChange={handleWhatsAppChange(setPatronalForm, "contato_whatsapp")}
                   placeholder="(62) 99999-9999"
                   maxLength={15}
                 />
               </div>
-            </div>
 
-            {/* Vínculos condicionais */}
-            {form.tipo === "patronal" && (
               <div className="space-y-3">
                 <Label className="text-base font-semibold">Unidades Representadas *</Label>
                 <p className="text-xs text-muted-foreground">Selecione as unidades que este sindicato patronal representa.</p>
@@ -711,9 +732,40 @@ export default function Sindicatos() {
                   <p className="text-xs text-red-500">* Selecione pelo menos uma unidade</p>
                 )}
               </div>
-            )}
+            </div>
 
-            {form.tipo === "laboral" && (
+            {/* ---- SINDICATO LABORAL ---- */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-primary">Sindicato Laboral</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nome *</Label>
+                  <Input
+                    value={laboralForm.nome}
+                    onChange={(e) => setLaboralForm({ ...laboralForm, nome: e.target.value })}
+                    placeholder="Ex: Sindicato Laboral"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>CNPJ</Label>
+                  <Input
+                    value={laboralForm.cnpj}
+                    onChange={handleCNPJChange(setLaboralForm, "cnpj")}
+                    placeholder="00.000.000/0000-00"
+                    maxLength={18}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Contato WhatsApp</Label>
+                <Input
+                  value={laboralForm.contato_whatsapp}
+                  onChange={handleWhatsAppChange(setLaboralForm, "contato_whatsapp")}
+                  placeholder="(62) 99999-9999"
+                  maxLength={15}
+                />
+              </div>
+
               <div className="space-y-3">
                 <Label className="text-base font-semibold">Cargos Representados *</Label>
                 <p className="text-xs text-muted-foreground">Selecione os cargos que este sindicato laboral representa.</p>
@@ -740,46 +792,27 @@ export default function Sindicatos() {
                   <p className="text-xs text-red-500">* Selecione pelo menos um cargo</p>
                 )}
               </div>
-            )}
+            </div>
 
-            {/* Atalho para documentos (se editando) */}
-            {editando && (
-              <div className="border-t border-border pt-4 mt-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-base font-semibold">Documentos (ACT/CCT)</Label>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setDialogOpen(false);
-                      abrirDocDialog(editando);
-                    }}
-                  >
-                    <FileText className="size-4 mr-1" /> Gerenciar Documentos
-                  </Button>
-                </div>
-              </div>
-            )}
-            {!editando && (
-              <div className="border-t border-border pt-4 mt-2">
-                <p className="text-xs text-muted-foreground">
-                  Após criar, você poderá anexar ACT/CCT.
-                </p>
-              </div>
-            )}
+            {/* ---- Anexo de documentos (informação) ---- */}
+            <div className="border-t border-border pt-4 mt-2">
+              <p className="text-sm text-muted-foreground">
+                📎 Após salvar, você poderá anexar ACT/CCT para cada sindicato na aba "Documentos" de cada card.
+              </p>
+            </div>
           </div>
 
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={salvarSindicato} disabled={busy}>
+            <Button onClick={salvarFichaUnificada} disabled={busy}>
               {busy ? <Loader2 className="size-4 animate-spin mr-1" /> : null}
-              {editando ? "Salvar" : "Cadastrar"}
+              {editando.patronal || editando.laboral ? "Salvar" : "Cadastrar"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de documentos (separado) */}
+      {/* === DIÁLOGO DE DOCUMENTOS (separado) === */}
       <Dialog open={docDialogOpen} onOpenChange={(open) => {
         if (!open) {
           setDocDialogOpen(false);
