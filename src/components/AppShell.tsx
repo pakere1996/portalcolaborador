@@ -149,8 +149,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
     { to: "/admin/documentos/atestados", label: "Atestados", icon: FileWarning },
     { to: "/admin/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
-    { to: "/admin/documentos/historico", label: "Histórico Completo", icon: ListChecks },
     { to: "/admin/documentos/act-cct", label: "ACT-CCT", icon: FileText },
+    { to: "/admin/documentos/historico", label: "Histórico Completo", icon: ListChecks },    
   ];
 
   // ADMIN: demais submenus
