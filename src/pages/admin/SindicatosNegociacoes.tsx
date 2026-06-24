@@ -42,6 +42,7 @@ import {
   Building2,
   Upload,
   Check,
+  Filter,
   X,
 } from "lucide-react";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
@@ -58,8 +59,8 @@ interface Negociacao {
   id: string;
   sindicato_patronal_id: string;
   sindicato_laboral_id: string;
+  mes: number;          // 1-12
   ano: number;
-  mes: number | null; // 🔥 NOVO
   tipo_documento: "act" | "cct";
   storage_path: string;
   nome_pdf: string | null;
@@ -97,7 +98,7 @@ export default function SindicatosNegociacoes() {
   const [filtroPatronal, setFiltroPatronal] = useState<string>("todos");
   const [filtroLaboral, setFiltroLaboral] = useState<string>("todos");
   const [filtroAno, setFiltroAno] = useState<string>("todos");
-  const [filtroMes, setFiltroMes] = useState<string>("todos"); // 🔥 NOVO
+  const [filtroMes, setFiltroMes] = useState<string>("todos");
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
 
   // --- Dialog de cadastro/edição ---
@@ -106,8 +107,8 @@ export default function SindicatosNegociacoes() {
   const [form, setForm] = useState({
     sindicato_patronal_id: "none",
     sindicato_laboral_id: "none",
+    mes: new Date().getMonth() + 1, // 1-12
     ano: new Date().getFullYear(),
-    mes: new Date().getMonth() + 1, // 🔥 NOVO
     tipo_documento: "act" as "act" | "cct",
     arquivo: null as File | null,
   });
@@ -125,7 +126,7 @@ export default function SindicatosNegociacoes() {
     setLoading(true);
     try {
       const [negRes, sindRes] = await Promise.all([
-        supabase.from("negociacoes").select("*").order("ano", { ascending: false }),
+        supabase.from("negociacoes").select("*").order("ano", { ascending: false }).order("mes", { ascending: false }),
         supabase.from("sindicatos").select("id, nome, tipo").order("nome"),
       ]);
 
@@ -157,12 +158,32 @@ export default function SindicatosNegociacoes() {
     setForm({
       sindicato_patronal_id: negociacao.sindicato_patronal_id,
       sindicato_laboral_id: negociacao.sindicato_laboral_id,
+      mes: negociacao.mes || 1,
       ano: negociacao.ano,
-      mes: negociacao.mes || new Date().getMonth() + 1,
       tipo_documento: negociacao.tipo_documento,
       arquivo: null,
     });
     setDialogOpen(true);
+  };
+
+  // --- Verificação de duplicidade ---
+  const verificarDuplicidade = async () => {
+    // Se for edição, ignora a própria negociação
+    const query = supabase
+      .from("negociacoes")
+      .select("id")
+      .eq("sindicato_patronal_id", form.sindicato_patronal_id)
+      .eq("sindicato_laboral_id", form.sindicato_laboral_id)
+      .eq("mes", form.mes)
+      .eq("ano", form.ano);
+
+    if (editando) {
+      query.neq("id", editando.id);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data && data.length > 0;
   };
 
   const salvarNegociacao = async () => {
@@ -177,6 +198,16 @@ export default function SindicatosNegociacoes() {
 
     setBusy(true);
     try {
+      // 🔥 Verificar duplicidade
+      const isDuplicado = await verificarDuplicidade();
+      if (isDuplicado) {
+        toast.error(
+          "Já existe uma negociação cadastrada para este mesmo par de sindicatos e data base (Mês/Ano).",
+          { duration: 6000 }
+        );
+        return;
+      }
+
       let path = "";
       if (form.arquivo) {
         path = `negociacoes/${form.sindicato_patronal_id}_${form.sindicato_laboral_id}_${form.ano}_${form.mes}.pdf`;
@@ -193,8 +224,8 @@ export default function SindicatosNegociacoes() {
       const dados = {
         sindicato_patronal_id: form.sindicato_patronal_id,
         sindicato_laboral_id: form.sindicato_laboral_id,
-        ano: form.ano,
         mes: form.mes,
+        ano: form.ano,
         tipo_documento: form.tipo_documento,
         storage_path: path,
         nome_pdf: form.arquivo ? form.arquivo.name : editando?.nome_pdf,
@@ -218,8 +249,8 @@ export default function SindicatosNegociacoes() {
       setForm({
         sindicato_patronal_id: "none",
         sindicato_laboral_id: "none",
-        ano: new Date().getFullYear(),
         mes: new Date().getMonth() + 1,
+        ano: new Date().getFullYear(),
         tipo_documento: "act",
         arquivo: null,
       });
@@ -283,10 +314,15 @@ export default function SindicatosNegociacoes() {
     return s ? s.nome : "—";
   };
 
-  const getMesLabel = (mes: number | null) => {
-    if (!mes) return "—";
+  const getSindicatoTipo = (id: string) => {
+    if (id === "none") return "";
+    const s = sindicatos.find(s => s.id === id);
+    return s?.tipo === "patronal" ? "Patronal" : "Laboral";
+  };
+
+  const getMesLabel = (mes: number) => {
     const m = MESES.find(m => m.value === mes);
-    return m ? m.label : String(mes);
+    return m ? m.label : "—";
   };
 
   // --- Filtros ---
@@ -307,7 +343,7 @@ export default function SindicatosNegociacoes() {
   }, [negociacoes]);
 
   const mesesDisponiveis = useMemo(() => {
-    const meses = new Set(negociacoes.map(n => n.mes).filter(m => m !== null));
+    const meses = new Set(negociacoes.map(n => n.mes));
     return Array.from(meses).sort((a, b) => a - b);
   }, [negociacoes]);
 
@@ -333,8 +369,8 @@ export default function SindicatosNegociacoes() {
             setForm({
               sindicato_patronal_id: "none",
               sindicato_laboral_id: "none",
-              ano: new Date().getFullYear(),
               mes: new Date().getMonth() + 1,
+              ano: new Date().getFullYear(),
               tipo_documento: "act",
               arquivo: null,
             });
@@ -376,7 +412,7 @@ export default function SindicatosNegociacoes() {
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs font-bold uppercase text-muted-foreground">Ano</Label>
+          <Label className="text-xs font-bold uppercase text-muted-foreground">Ano Base</Label>
           <Select value={filtroAno} onValueChange={setFiltroAno}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Todos" />
@@ -390,16 +426,17 @@ export default function SindicatosNegociacoes() {
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs font-bold uppercase text-muted-foreground">Mês</Label> {/* 🔥 NOVO */}
+          <Label className="text-xs font-bold uppercase text-muted-foreground">Mês Base</Label>
           <Select value={filtroMes} onValueChange={setFiltroMes}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Todos" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos</SelectItem>
-              {mesesDisponiveis.map(m => (
-                <SelectItem key={m} value={String(m)}>{getMesLabel(m)}</SelectItem>
-              ))}
+              {mesesDisponiveis.map(m => {
+                const mesLabel = MESES.find(mm => mm.value === m)?.label || m;
+                return <SelectItem key={m} value={String(m)}>{mesLabel}</SelectItem>;
+              })}
             </SelectContent>
           </Select>
         </div>
@@ -452,8 +489,9 @@ export default function SindicatosNegociacoes() {
                     {getSindicatoNome(neg.sindicato_patronal_id)} / {getSindicatoNome(neg.sindicato_laboral_id)}
                   </CardTitle>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="secondary">{neg.ano}</Badge>
-                    {neg.mes && <Badge variant="outline">{getMesLabel(neg.mes)}</Badge>}
+                    <Badge variant="secondary">
+                      Data Base: {getMesLabel(neg.mes)} / {neg.ano}
+                    </Badge>
                     <Badge variant="outline">
                       {TIPOS_DOCUMENTO.find(t => t.value === neg.tipo_documento)?.label || neg.tipo_documento}
                     </Badge>
@@ -461,15 +499,12 @@ export default function SindicatosNegociacoes() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm text-muted-foreground mb-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-muted-foreground mb-3">
                   <div>
                     <span className="font-medium">Patronal:</span> {getSindicatoNome(neg.sindicato_patronal_id)}
                   </div>
                   <div>
                     <span className="font-medium">Laboral:</span> {getSindicatoNome(neg.sindicato_laboral_id)}
-                  </div>
-                  <div>
-                    <span className="font-medium">Mês/Ano:</span> {getMesLabel(neg.mes)}/{neg.ano}
                   </div>
                   <div>
                     <span className="font-medium">Documento:</span> {neg.nome_pdf || "PDF"}
@@ -571,7 +606,7 @@ export default function SindicatosNegociacoes() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Ano *</Label>
+                <Label>Ano Base *</Label>
                 <Input
                   type="number"
                   value={form.ano}
@@ -579,7 +614,7 @@ export default function SindicatosNegociacoes() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Mês *</Label> {/* 🔥 NOVO */}
+                <Label>Mês Base *</Label>
                 <Select
                   value={String(form.mes)}
                   onValueChange={(v) => setForm({ ...form, mes: parseInt(v) })}
