@@ -101,8 +101,6 @@ function AuthenticatedRoutes() {
               <Route path="/admin/colaboradores" element={<Colaboradores />} />
               <Route path="/admin/cargos" element={<Cargos />} />
               <Route path="/admin/unidades" element={<Unidades />} />
-
-              {/* Sindicatos – agora como subpáginas do Cadastro (rotas planas) */}
               <Route path="/admin/cadastro/sindicatos" element={<SindicatosCadastro />} />
               <Route path="/admin/cadastro/act-cct" element={<SindicatosNegociacoes />} />
 
