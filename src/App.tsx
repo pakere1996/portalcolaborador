@@ -21,9 +21,9 @@ import Cargos from "./pages/admin/Cargos";
 import Unidades from "./pages/admin/Unidades";
 
 // Sindicatos – novo módulo com submenus
-import SindicatosCadastro from "./pages/admin/Sindicatos"; // cadastro unificado (patronal + laboral)
-import SindicatosNegociacoes from "./pages/admin/SindicatosNegociacoes"; // negociações (a ser criado)
-import SindicatosHub from "./pages/admin/SindicatosHub"; // hub do módulo (a ser criado)
+import SindicatosCadastro from "./pages/admin/SindicatosCadastro";
+import SindicatoNegociacoes from "./pages/admin/SindicatoNegociacoes";
+import SindicatoHub from "./pages/admin/SindicatoHub";
 
 // Outras páginas admin
 import FolgasDashboard from "./pages/admin/FolgasHub";
