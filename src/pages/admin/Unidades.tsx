@@ -22,7 +22,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Plus, Building2, Pencil, Trash2, ListChecks, Users, X, Save } from "lucide-react";
+import {
+  Plus,
+  Building2,
+  Pencil,
+  Trash2,
+  ListChecks,
+  Users,
+  X,
+  Save,
+} from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -32,11 +41,33 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
-import { Tables } from "@/integrations/supabase/types";
 
-type Unidade = Tables<"unidades">;
-type Sindicato = Tables<"sindicatos">;
-type Cargo = Tables<"cargos">;
+// Tipos (use as tabelas do seu projeto)
+type Unidade = {
+  id: string;
+  nome: string;
+  cnpj: string | null;
+  endereco: string | null;
+  cidade: string | null;
+  telefone: string | null;
+  ativo: boolean;
+  possui_relogio_ponto: boolean;
+  tem_adiantamento: boolean;
+  dia_adiantamento: number | null;
+  created_at: string;
+};
+
+type Sindicato = {
+  id: string;
+  nome: string;
+  tipo: "laboral" | "patronal";
+};
+
+type Cargo = {
+  id: string;
+  nome: string;
+  descricao: string | null;
+};
 
 interface UnidadeWithCounts extends Unidade {
   cargos_count?: number;
@@ -70,19 +101,26 @@ export default function Unidades() {
   const [confirmDelete, setConfirmDelete] = useState<Unidade | null>(null);
 
   // Dados auxiliares
-  const [sindicatosPatronais, setSindicatosPatronais] = useState<Sindicato[]>([]);
+  const [sindicatosPatronais, setSindicatosPatronais] = useState<Sindicato[]>(
+    []
+  );
   const [sindicatosLaborais, setSindicatosLaborais] = useState<Sindicato[]>([]);
   const [cargosGlobais, setCargosGlobais] = useState<Cargo[]>([]);
 
-  // Associações da unidade em edição
-  const [patronaisSelecionados, setPatronaisSelecionados] = useState<string[]>([]);
-  const [cargosAssociados, setCargosAssociados] = useState<UnidadeCargoAssoc[]>([]);
+  // Associações para a unidade em edição
+  const [patronaisSelecionados, setPatronaisSelecionados] = useState<string[]>(
+    []
+  );
+  const [cargosAssociados, setCargosAssociados] = useState<
+    UnidadeCargoAssoc[]
+  >([]);
 
-  // Estado para adicionar novo cargo
+  // Novo cargo a ser adicionado
   const [novoCargoId, setNovoCargoId] = useState<string>("");
-  const [novoCargoSindicatoId, setNovoCargoSindicatoId] = useState<string>("none");
+  const [novoCargoSindicatoId, setNovoCargoSindicatoId] =
+    useState<string>("none");
 
-  // Carregar lista de unidades com contagens
+  // Carregar listagem principal
   const load = async () => {
     const { data: unidades, error } = await supabase
       .from("unidades")
@@ -93,6 +131,7 @@ export default function Unidades() {
       return;
     }
 
+    // Buscar contagens separadamente
     const unidadesComContagens = await Promise.all(
       (unidades ?? []).map(async (u) => {
         const { count: patronalCount } = await supabase
@@ -141,7 +180,7 @@ export default function Unidades() {
     loadAuxData();
   }, []);
 
-  // Abrir modal de edição
+  // Abrir edição e carregar associações
   const openEdit = async (u: Unidade) => {
     setEditing(u);
     setEditForm({
@@ -155,14 +194,14 @@ export default function Unidades() {
       dia_adiantamento: u.dia_adiantamento ?? null,
     });
 
-    // Carregar sindicatos patronais vinculados
+    // Carregar sindicatos patronais
     const { data: su } = await supabase
       .from("sindicato_unidades")
       .select("sindicato_id")
       .eq("unidade_id", u.id);
     setPatronaisSelecionados(su?.map((item) => item.sindicato_id) ?? []);
 
-    // Carregar cargos vinculados com sindicatos laborais
+    // Carregar cargos associados
     const { data: uc } = await supabase
       .from("unidade_cargos")
       .select("cargo_id, sindicato_laboral_id")
@@ -195,7 +234,8 @@ export default function Unidades() {
       ...cargosAssociados,
       {
         cargo_id: novoCargoId,
-        sindicato_laboral_id: novoCargoSindicatoId === "none" ? null : novoCargoSindicatoId,
+        sindicato_laboral_id:
+          novoCargoSindicatoId === "none" ? null : novoCargoSindicatoId,
         cargo_nome: cargo?.nome || "Cargo",
       },
     ]);
@@ -204,7 +244,9 @@ export default function Unidades() {
   };
 
   const removeCargo = (cargoId: string) => {
-    setCargosAssociados(cargosAssociados.filter((a) => a.cargo_id !== cargoId));
+    setCargosAssociados(
+      cargosAssociados.filter((a) => a.cargo_id !== cargoId)
+    );
   };
 
   const updateCargoSindicato = (cargoId: string, value: string) => {
@@ -224,7 +266,7 @@ export default function Unidades() {
     );
   };
 
-  // Salvar edição (incluindo associações)
+  // Salvar edição (unidade + associações)
   const saveEdit = async () => {
     if (!editing) return;
     if (!editForm.nome.trim()) {
@@ -233,7 +275,7 @@ export default function Unidades() {
     }
     setBusy(true);
     try {
-      // Atualizar dados da unidade
+      // 1. Atualizar dados da unidade
       const { error: updateError } = await supabase
         .from("unidades")
         .update({
@@ -244,12 +286,14 @@ export default function Unidades() {
           telefone: editForm.telefone.trim() || null,
           possui_relogio_ponto: editForm.possui_relogio_ponto || false,
           tem_adiantamento: editForm.tem_adiantamento || false,
-          dia_adiantamento: editForm.tem_adiantamento ? editForm.dia_adiantamento : null,
+          dia_adiantamento: editForm.tem_adiantamento
+            ? editForm.dia_adiantamento
+            : null,
         })
         .eq("id", editing.id);
       if (updateError) throw updateError;
 
-      // Atualizar sindicatos patronais: deletar todos e inserir os selecionados
+      // 2. Atualizar sindicatos patronais (deleta todos e insere os selecionados)
       const { error: delPatronal } = await supabase
         .from("sindicato_unidades")
         .delete()
@@ -268,7 +312,7 @@ export default function Unidades() {
         if (insPatronal) throw insPatronal;
       }
 
-      // Atualizar cargos: deletar todos e inserir os novos
+      // 3. Atualizar cargos (deleta todos e insere os novos)
       const { error: delCargos } = await supabase
         .from("unidade_cargos")
         .delete()
@@ -291,8 +335,13 @@ export default function Unidades() {
       toast.success("Unidade atualizada com sucesso!");
       setEditing(null);
       load();
-    } catch (e) {
-      toast.error("Erro ao atualizar", { description: (e as Error).message });
+    } catch (e: any) {
+      console.error(e);
+      if (e.message?.includes("row-level security")) {
+        toast.error("Erro de permissão (RLS). Verifique se você é administrador.");
+      } else {
+        toast.error("Erro ao atualizar", { description: e.message });
+      }
     } finally {
       setBusy(false);
     }
@@ -319,8 +368,8 @@ export default function Unidades() {
       setOpen(false);
       setForm(blank);
       load();
-    } catch (e) {
-      toast.error("Erro ao cadastrar", { description: (e as Error).message });
+    } catch (e: any) {
+      toast.error("Erro ao cadastrar", { description: e.message });
     } finally {
       setBusy(false);
     }
@@ -347,14 +396,14 @@ export default function Unidades() {
       toast.success("Unidade excluída!");
       setConfirmDelete(null);
       load();
-    } catch (e) {
-      toast.error("Erro ao excluir", { description: (e as Error).message });
+    } catch (e: any) {
+      toast.error("Erro ao excluir", { description: e.message });
     } finally {
       setBusy(false);
     }
   };
 
-  // Renderização
+  // ---------- Renderização ----------
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -367,7 +416,11 @@ export default function Unidades() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <FavoritarBotao rota="/admin/unidades" label="Unidades" icone="Building2" />
+          <FavoritarBotao
+            rota="/admin/unidades"
+            label="Unidades"
+            icone="Building2"
+          />
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button className="rounded-full px-6">
@@ -399,7 +452,9 @@ export default function Unidades() {
                   <Label>Endereço</Label>
                   <Input
                     value={form.endereco}
-                    onChange={(e) => setForm({ ...form, endereco: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, endereco: e.target.value })
+                    }
                     placeholder="Ex: R 9 A, SN"
                   />
                 </div>
@@ -407,7 +462,9 @@ export default function Unidades() {
                   <Label>Cidade</Label>
                   <Input
                     value={form.cidade}
-                    onChange={(e) => setForm({ ...form, cidade: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, cidade: e.target.value })
+                    }
                     placeholder="Ex: Aparecida de Goiânia"
                   />
                 </div>
@@ -415,7 +472,9 @@ export default function Unidades() {
                   <Label>Telefone</Label>
                   <Input
                     value={form.telefone}
-                    onChange={(e) => setForm({ ...form, telefone: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, telefone: e.target.value })
+                    }
                     placeholder="Ex: (62) 99999-9999"
                   />
                 </div>
@@ -427,7 +486,9 @@ export default function Unidades() {
                       setForm({ ...form, possui_relogio_ponto: checked })
                     }
                   />
-                  <Label htmlFor="possui_relogio_ponto">Possui relógio de ponto</Label>
+                  <Label htmlFor="possui_relogio_ponto">
+                    Possui relógio de ponto
+                  </Label>
                 </div>
                 <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
                   <Switch
@@ -441,7 +502,9 @@ export default function Unidades() {
                       })
                     }
                   />
-                  <Label htmlFor="tem_adiantamento">Tem adiantamento salarial</Label>
+                  <Label htmlFor="tem_adiantamento">
+                    Tem adiantamento salarial
+                  </Label>
                 </div>
                 {form.tem_adiantamento && (
                   <div className="space-y-2">
@@ -456,11 +519,13 @@ export default function Unidades() {
                         <SelectValue placeholder="Selecione o dia" />
                       </SelectTrigger>
                       <SelectContent>
-                        {Array.from({ length: 28 }, (_, i) => i + 1).map((dia) => (
-                          <SelectItem key={dia} value={dia.toString()}>
-                            {dia}
-                          </SelectItem>
-                        ))}
+                        {Array.from({ length: 28 }, (_, i) => i + 1).map(
+                          (dia) => (
+                            <SelectItem key={dia} value={dia.toString()}>
+                              {dia}
+                            </SelectItem>
+                          )
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -495,7 +560,7 @@ export default function Unidades() {
                   Cargos
                 </th>
                 <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">
-                  Sindicatos Patronais
+                  Sind. Patronais
                 </th>
                 <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">
                   Status
@@ -508,17 +573,25 @@ export default function Unidades() {
             <tbody className="divide-y divide-border">
               {list.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="p-12 text-center text-muted-foreground">
+                  <td
+                    colSpan={6}
+                    className="p-12 text-center text-muted-foreground"
+                  >
                     Nenhuma unidade cadastrada.
                   </td>
                 </tr>
               )}
               {list.map((u) => (
-                <tr key={u.id} className="hover:bg-muted/20 transition-colors">
+                <tr
+                  key={u.id}
+                  className="hover:bg-muted/20 transition-colors"
+                >
                   <td className="p-4">
                     <div className="font-bold">{u.nome}</div>
                     {u.endereco && (
-                      <div className="text-xs text-muted-foreground">{u.endereco}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {u.endereco}
+                      </div>
                     )}
                   </td>
                   <td className="p-4 hidden md:table-cell font-mono text-xs">
@@ -531,11 +604,15 @@ export default function Unidades() {
                   </td>
                   <td className="p-4 text-center">
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                      <Users className="size-3" /> {u.sindicatos_patronais_count ?? 0}
+                      <Users className="size-3" />{" "}
+                      {u.sindicatos_patronais_count ?? 0}
                     </span>
                   </td>
                   <td className="p-4 text-center">
-                    <Switch checked={u.ativo} onCheckedChange={() => toggleAtivo(u)} />
+                    <Switch
+                      checked={u.ativo}
+                      onCheckedChange={() => toggleAtivo(u)}
+                    />
                   </td>
                   <td className="p-4 text-right whitespace-nowrap">
                     <div className="flex justify-end gap-1">
@@ -565,7 +642,10 @@ export default function Unidades() {
       </div>
 
       {/* Modal de edição */}
-      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+      <Dialog
+        open={!!editing}
+        onOpenChange={(o) => !o && setEditing(null)}
+      >
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar unidade: {editing?.nome}</DialogTitle>
@@ -577,14 +657,18 @@ export default function Unidades() {
                 <Label>Nome *</Label>
                 <Input
                   value={editForm.nome}
-                  onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, nome: e.target.value })
+                  }
                 />
               </div>
               <div className="space-y-2">
                 <Label>CNPJ</Label>
                 <Input
                   value={editForm.cnpj}
-                  onChange={(e) => setEditForm({ ...editForm, cnpj: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, cnpj: e.target.value })
+                  }
                   placeholder="00.000.000/0000-00"
                 />
               </div>
@@ -592,21 +676,27 @@ export default function Unidades() {
                 <Label>Endereço</Label>
                 <Input
                   value={editForm.endereco}
-                  onChange={(e) => setEditForm({ ...editForm, endereco: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, endereco: e.target.value })
+                  }
                 />
               </div>
               <div className="space-y-2">
                 <Label>Cidade</Label>
                 <Input
                   value={editForm.cidade}
-                  onChange={(e) => setEditForm({ ...editForm, cidade: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, cidade: e.target.value })
+                  }
                 />
               </div>
               <div className="space-y-2">
                 <Label>Telefone</Label>
                 <Input
                   value={editForm.telefone}
-                  onChange={(e) => setEditForm({ ...editForm, telefone: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, telefone: e.target.value })
+                  }
                 />
               </div>
               <div className="flex items-center space-x-2 rounded-xl border border-border p-3 col-span-full">
@@ -617,7 +707,9 @@ export default function Unidades() {
                     setEditForm({ ...editForm, possui_relogio_ponto: checked })
                   }
                 />
-                <Label htmlFor="edit_possui_relogio_ponto">Possui relógio de ponto</Label>
+                <Label htmlFor="edit_possui_relogio_ponto">
+                  Possui relógio de ponto
+                </Label>
               </div>
               <div className="flex items-center space-x-2 rounded-xl border border-border p-3 col-span-full">
                 <Switch
@@ -627,11 +719,15 @@ export default function Unidades() {
                     setEditForm({
                       ...editForm,
                       tem_adiantamento: checked,
-                      dia_adiantamento: checked ? editForm.dia_adiantamento : null,
+                      dia_adiantamento: checked
+                        ? editForm.dia_adiantamento
+                        : null,
                     })
                   }
                 />
-                <Label htmlFor="edit_tem_adiantamento">Tem adiantamento salarial</Label>
+                <Label htmlFor="edit_tem_adiantamento">
+                  Tem adiantamento salarial
+                </Label>
               </div>
               {editForm.tem_adiantamento && (
                 <div className="space-y-2 col-span-full">
@@ -639,18 +735,23 @@ export default function Unidades() {
                   <Select
                     value={editForm.dia_adiantamento?.toString() || ""}
                     onValueChange={(value) =>
-                      setEditForm({ ...editForm, dia_adiantamento: parseInt(value) })
+                      setEditForm({
+                        ...editForm,
+                        dia_adiantamento: parseInt(value),
+                      })
                     }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione o dia" />
                     </SelectTrigger>
                     <SelectContent>
-                      {Array.from({ length: 28 }, (_, i) => i + 1).map((dia) => (
-                        <SelectItem key={dia} value={dia.toString()}>
-                          {dia}
-                        </SelectItem>
-                      ))}
+                      {Array.from({ length: 28 }, (_, i) => i + 1).map(
+                        (dia) => (
+                          <SelectItem key={dia} value={dia.toString()}>
+                            {dia}
+                          </SelectItem>
+                        )
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -659,7 +760,7 @@ export default function Unidades() {
 
             <hr className="border-border" />
 
-            {/* Sindicatos Patronais */}
+            {/* Seção: Sindicatos Patronais */}
             <div>
               <h3 className="font-semibold text-lg flex items-center gap-2">
                 <Users className="size-5" /> Sindicatos Patronais
@@ -689,8 +790,7 @@ export default function Unidades() {
                       variant="link"
                       className="p-0 h-auto"
                       onClick={() => {
-                        // Navegar para cadastro de sindicatos
-                        window.location.href = "/admin/sindicatos/cadastro";
+                        /* navegar para cadastro de sindicatos */
                       }}
                     >
                       Cadastrar
@@ -702,22 +802,26 @@ export default function Unidades() {
 
             <hr className="border-border" />
 
-            {/* Cargos da Unidade */}
+            {/* Seção: Cargos da Unidade */}
             <div>
               <h3 className="font-semibold text-lg flex items-center gap-2">
                 <ListChecks className="size-5" /> Cargos da Unidade
               </h3>
               <p className="text-sm text-muted-foreground">
-                Associe cargos a esta unidade e defina o sindicato laboral para cada um.
+                Associe cargos a esta unidade e defina o sindicato laboral para
+                cada um.
               </p>
 
+              {/* Lista de cargos já associados */}
               <div className="mt-4 space-y-2">
                 {cargosAssociados.map((assoc) => (
                   <div
                     key={assoc.cargo_id}
                     className="flex items-center gap-3 p-2 border border-border rounded-md bg-muted/10"
                   >
-                    <span className="font-medium min-w-[120px]">{assoc.cargo_nome}</span>
+                    <span className="font-medium min-w-[120px]">
+                      {assoc.cargo_nome}
+                    </span>
                     <div className="flex-1">
                       <Select
                         value={assoc.sindicato_laboral_id || "none"}
@@ -759,7 +863,10 @@ export default function Unidades() {
               <div className="mt-4 flex flex-wrap items-end gap-3">
                 <div className="flex-1 min-w-[150px]">
                   <Label className="text-xs">Cargo</Label>
-                  <Select value={novoCargoId} onValueChange={setNovoCargoId}>
+                  <Select
+                    value={novoCargoId}
+                    onValueChange={setNovoCargoId}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione um cargo" />
                     </SelectTrigger>
@@ -791,7 +898,11 @@ export default function Unidades() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button variant="outline" onClick={addCargo} disabled={!novoCargoId}>
+                <Button
+                  variant="outline"
+                  onClick={addCargo}
+                  disabled={!novoCargoId}
+                >
                   <Plus className="size-4 mr-1" /> Adicionar
                 </Button>
               </div>
@@ -803,20 +914,29 @@ export default function Unidades() {
               Cancelar
             </Button>
             <Button onClick={saveEdit} disabled={busy}>
-              {busy ? "Salvando..." : <><Save className="size-4 mr-2" /> Salvar Alterações</>}
+              {busy ? (
+                "Salvando..."
+              ) : (
+                <>
+                  <Save className="size-4 mr-2" /> Salvar Alterações
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Modal de confirmação de exclusão */}
-      <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+      <AlertDialog
+        open={!!confirmDelete}
+        onOpenChange={(o) => !o && setConfirmDelete(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir {confirmDelete?.nome}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação não pode ser desfeita. Colaboradores vinculados a esta unidade
-              perderão o vínculo.
+              Esta ação não pode ser desfeita. Colaboradores vinculados a esta
+              unidade perderão o vínculo.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
