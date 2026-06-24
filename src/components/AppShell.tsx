@@ -62,7 +62,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         cadastro: setCadastroOpen,
         comunicacao: setComunicacaoOpen,
       };
+      // Fecha todos
       Object.values(setters).forEach((setter) => setter(false));
+      // Abre o selecionado se estava fechado
       const currentState = {
         folgas: folgasOpen,
         docs: docsOpen,
@@ -83,10 +85,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isAdmin = getIsAdmin();
   const homePath = isAdmin ? "/admin/home" : "/home";
 
+  // Fechar menu mobile ao navegar
   useEffect(() => {
     setOpen(false);
   }, [path]);
 
+  // Abrir submenus automaticamente com base na rota atual
   useEffect(() => {
     const shouldOpen = {
       cadastro:
@@ -95,7 +99,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         path.startsWith("/admin/unidades") ||
         path.startsWith("/admin/cadastro") ||
         path === "/admin/cadastro",
-      docs: path.startsWith("/admin/documentos") || path === "/admin/documentos",
+      docs:
+        path.startsWith("/admin/documentos") ||
+        path === "/admin/documentos",
       comunicacao:
         path.startsWith("/admin/mensagens") ||
         path.startsWith("/admin/avisos") ||
@@ -128,13 +134,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
   ];
 
-  // ADMIN: submenu Cadastro (agora inclui todos os itens)
+  // ADMIN: submenu Cadastro (agora com Sindicatos, sem ACT-CCT)
   const adminCadastroNav: NavItem[] = [
     { to: "/admin/colaboradores", label: "Colaboradores", icon: Users },
     { to: "/admin/cargos", label: "Cargos", icon: Briefcase },
     { to: "/admin/unidades", label: "Unidades", icon: Building2 },
     { to: "/admin/cadastro/sindicatos", label: "Sindicatos", icon: Scale },
-    { to: "/admin/cadastro/act-cct", label: "ACT-CCT", icon: FileText },
+  ];
+
+  // ADMIN: submenu Documentos (agora com ACT-CCT)
+  const adminDocsNav: NavItem[] = [
+    { to: "/admin/documentos/contracheque", label: "Contracheques", icon: FileText, end: true },
+    { to: "/admin/documentos/adiantamento", label: "Adiantamentos", icon: Coins },
+    { to: "/admin/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
+    { to: "/admin/documentos/atestados", label: "Atestados", icon: FileWarning },
+    { to: "/admin/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
+    { to: "/admin/documentos/historico", label: "Histórico Completo", icon: ListChecks },
+    { to: "/admin/documentos/act-cct", label: "ACT-CCT", icon: FileText },
   ];
 
   // ADMIN: demais submenus
@@ -144,15 +160,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/aprovacoes", label: "Aprovações", icon: UserCheck },
     { to: "/admin/trocas", label: "Trocas", icon: ArrowLeftRight },
     { to: "/admin/bloqueios", label: "Datas Bloqueadas", icon: Ban },
-  ];
-
-  const adminDocsNav: NavItem[] = [
-    { to: "/admin/documentos/contracheque", label: "Contracheques", icon: FileText, end: true },
-    { to: "/admin/documentos/adiantamento", label: "Adiantamentos", icon: Coins },
-    { to: "/admin/documentos/ponto", label: "Folhas de Ponto", icon: FileText },
-    { to: "/admin/documentos/atestados", label: "Atestados", icon: FileWarning },
-    { to: "/admin/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
-    { to: "/admin/documentos/historico", label: "Histórico Completo", icon: ListChecks },
   ];
 
   const adminComunicacaoNav: NavItem[] = [
@@ -178,8 +185,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     toggleFn: () => void,
     subItems: NavItem[]
   ) => {
-    const isActive = path === linkTo || path.startsWith(linkTo + "/");
-
     return (
       <div className="space-y-1">
         <div className="flex items-center">
