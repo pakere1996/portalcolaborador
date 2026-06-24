@@ -216,7 +216,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
     pending: "bg-violet-600 text-white border-violet-700 shadow-md",
   };
 
-  // Renderização mobile
+  // Renderização mobile (omitida por brevidade, mas igual ao original)
   const renderMobileCalendar = () => {
     const days = getMonthDays(year, month0);
     const monthName = new Date(year, month0).toLocaleString("pt-BR", {
@@ -543,7 +543,7 @@ export function FolgaCalendar(props: FolgaCalendarProps) {
                     {c.status === "pending" && (
                       <AlertCircle className="size-4 text-violet-600" />
                     )}
-                    {c.status === "blocked" && !isAdmin && (
+                    {c.status === "blocked" && (
                       <Lock className="size-3.5 text-rose-400" />
                     )}
                     {c.birthdayUser && (
