@@ -31,6 +31,7 @@ import {
   Users,
   X,
   Save,
+  Check,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -41,8 +42,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
+import { cn } from "@/lib/utils";
 
-// Tipos (use as tabelas do seu projeto)
+// --- Formatação (copiada da tela de sindicatos) ---
+const onlyNumbers = (value: string) => value.replace(/\D/g, "");
+const formatCNPJ = (value: string) => {
+  const clean = onlyNumbers(value);
+  if (clean.length <= 2) return clean;
+  if (clean.length <= 5) return clean.replace(/^(\d{2})(\d{0,3})/, "$1.$2");
+  if (clean.length <= 8) return clean.replace(/^(\d{2})(\d{3})(\d{0,3})/, "$1.$2.$3");
+  if (clean.length <= 12) return clean.replace(/^(\d{2})(\d{3})(\d{3})(\d{0,4})/, "$1.$2.$3/$4");
+  return clean.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, "$1.$2.$3/$4-$5");
+};
+const formatWhatsApp = (value: string) => {
+  const clean = onlyNumbers(value);
+  if (clean.length <= 2) return clean;
+  if (clean.length <= 6) return clean.replace(/^(\d{2})(\d{0,4})/, "($1) $2");
+  if (clean.length <= 10) return clean.replace(/^(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3");
+  return clean.replace(/^(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3");
+};
+
+// --- Tipos ---
 type Unidade = {
   id: string;
   nome: string;
@@ -101,33 +121,33 @@ export default function Unidades() {
   const [confirmDelete, setConfirmDelete] = useState<Unidade | null>(null);
 
   // Dados auxiliares
-  const [sindicatosPatronais, setSindicatosPatronais] = useState<Sindicato[]>(
-    []
-  );
+  const [sindicatosPatronais, setSindicatosPatronais] = useState<Sindicato[]>([]);
   const [sindicatosLaborais, setSindicatosLaborais] = useState<Sindicato[]>([]);
   const [cargosGlobais, setCargosGlobais] = useState<Cargo[]>([]);
+  const [unidadesGlobais, setUnidadesGlobais] = useState<Unidade[]>([]);
 
   // Associações para a unidade em edição
-  const [patronaisSelecionados, setPatronaisSelecionados] = useState<string[]>(
-    []
-  );
-  const [cargosAssociados, setCargosAssociados] = useState<
-    UnidadeCargoAssoc[]
-  >([]);
+  const [patronaisSelecionados, setPatronaisSelecionados] = useState<string[]>([]);
+  const [cargosAssociados, setCargosAssociados] = useState<UnidadeCargoAssoc[]>([]);
 
   // Novo cargo a ser adicionado
   const [novoCargoId, setNovoCargoId] = useState<string>("");
-  const [novoCargoSindicatoId, setNovoCargoSindicatoId] =
-    useState<string>("none");
+  const [novoCargoSindicatoId, setNovoCargoSindicatoId] = useState<string>("none");
 
-  // Estados para criação rápida
+  // --- Estados para o modal de criação de cargo (completo) ---
   const [openNovoCargo, setOpenNovoCargo] = useState(false);
-  const [openNovoSindicato, setOpenNovoSindicato] = useState(false);
   const [novoCargoForm, setNovoCargoForm] = useState({ nome: "", descricao: "" });
+
+  // --- Estados para o modal de criação de sindicato (completo) ---
+  const [openNovoSindicato, setOpenNovoSindicato] = useState(false);
+  const [novoSindicatoTipo, setNovoSindicatoTipo] = useState<"laboral" | "patronal">("laboral");
   const [novoSindicatoForm, setNovoSindicatoForm] = useState({
     nome: "",
-    tipo: "laboral" as "laboral" | "patronal",
+    cnpj: "",
+    contato_whatsapp: "",
   });
+  const [unidadesSelecionadas, setUnidadesSelecionadas] = useState<string[]>([]);
+  const [cargosSelecionados, setCargosSelecionados] = useState<string[]>([]);
 
   // Carregar listagem principal
   const load = async () => {
@@ -140,7 +160,6 @@ export default function Unidades() {
       return;
     }
 
-    // Buscar contagens separadamente
     const unidadesComContagens = await Promise.all(
       (unidades ?? []).map(async (u) => {
         const { count: patronalCount } = await supabase
@@ -161,27 +180,19 @@ export default function Unidades() {
     setList(unidadesComContagens);
   };
 
-  // Carregar dados auxiliares (sindicatos e cargos)
+  // Carregar dados auxiliares (sindicatos, cargos, unidades)
   const loadAuxData = async () => {
-    const { data: patronais } = await supabase
-      .from("sindicatos")
-      .select("*")
-      .eq("tipo", "patronal")
-      .order("nome");
-    if (patronais) setSindicatosPatronais(patronais);
+    const [patronais, laborais, cargos, unidades] = await Promise.all([
+      supabase.from("sindicatos").select("*").eq("tipo", "patronal").order("nome"),
+      supabase.from("sindicatos").select("*").eq("tipo", "laboral").order("nome"),
+      supabase.from("cargos").select("*").order("nome"),
+      supabase.from("unidades").select("id, nome").eq("ativo", true).order("nome"),
+    ]);
 
-    const { data: laborais } = await supabase
-      .from("sindicatos")
-      .select("*")
-      .eq("tipo", "laboral")
-      .order("nome");
-    if (laborais) setSindicatosLaborais(laborais);
-
-    const { data: cargos } = await supabase
-      .from("cargos")
-      .select("*")
-      .order("nome");
-    if (cargos) setCargosGlobais(cargos);
+    if (patronais.data) setSindicatosPatronais(patronais.data);
+    if (laborais.data) setSindicatosLaborais(laborais.data);
+    if (cargos.data) setCargosGlobais(cargos.data);
+    if (unidades.data) setUnidadesGlobais(unidades.data);
   };
 
   useEffect(() => {
@@ -203,14 +214,12 @@ export default function Unidades() {
       dia_adiantamento: u.dia_adiantamento ?? null,
     });
 
-    // Carregar sindicatos patronais
     const { data: su } = await supabase
       .from("sindicato_unidades")
       .select("sindicato_id")
       .eq("unidade_id", u.id);
     setPatronaisSelecionados(su?.map((item) => item.sindicato_id) ?? []);
 
-    // Carregar cargos associados
     const { data: uc } = await supabase
       .from("unidade_cargos")
       .select("cargo_id, sindicato_laboral_id")
@@ -253,9 +262,7 @@ export default function Unidades() {
   };
 
   const removeCargo = (cargoId: string) => {
-    setCargosAssociados(
-      cargosAssociados.filter((a) => a.cargo_id !== cargoId)
-    );
+    setCargosAssociados(cargosAssociados.filter((a) => a.cargo_id !== cargoId));
   };
 
   const updateCargoSindicato = (cargoId: string, value: string) => {
@@ -269,13 +276,11 @@ export default function Unidades() {
 
   const togglePatronal = (sindicatoId: string) => {
     setPatronaisSelecionados((prev) =>
-      prev.includes(sindicatoId)
-        ? prev.filter((id) => id !== sindicatoId)
-        : [...prev, sindicatoId]
+      prev.includes(sindicatoId) ? prev.filter((id) => id !== sindicatoId) : [...prev, sindicatoId]
     );
   };
 
-  // Criação rápida de novo cargo
+  // --- Criação rápida de novo cargo (mesmos campos da tela de cargos) ---
   const criarNovoCargo = async () => {
     if (!novoCargoForm.nome.trim()) {
       toast.error("Nome do cargo é obrigatório.");
@@ -290,13 +295,19 @@ export default function Unidades() {
           descricao: novoCargoForm.descricao.trim() || null,
         })
         .select();
-      if (error) throw error;
+      if (error) {
+        if (error.code === "23505") {
+          toast.error("Já existe um cargo com este nome.");
+          return;
+        }
+        throw error;
+      }
       toast.success("Cargo criado com sucesso!");
       setOpenNovoCargo(false);
       setNovoCargoForm({ nome: "", descricao: "" });
-      await loadAuxData();
+      await loadAuxData(); // recarrega a lista de cargos globais
       if (data && data[0]) {
-        setNovoCargoId(data[0].id);
+        setNovoCargoId(data[0].id); // pré‑seleciona o novo cargo
       }
     } catch (e: any) {
       toast.error("Erro ao criar cargo", { description: e.message });
@@ -305,38 +316,83 @@ export default function Unidades() {
     }
   };
 
-  // Criação rápida de novo sindicato
+  // --- Criação rápida de novo sindicato (completa, igual à tela de sindicatos) ---
+  const abrirNovoSindicato = (tipo: "laboral" | "patronal") => {
+    setNovoSindicatoTipo(tipo);
+    setNovoSindicatoForm({ nome: "", cnpj: "", contato_whatsapp: "" });
+    setUnidadesSelecionadas([]);
+    setCargosSelecionados([]);
+    setOpenNovoSindicato(true);
+  };
+
   const criarNovoSindicato = async () => {
     if (!novoSindicatoForm.nome.trim()) {
       toast.error("Nome do sindicato é obrigatório.");
       return;
     }
+
+    if (novoSindicatoTipo === "patronal" && unidadesSelecionadas.length === 0) {
+      toast.error("Selecione pelo menos uma unidade para o sindicato patronal.");
+      return;
+    }
+    if (novoSindicatoTipo === "laboral" && cargosSelecionados.length === 0) {
+      toast.error("Selecione pelo menos um cargo para o sindicato laboral.");
+      return;
+    }
+
     setBusy(true);
     try {
       const { data, error } = await supabase
         .from("sindicatos")
         .insert({
           nome: novoSindicatoForm.nome.trim(),
-          tipo: novoSindicatoForm.tipo,
+          cnpj: novoSindicatoForm.cnpj ? onlyNumbers(novoSindicatoForm.cnpj) : null,
+          tipo: novoSindicatoTipo,
+          contato_whatsapp: novoSindicatoForm.contato_whatsapp
+            ? onlyNumbers(novoSindicatoForm.contato_whatsapp)
+            : null,
         })
-        .select();
+        .select()
+        .single();
       if (error) throw error;
+
+      const sindicatoId = data.id;
+
+      if (novoSindicatoTipo === "patronal") {
+        const inserts = unidadesSelecionadas.map((unidade_id) => ({
+          sindicato_id: sindicatoId,
+          unidade_id,
+        }));
+        const { error: linkError } = await supabase
+          .from("sindicato_unidades")
+          .insert(inserts);
+        if (linkError) throw linkError;
+      } else {
+        const inserts = cargosSelecionados.map((cargo_id) => ({
+          sindicato_id: sindicatoId,
+          cargo_id,
+        }));
+        const { error: linkError } = await supabase
+          .from("sindicato_cargos")
+          .insert(inserts);
+        if (linkError) throw linkError;
+      }
+
       toast.success("Sindicato criado com sucesso!");
       setOpenNovoSindicato(false);
-      setNovoSindicatoForm({ nome: "", tipo: "laboral" });
       await loadAuxData();
-      // Se for laboral e estiver no contexto de adicionar cargo, pré-selecionar
-      if (novoSindicatoForm.tipo === "laboral" && data && data[0]) {
-        setNovoCargoSindicatoId(data[0].id);
+      if (novoSindicatoTipo === "laboral") {
+        setNovoCargoSindicatoId(sindicatoId);
       }
     } catch (e: any) {
+      console.error(e);
       toast.error("Erro ao criar sindicato", { description: e.message });
     } finally {
       setBusy(false);
     }
   };
 
-  // Salvar edição (unidade + associações)
+  // --- Salvar edição da unidade ---
   const saveEdit = async () => {
     if (!editing) return;
     if (!editForm.nome.trim()) {
@@ -345,7 +401,6 @@ export default function Unidades() {
     }
     setBusy(true);
     try {
-      // 1. Atualizar dados da unidade
       const { error: updateError } = await supabase
         .from("unidades")
         .update({
@@ -356,50 +411,30 @@ export default function Unidades() {
           telefone: editForm.telefone.trim() || null,
           possui_relogio_ponto: editForm.possui_relogio_ponto || false,
           tem_adiantamento: editForm.tem_adiantamento || false,
-          dia_adiantamento: editForm.tem_adiantamento
-            ? editForm.dia_adiantamento
-            : null,
+          dia_adiantamento: editForm.tem_adiantamento ? editForm.dia_adiantamento : null,
         })
         .eq("id", editing.id);
       if (updateError) throw updateError;
 
-      // 2. Atualizar sindicatos patronais (deleta todos e insere os selecionados)
-      const { error: delPatronal } = await supabase
-        .from("sindicato_unidades")
-        .delete()
-        .eq("unidade_id", editing.id);
-      if (delPatronal) throw delPatronal;
-
+      // Sindicatos patronais
+      await supabase.from("sindicato_unidades").delete().eq("unidade_id", editing.id);
       if (patronaisSelecionados.length > 0) {
-        const { error: insPatronal } = await supabase
-          .from("sindicato_unidades")
-          .insert(
-            patronaisSelecionados.map((sindicato_id) => ({
-              unidade_id: editing.id,
-              sindicato_id,
-            }))
-          );
-        if (insPatronal) throw insPatronal;
+        const inserts = patronaisSelecionados.map((sindicato_id) => ({
+          unidade_id: editing.id,
+          sindicato_id,
+        }));
+        await supabase.from("sindicato_unidades").insert(inserts);
       }
 
-      // 3. Atualizar cargos (deleta todos e insere os novos)
-      const { error: delCargos } = await supabase
-        .from("unidade_cargos")
-        .delete()
-        .eq("unidade_id", editing.id);
-      if (delCargos) throw delCargos;
-
+      // Cargos
+      await supabase.from("unidade_cargos").delete().eq("unidade_id", editing.id);
       if (cargosAssociados.length > 0) {
-        const { error: insCargos } = await supabase
-          .from("unidade_cargos")
-          .insert(
-            cargosAssociados.map(({ cargo_id, sindicato_laboral_id }) => ({
-              unidade_id: editing.id,
-              cargo_id,
-              sindicato_laboral_id,
-            }))
-          );
-        if (insCargos) throw insCargos;
+        const inserts = cargosAssociados.map(({ cargo_id, sindicato_laboral_id }) => ({
+          unidade_id: editing.id,
+          cargo_id,
+          sindicato_laboral_id,
+        }));
+        await supabase.from("unidade_cargos").insert(inserts);
       }
 
       toast.success("Unidade atualizada com sucesso!");
@@ -458,10 +493,7 @@ export default function Unidades() {
     if (!confirmDelete) return;
     setBusy(true);
     try {
-      const { error } = await supabase
-        .from("unidades")
-        .delete()
-        .eq("id", confirmDelete.id);
+      const { error } = await supabase.from("unidades").delete().eq("id", confirmDelete.id);
       if (error) throw error;
       toast.success("Unidade excluída!");
       setConfirmDelete(null);
@@ -476,6 +508,7 @@ export default function Unidades() {
   // ---------- Renderização ----------
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
+      {/* Cabeçalho */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
@@ -486,23 +519,19 @@ export default function Unidades() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <FavoritarBotao
-            rota="/admin/unidades"
-            label="Unidades"
-            icone="Building2"
-          />
+          <FavoritarBotao rota="/admin/unidades" label="Unidades" icone="Building2" />
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button className="rounded-full px-6">
                 <Plus className="size-4 mr-2" /> Nova Unidade
               </Button>
             </DialogTrigger>
+            {/* ... conteúdo do Dialog de Nova Unidade (mesmo de antes) ... */}
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>Nova unidade</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-4">
-                {/* ... campos iguais aos anteriores ... */}
                 <div className="space-y-2">
                   <Label>Nome da Unidade *</Label>
                   <Input
@@ -523,9 +552,7 @@ export default function Unidades() {
                   <Label>Endereço</Label>
                   <Input
                     value={form.endereco}
-                    onChange={(e) =>
-                      setForm({ ...form, endereco: e.target.value })
-                    }
+                    onChange={(e) => setForm({ ...form, endereco: e.target.value })}
                     placeholder="Ex: R 9 A, SN"
                   />
                 </div>
@@ -533,9 +560,7 @@ export default function Unidades() {
                   <Label>Cidade</Label>
                   <Input
                     value={form.cidade}
-                    onChange={(e) =>
-                      setForm({ ...form, cidade: e.target.value })
-                    }
+                    onChange={(e) => setForm({ ...form, cidade: e.target.value })}
                     placeholder="Ex: Aparecida de Goiânia"
                   />
                 </div>
@@ -543,9 +568,7 @@ export default function Unidades() {
                   <Label>Telefone</Label>
                   <Input
                     value={form.telefone}
-                    onChange={(e) =>
-                      setForm({ ...form, telefone: e.target.value })
-                    }
+                    onChange={(e) => setForm({ ...form, telefone: e.target.value })}
                     placeholder="Ex: (62) 99999-9999"
                   />
                 </div>
@@ -557,9 +580,7 @@ export default function Unidades() {
                       setForm({ ...form, possui_relogio_ponto: checked })
                     }
                   />
-                  <Label htmlFor="possui_relogio_ponto">
-                    Possui relógio de ponto
-                  </Label>
+                  <Label htmlFor="possui_relogio_ponto">Possui relógio de ponto</Label>
                 </div>
                 <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
                   <Switch
@@ -573,9 +594,7 @@ export default function Unidades() {
                       })
                     }
                   />
-                  <Label htmlFor="tem_adiantamento">
-                    Tem adiantamento salarial
-                  </Label>
+                  <Label htmlFor="tem_adiantamento">Tem adiantamento salarial</Label>
                 </div>
                 {form.tem_adiantamento && (
                   <div className="space-y-2">
@@ -590,13 +609,11 @@ export default function Unidades() {
                         <SelectValue placeholder="Selecione o dia" />
                       </SelectTrigger>
                       <SelectContent>
-                        {Array.from({ length: 28 }, (_, i) => i + 1).map(
-                          (dia) => (
-                            <SelectItem key={dia} value={dia.toString()}>
-                              {dia}
-                            </SelectItem>
-                          )
-                        )}
+                        {Array.from({ length: 28 }, (_, i) => i + 1).map((dia) => (
+                          <SelectItem key={dia} value={dia.toString()}>
+                            {dia}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -621,53 +638,29 @@ export default function Unidades() {
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-muted-foreground border-b border-border">
               <tr>
-                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">
-                  Unidade
-                </th>
-                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">
-                  CNPJ
-                </th>
-                <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">
-                  Cargos
-                </th>
-                <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">
-                  Sind. Patronais
-                </th>
-                <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">
-                  Status
-                </th>
-                <th className="text-right p-4 font-bold uppercase tracking-wider text-[10px]">
-                  Ações
-                </th>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Unidade</th>
+                <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">CNPJ</th>
+                <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Cargos</th>
+                <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Sind. Patronais</th>
+                <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
+                <th className="text-right p-4 font-bold uppercase tracking-wider text-[10px]">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {list.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={6}
-                    className="p-12 text-center text-muted-foreground"
-                  >
+                  <td colSpan={6} className="p-12 text-center text-muted-foreground">
                     Nenhuma unidade cadastrada.
                   </td>
                 </tr>
               )}
               {list.map((u) => (
-                <tr
-                  key={u.id}
-                  className="hover:bg-muted/20 transition-colors"
-                >
+                <tr key={u.id} className="hover:bg-muted/20 transition-colors">
                   <td className="p-4">
                     <div className="font-bold">{u.nome}</div>
-                    {u.endereco && (
-                      <div className="text-xs text-muted-foreground">
-                        {u.endereco}
-                      </div>
-                    )}
+                    {u.endereco && <div className="text-xs text-muted-foreground">{u.endereco}</div>}
                   </td>
-                  <td className="p-4 hidden md:table-cell font-mono text-xs">
-                    {u.cnpj || "—"}
-                  </td>
+                  <td className="p-4 hidden md:table-cell font-mono text-xs">{u.cnpj || "—"}</td>
                   <td className="p-4 text-center">
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                       <ListChecks className="size-3" /> {u.cargos_count ?? 0}
@@ -675,32 +668,18 @@ export default function Unidades() {
                   </td>
                   <td className="p-4 text-center">
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                      <Users className="size-3" />{" "}
-                      {u.sindicatos_patronais_count ?? 0}
+                      <Users className="size-3" /> {u.sindicatos_patronais_count ?? 0}
                     </span>
                   </td>
                   <td className="p-4 text-center">
-                    <Switch
-                      checked={u.ativo}
-                      onCheckedChange={() => toggleAtivo(u)}
-                    />
+                    <Switch checked={u.ativo} onCheckedChange={() => toggleAtivo(u)} />
                   </td>
                   <td className="p-4 text-right whitespace-nowrap">
                     <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8"
-                        onClick={() => openEdit(u)}
-                      >
+                      <Button variant="ghost" size="icon" className="size-8" onClick={() => openEdit(u)}>
                         <Pencil className="size-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8"
-                        onClick={() => setConfirmDelete(u)}
-                      >
+                      <Button variant="ghost" size="icon" className="size-8" onClick={() => setConfirmDelete(u)}>
                         <Trash2 className="size-4" />
                       </Button>
                     </div>
@@ -712,11 +691,8 @@ export default function Unidades() {
         </div>
       </div>
 
-      {/* Modal de edição */}
-      <Dialog
-        open={!!editing}
-        onOpenChange={(o) => !o && setEditing(null)}
-      >
+      {/* ===== MODAL DE EDIÇÃO DA UNIDADE ===== */}
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar unidade: {editing?.nome}</DialogTitle>
@@ -728,18 +704,14 @@ export default function Unidades() {
                 <Label>Nome *</Label>
                 <Input
                   value={editForm.nome}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, nome: e.target.value })
-                  }
+                  onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
                 <Label>CNPJ</Label>
                 <Input
                   value={editForm.cnpj}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, cnpj: e.target.value })
-                  }
+                  onChange={(e) => setEditForm({ ...editForm, cnpj: e.target.value })}
                   placeholder="00.000.000/0000-00"
                 />
               </div>
@@ -747,27 +719,21 @@ export default function Unidades() {
                 <Label>Endereço</Label>
                 <Input
                   value={editForm.endereco}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, endereco: e.target.value })
-                  }
+                  onChange={(e) => setEditForm({ ...editForm, endereco: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
                 <Label>Cidade</Label>
                 <Input
                   value={editForm.cidade}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, cidade: e.target.value })
-                  }
+                  onChange={(e) => setEditForm({ ...editForm, cidade: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
                 <Label>Telefone</Label>
                 <Input
                   value={editForm.telefone}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, telefone: e.target.value })
-                  }
+                  onChange={(e) => setEditForm({ ...editForm, telefone: e.target.value })}
                 />
               </div>
               <div className="flex items-center space-x-2 rounded-xl border border-border p-3 col-span-full">
@@ -778,9 +744,7 @@ export default function Unidades() {
                     setEditForm({ ...editForm, possui_relogio_ponto: checked })
                   }
                 />
-                <Label htmlFor="edit_possui_relogio_ponto">
-                  Possui relógio de ponto
-                </Label>
+                <Label htmlFor="edit_possui_relogio_ponto">Possui relógio de ponto</Label>
               </div>
               <div className="flex items-center space-x-2 rounded-xl border border-border p-3 col-span-full">
                 <Switch
@@ -790,15 +754,11 @@ export default function Unidades() {
                     setEditForm({
                       ...editForm,
                       tem_adiantamento: checked,
-                      dia_adiantamento: checked
-                        ? editForm.dia_adiantamento
-                        : null,
+                      dia_adiantamento: checked ? editForm.dia_adiantamento : null,
                     })
                   }
                 />
-                <Label htmlFor="edit_tem_adiantamento">
-                  Tem adiantamento salarial
-                </Label>
+                <Label htmlFor="edit_tem_adiantamento">Tem adiantamento salarial</Label>
               </div>
               {editForm.tem_adiantamento && (
                 <div className="space-y-2 col-span-full">
@@ -806,23 +766,18 @@ export default function Unidades() {
                   <Select
                     value={editForm.dia_adiantamento?.toString() || ""}
                     onValueChange={(value) =>
-                      setEditForm({
-                        ...editForm,
-                        dia_adiantamento: parseInt(value),
-                      })
+                      setEditForm({ ...editForm, dia_adiantamento: parseInt(value) })
                     }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione o dia" />
                     </SelectTrigger>
                     <SelectContent>
-                      {Array.from({ length: 28 }, (_, i) => i + 1).map(
-                        (dia) => (
-                          <SelectItem key={dia} value={dia.toString()}>
-                            {dia}
-                          </SelectItem>
-                        )
-                      )}
+                      {Array.from({ length: 28 }, (_, i) => i + 1).map((dia) => (
+                        <SelectItem key={dia} value={dia.toString()}>
+                          {dia}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -831,20 +786,13 @@ export default function Unidades() {
 
             <hr className="border-border" />
 
-            {/* Seção: Sindicatos Patronais */}
+            {/* Sindicatos Patronais */}
             <div>
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-lg flex items-center gap-2">
                   <Users className="size-5" /> Sindicatos Patronais
                 </h3>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setNovoSindicatoForm({ nome: "", tipo: "patronal" });
-                    setOpenNovoSindicato(true);
-                  }}
-                >
+                <Button variant="outline" size="sm" onClick={() => abrirNovoSindicato("patronal")}>
                   <Plus className="size-4 mr-1" /> Novo Patronal
                 </Button>
               </div>
@@ -876,32 +824,26 @@ export default function Unidades() {
 
             <hr className="border-border" />
 
-            {/* Seção: Cargos da Unidade */}
+            {/* Cargos da Unidade */}
             <div>
               <h3 className="font-semibold text-lg flex items-center gap-2">
                 <ListChecks className="size-5" /> Cargos da Unidade
               </h3>
               <p className="text-sm text-muted-foreground">
-                Associe cargos a esta unidade e defina o sindicato laboral para
-                cada um.
+                Associe cargos a esta unidade e defina o sindicato laboral para cada um.
               </p>
 
-              {/* Lista de cargos já associados */}
               <div className="mt-4 space-y-2">
                 {cargosAssociados.map((assoc) => (
                   <div
                     key={assoc.cargo_id}
                     className="flex items-center gap-3 p-2 border border-border rounded-md bg-muted/10"
                   >
-                    <span className="font-medium min-w-[120px]">
-                      {assoc.cargo_nome}
-                    </span>
+                    <span className="font-medium min-w-[120px]">{assoc.cargo_nome}</span>
                     <div className="flex-1">
                       <Select
                         value={assoc.sindicato_laboral_id || "none"}
-                        onValueChange={(value) =>
-                          updateCargoSindicato(assoc.cargo_id, value)
-                        }
+                        onValueChange={(value) => updateCargoSindicato(assoc.cargo_id, value)}
                       >
                         <SelectTrigger className="w-full">
                           <SelectValue placeholder="Sindicato laboral (opcional)" />
@@ -927,9 +869,7 @@ export default function Unidades() {
                   </div>
                 ))}
                 {cargosAssociados.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    Nenhum cargo associado.
-                  </p>
+                  <p className="text-sm text-muted-foreground">Nenhum cargo associado.</p>
                 )}
               </div>
 
@@ -938,10 +878,7 @@ export default function Unidades() {
                 <div className="flex-1 min-w-[150px]">
                   <Label className="text-xs">Cargo</Label>
                   <div className="flex items-center gap-2">
-                    <Select
-                      value={novoCargoId}
-                      onValueChange={setNovoCargoId}
-                    >
+                    <Select value={novoCargoId} onValueChange={setNovoCargoId}>
                       <SelectTrigger className="flex-1">
                         <SelectValue placeholder="Selecione um cargo" />
                       </SelectTrigger>
@@ -967,10 +904,7 @@ export default function Unidades() {
                 <div className="flex-1 min-w-[150px]">
                   <Label className="text-xs">Sindicato Laboral</Label>
                   <div className="flex items-center gap-2">
-                    <Select
-                      value={novoCargoSindicatoId}
-                      onValueChange={setNovoCargoSindicatoId}
-                    >
+                    <Select value={novoCargoSindicatoId} onValueChange={setNovoCargoSindicatoId}>
                       <SelectTrigger className="flex-1">
                         <SelectValue placeholder="Opcional" />
                       </SelectTrigger>
@@ -987,21 +921,14 @@ export default function Unidades() {
                       variant="outline"
                       size="icon"
                       className="size-9"
-                      onClick={() => {
-                        setNovoSindicatoForm({ nome: "", tipo: "laboral" });
-                        setOpenNovoSindicato(true);
-                      }}
+                      onClick={() => abrirNovoSindicato("laboral")}
                       title="Novo sindicato laboral"
                     >
                       <Plus className="size-4" />
                     </Button>
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  onClick={addCargo}
-                  disabled={!novoCargoId}
-                >
+                <Button variant="outline" onClick={addCargo} disabled={!novoCargoId}>
                   <Plus className="size-4 mr-1" /> Adicionar
                 </Button>
               </div>
@@ -1013,19 +940,13 @@ export default function Unidades() {
               Cancelar
             </Button>
             <Button onClick={saveEdit} disabled={busy}>
-              {busy ? (
-                "Salvando..."
-              ) : (
-                <>
-                  <Save className="size-4 mr-2" /> Salvar Alterações
-                </>
-              )}
+              {busy ? "Salvando..." : <><Save className="size-4 mr-2" /> Salvar Alterações</>}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal de criação rápida de novo cargo */}
+      {/* ===== MODAL DE CRIAÇÃO DE CARGO (completo) ===== */}
       <Dialog open={openNovoCargo} onOpenChange={setOpenNovoCargo}>
         <DialogContent>
           <DialogHeader>
@@ -1036,9 +957,7 @@ export default function Unidades() {
               <Label>Nome do Cargo *</Label>
               <Input
                 value={novoCargoForm.nome}
-                onChange={(e) =>
-                  setNovoCargoForm({ ...novoCargoForm, nome: e.target.value })
-                }
+                onChange={(e) => setNovoCargoForm({ ...novoCargoForm, nome: e.target.value })}
                 placeholder="Ex: Pizzaiolo Sênior"
               />
             </div>
@@ -1064,44 +983,121 @@ export default function Unidades() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de criação rápida de novo sindicato */}
+      {/* ===== MODAL DE CRIAÇÃO DE SINDICATO (completo) ===== */}
       <Dialog open={openNovoSindicato} onOpenChange={setOpenNovoSindicato}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Novo Sindicato</DialogTitle>
+            <DialogTitle>
+              Novo Sindicato {novoSindicatoTipo === "patronal" ? "Patronal" : "Laboral"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Nome do Sindicato *</Label>
+              <Label>Nome *</Label>
               <Input
                 value={novoSindicatoForm.nome}
                 onChange={(e) =>
-                  setNovoSindicatoForm({
-                    ...novoSindicatoForm,
-                    nome: e.target.value,
-                  })
+                  setNovoSindicatoForm({ ...novoSindicatoForm, nome: e.target.value })
                 }
-                placeholder="Ex: Sindicato dos Pizzaiolos"
+                placeholder="Nome do sindicato"
               />
             </div>
             <div className="space-y-2">
-              <Label>Tipo</Label>
-              <Select
-                value={novoSindicatoForm.tipo}
-                onValueChange={(value: "laboral" | "patronal") =>
-                  setNovoSindicatoForm({ ...novoSindicatoForm, tipo: value })
+              <Label>CNPJ</Label>
+              <Input
+                value={novoSindicatoForm.cnpj}
+                onChange={(e) =>
+                  setNovoSindicatoForm({
+                    ...novoSindicatoForm,
+                    cnpj: formatCNPJ(e.target.value),
+                  })
                 }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="laboral">Laboral</SelectItem>
-                  <SelectItem value="patronal">Patronal</SelectItem>
-                </SelectContent>
-              </Select>
+                placeholder="00.000.000/0000-00"
+                maxLength={18}
+              />
             </div>
+            <div className="space-y-2">
+              <Label>WhatsApp</Label>
+              <Input
+                value={novoSindicatoForm.contato_whatsapp}
+                onChange={(e) =>
+                  setNovoSindicatoForm({
+                    ...novoSindicatoForm,
+                    contato_whatsapp: formatWhatsApp(e.target.value),
+                  })
+                }
+                placeholder="(62) 99999-9999"
+                maxLength={15}
+              />
+            </div>
+
+            {novoSindicatoTipo === "patronal" ? (
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">Unidades Representadas *</Label>
+                <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-border rounded-lg p-3">
+                  {unidadesGlobais.map((un) => (
+                    <div key={un.id} className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setUnidadesSelecionadas((prev) =>
+                            prev.includes(un.id)
+                              ? prev.filter((id) => id !== un.id)
+                              : [...prev, un.id]
+                          )
+                        }
+                        className={cn(
+                          "size-5 rounded border-2 flex items-center justify-center transition-all",
+                          unidadesSelecionadas.includes(un.id)
+                            ? "bg-primary border-primary text-white"
+                            : "border-muted-foreground/30 hover:border-primary/50"
+                        )}
+                      >
+                        {unidadesSelecionadas.includes(un.id) && <Check className="size-3" />}
+                      </button>
+                      <Label className="text-sm cursor-pointer">{un.nome}</Label>
+                    </div>
+                  ))}
+                </div>
+                {unidadesSelecionadas.length === 0 && (
+                  <p className="text-xs text-red-500">* Selecione pelo menos uma unidade</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">Cargos Representados *</Label>
+                <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-border rounded-lg p-3">
+                  {cargosGlobais.map((cg) => (
+                    <div key={cg.id} className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCargosSelecionados((prev) =>
+                            prev.includes(cg.id)
+                              ? prev.filter((id) => id !== cg.id)
+                              : [...prev, cg.id]
+                          )
+                        }
+                        className={cn(
+                          "size-5 rounded border-2 flex items-center justify-center transition-all",
+                          cargosSelecionados.includes(cg.id)
+                            ? "bg-primary border-primary text-white"
+                            : "border-muted-foreground/30 hover:border-primary/50"
+                        )}
+                      >
+                        {cargosSelecionados.includes(cg.id) && <Check className="size-3" />}
+                      </button>
+                      <Label className="text-sm cursor-pointer">{cg.nome}</Label>
+                    </div>
+                  ))}
+                </div>
+                {cargosSelecionados.length === 0 && (
+                  <p className="text-xs text-red-500">* Selecione pelo menos um cargo</p>
+                )}
+              </div>
+            )}
           </div>
+
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpenNovoSindicato(false)}>
               Cancelar
@@ -1113,17 +1109,13 @@ export default function Unidades() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de confirmação de exclusão */}
-      <AlertDialog
-        open={!!confirmDelete}
-        onOpenChange={(o) => !o && setConfirmDelete(null)}
-      >
+      {/* ===== CONFIRMAÇÃO DE EXCLUSÃO ===== */}
+      <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir {confirmDelete?.nome}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação não pode ser desfeita. Colaboradores vinculados a esta
-              unidade perderão o vínculo.
+              Esta ação não pode ser desfeita. Colaboradores vinculados a esta unidade perderão o vínculo.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
