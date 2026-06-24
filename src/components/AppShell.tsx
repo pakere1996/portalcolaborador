@@ -53,16 +53,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [docsOpen, setDocsOpen] = useState(false);
   const [cadastroOpen, setCadastroOpen] = useState(false);
   const [comunicacaoOpen, setComunicacaoOpen] = useState(false);
-  const [sindicatosOpen, setSindicatosOpen] = useState(false);
 
   const toggleMenu = useCallback(
-    (menu: "folgas" | "docs" | "cadastro" | "comunicacao" | "sindicatos") => {
+    (menu: "folgas" | "docs" | "cadastro" | "comunicacao") => {
       const setters = {
         folgas: setFolgasOpen,
         docs: setDocsOpen,
         cadastro: setCadastroOpen,
         comunicacao: setComunicacaoOpen,
-        sindicatos: setSindicatosOpen,
       };
       Object.values(setters).forEach((setter) => setter(false));
       const currentState = {
@@ -70,11 +68,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         docs: docsOpen,
         cadastro: cadastroOpen,
         comunicacao: comunicacaoOpen,
-        sindicatos: sindicatosOpen,
       }[menu];
       setters[menu](!currentState);
     },
-    [folgasOpen, docsOpen, cadastroOpen, comunicacaoOpen, sindicatosOpen]
+    [folgasOpen, docsOpen, cadastroOpen, comunicacaoOpen]
   );
 
   const getIsAdmin = () => {
@@ -96,6 +93,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         path.startsWith("/admin/colaboradores") ||
         path.startsWith("/admin/cargos") ||
         path.startsWith("/admin/unidades") ||
+        path.startsWith("/admin/cadastro") ||
         path === "/admin/cadastro",
       docs: path.startsWith("/admin/documentos") || path === "/admin/documentos",
       comunicacao:
@@ -109,16 +107,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         path.startsWith("/admin/trocas") ||
         path.startsWith("/admin/bloqueios") ||
         path === "/admin/folgas",
-      sindicatos:
-        path.startsWith("/admin/sindicatos") ||
-        path === "/admin/sindicatos",
     };
 
     setFolgasOpen(shouldOpen.folgas);
     setDocsOpen(shouldOpen.docs);
     setCadastroOpen(shouldOpen.cadastro);
     setComunicacaoOpen(shouldOpen.comunicacao);
-    setSindicatosOpen(shouldOpen.sindicatos);
   }, [path]);
 
   // Navegação do colaborador
@@ -134,18 +128,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
   ];
 
-  // ADMIN: submenus
+  // ADMIN: submenu Cadastro (agora inclui todos os itens)
   const adminCadastroNav: NavItem[] = [
     { to: "/admin/colaboradores", label: "Colaboradores", icon: Users },
     { to: "/admin/cargos", label: "Cargos", icon: Briefcase },
     { to: "/admin/unidades", label: "Unidades", icon: Building2 },
+    { to: "/admin/cadastro/sindicatos", label: "Sindicatos", icon: Scale },
+    { to: "/admin/cadastro/act-cct", label: "ACT-CCT", icon: FileText },
   ];
 
-  const adminSindicatosNav: NavItem[] = [
-    { to: "/admin/sindicatos/cadastro", label: "Cadastro", icon: Users },
-    { to: "/admin/sindicatos/negociacoes", label: "Negociações", icon: FileText },
-  ];
-
+  // ADMIN: demais submenus
   const adminFolgaNav: NavItem[] = [
     { to: "/admin/calendario", label: "Calendário Geral", icon: Calendar },
     { to: "/admin/solicitacoes", label: "Solicitações", icon: ClipboardList },
@@ -281,15 +273,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 cadastroOpen,
                 () => toggleMenu("cadastro"),
                 adminCadastroNav
-              )}
-
-              {renderAdminMenuItem(
-                "Sindicatos",
-                Scale,
-                "/admin/sindicatos",
-                sindicatosOpen,
-                () => toggleMenu("sindicatos"),
-                adminSindicatosNav
               )}
 
               {renderAdminMenuItem(
