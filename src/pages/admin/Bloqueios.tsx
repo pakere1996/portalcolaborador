@@ -29,6 +29,9 @@ interface RegraComUnidades extends BloqueioRegra {
   unidades?: Unidade[];
 }
 
+const MESES = [1,2,3,4,5,6,7,8,9,10,11,12];
+const DIAS = Array.from({ length: 31 }, (_, i) => i + 1);
+
 export default function BloqueiosPage() {
   const [regras, setRegras] = useState<RegraComUnidades[]>([]);
   const [datasBloqueadas, setDatasBloqueadas] = useState<DataBloqueada[]>([]);
@@ -95,17 +98,55 @@ export default function BloqueiosPage() {
     return yearMatch && monthMatch;
   });
 
-  // --- Regras de Bloqueio ---
+  // --- Estado do formulário ---
   const [regraForm, setRegraForm] = useState<Partial<BloqueioRegra>>({
-    descricao: "", tipo: "fixa_anual", mes: null, dia: null, ordinal: null, dia_semana: null, ativo: true,
+    descricao: "",
+    tipo: "fixa_anual",
+    aplicacao: "anual",
+    ano_referencia: null,
+    meses: [],
+    dias: [],
+    ordinal: null,
+    dia_semana: null,
+    ativo: true,
   });
   const [regraUnidadesSelecionadas, setRegraUnidadesSelecionadas] = useState<string[]>([]);
   const [editRegraId, setEditRegraId] = useState<string | null>(null);
 
+  // Helpers para manipular arrays de meses e dias
+  const toggleArrayItem = (array: number[], item: number) =>
+    array.includes(item) ? array.filter(i => i !== item) : [...array, item];
+
+  const toggleAllMeses = () => {
+    const all = MESES;
+    setRegraForm(prev => ({
+      ...prev,
+      meses: prev.meses?.length === all.length ? [] : all,
+    }));
+  };
+
+  const toggleAllDias = () => {
+    const all = DIAS;
+    setRegraForm(prev => ({
+      ...prev,
+      dias: prev.dias?.length === all.length ? [] : all,
+    }));
+  };
+
   const openRegraDialog = async (r?: RegraComUnidades) => {
     if (r) {
       setEditRegraId(r.id);
-      setRegraForm({ ...r });
+      setRegraForm({
+        descricao: r.descricao || "",
+        tipo: r.tipo || "fixa_anual",
+        aplicacao: r.aplicacao || "anual",
+        ano_referencia: r.ano_referencia || null,
+        meses: r.meses || [],
+        dias: r.dias || [],
+        ordinal: r.ordinal || null,
+        dia_semana: r.dia_semana || null,
+        ativo: r.ativo ?? true,
+      });
       const { data: vincData } = await supabase
         .from("bloqueio_regra_unidades")
         .select("unidade_id")
@@ -113,7 +154,17 @@ export default function BloqueiosPage() {
       setRegraUnidadesSelecionadas(vincData?.map(v => v.unidade_id) ?? []);
     } else {
       setEditRegraId(null);
-      setRegraForm({ descricao: "", tipo: "fixa_anual", mes: null, dia: null, ordinal: null, dia_semana: null, ativo: true });
+      setRegraForm({
+        descricao: "",
+        tipo: "fixa_anual",
+        aplicacao: "anual",
+        ano_referencia: null,
+        meses: [],
+        dias: [],
+        ordinal: null,
+        dia_semana: null,
+        ativo: true,
+      });
       setRegraUnidadesSelecionadas([]);
     }
     setIsRegraDialogOpen(true);
@@ -127,28 +178,54 @@ export default function BloqueiosPage() {
 
   const toggleUnidade = (unidadeId: string) => {
     setRegraUnidadesSelecionadas(prev =>
-      prev.includes(unidadeId)
-        ? prev.filter(id => id !== unidadeId)
-        : [...prev, unidadeId]
+      prev.includes(unidadeId) ? prev.filter(id => id !== unidadeId) : [...prev, unidadeId]
     );
   };
 
   const saveRegra = async () => {
     if (!regraForm.descricao?.trim()) return toast.error("Descrição é obrigatória");
+    
+    // Validação: se for "única", ano_referencia é obrigatório
+    if (regraForm.aplicacao === "unica" && !regraForm.ano_referencia) {
+      toast.error("Para regras únicas, informe o ano de referência.");
+      return;
+    }
+
+    // Validação: meses e dias não podem ser vazios para tipo "fixa_anual"
+    if (regraForm.tipo === "fixa_anual" && (!regraForm.meses || regraForm.meses.length === 0)) {
+      toast.error("Selecione pelo menos um mês para a regra fixa.");
+      return;
+    }
+
     setBusy(true);
     try {
       let regraId = editRegraId;
 
+      const dadosParaEnviar = {
+        descricao: regraForm.descricao.trim(),
+        tipo: regraForm.tipo,
+        aplicacao: regraForm.aplicacao,
+        ano_referencia: regraForm.aplicacao === "unica" ? regraForm.ano_referencia : null,
+        meses: regraForm.tipo === "fixa_anual" ? regraForm.meses : null,
+        dias: regraForm.tipo === "fixa_anual" ? regraForm.dias : null,
+        ordinal: regraForm.tipo === "dinamica" ? regraForm.ordinal : null,
+        dia_semana: regraForm.tipo === "dinamica" ? regraForm.dia_semana : null,
+        mes: regraForm.tipo !== "fixa_anual" ? (regraForm.meses?.[0] || null) : null,
+        dia: regraForm.tipo !== "fixa_anual" ? (regraForm.dias?.[0] || null) : null,
+        ativo: regraForm.ativo,
+        updated_at: new Date().toISOString(),
+      };
+
       if (editRegraId) {
         const { error } = await supabase
           .from("bloqueio_regras")
-          .update(regraForm)
+          .update(dadosParaEnviar)
           .eq("id", editRegraId);
         if (error) throw error;
       } else {
         const { data, error } = await supabase
           .from("bloqueio_regras")
-          .insert(regraForm)
+          .insert({ ...dadosParaEnviar, created_at: new Date().toISOString() })
           .select("id")
           .single();
         if (error) throw error;
@@ -156,19 +233,13 @@ export default function BloqueiosPage() {
       }
 
       if (regraId) {
-        await supabase
-          .from("bloqueio_regra_unidades")
-          .delete()
-          .eq("regra_id", regraId);
-
+        await supabase.from("bloqueio_regra_unidades").delete().eq("regra_id", regraId);
         if (regraUnidadesSelecionadas.length > 0) {
           const inserts = regraUnidadesSelecionadas.map(unidade_id => ({
             regra_id: regraId,
             unidade_id,
           }));
-          const { error } = await supabase
-            .from("bloqueio_regra_unidades")
-            .insert(inserts);
+          const { error } = await supabase.from("bloqueio_regra_unidades").insert(inserts);
           if (error) throw error;
         }
       }
@@ -204,7 +275,7 @@ export default function BloqueiosPage() {
     }
   };
 
-  // --- Datas Bloqueadas Manuais ---
+  // --- Datas Manuais (igual antes) ---
   const [manualData, setManualData] = useState("");
   const [manualMotivo, setManualMotivo] = useState("");
   const [editDataId, setEditDataId] = useState<string | null>(null);
@@ -272,7 +343,7 @@ export default function BloqueiosPage() {
 
   const getTipoLabel = (tipo: string) => {
     switch (tipo) {
-      case "fixa_anual": return "Fixa Anual (dia/mês)";
+      case "fixa_anual": return "Fixa (dia/mês fixo)";
       case "dinamica": return "Dinâmica (ex: 2º sábado)";
       case "pos_pagamento": return "Pós-Pagamento (1º sáb e dom após dia 5)";
       default: return tipo;
@@ -283,6 +354,17 @@ export default function BloqueiosPage() {
     return new Date(2000, month - 1, 1).toLocaleString('pt-BR', { month: 'long' });
   };
 
+  const formatMeses = (meses: number[] | null) => {
+    if (!meses || meses.length === 0) return "Todos";
+    return meses.map(m => getMonthName(m)).join(", ");
+  };
+
+  const formatDias = (dias: number[] | null) => {
+    if (!dias || dias.length === 0) return "Todos";
+    return dias.join(", ");
+  };
+
+  // --- Renderização ---
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -317,7 +399,7 @@ export default function BloqueiosPage() {
         </div>
       </div>
 
-      {/* Regras de Bloqueio Automático */}
+      {/* Regras */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -343,9 +425,24 @@ export default function BloqueiosPage() {
                       <div className="font-semibold">{r.descricao ?? ""}</div>
                       <div className="text-sm text-muted-foreground flex items-center gap-4 flex-wrap">
                         <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">{getTipoLabel(r.tipo ?? "")}</span>
-                        {r.tipo === "fixa_anual" && <span>Dia {r.dia} de {getMonthName(r.mes ?? 1)}</span>}
-                        {r.tipo === "dinamica" && <span>{["Primeiro","Segundo","Terceiro","Quarto","Quinto"][(r.ordinal ?? 1) - 1]} {["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"][r.dia_semana ?? 0]} de {getMonthName(r.mes ?? 1)}</span>}
-                        {r.tipo === "pos_pagamento" && <span>1º Sábado e 1º Domingo após dia 5 de {getMonthName(r.mes ?? 1)}</span>}
+                        {r.tipo === "fixa_anual" && (
+                          <>
+                            <span>Meses: {formatMeses(r.meses)}</span>
+                            <span>Dias: {formatDias(r.dias)}</span>
+                          </>
+                        )}
+                        {r.tipo === "dinamica" && (
+                          <span>{["Primeiro","Segundo","Terceiro","Quarto","Quinto"][(r.ordinal ?? 1) - 1]} {["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"][r.dia_semana ?? 0]}</span>
+                        )}
+                        {r.tipo === "pos_pagamento" && (
+                          <span>1º Sábado e Domingo após dia 5</span>
+                        )}
+                        {r.aplicacao === "unica" && r.ano_referencia && (
+                          <span className="text-amber-600 font-medium">🔹 Única vez - {r.ano_referencia}</span>
+                        )}
+                        {r.aplicacao === "anual" && (
+                          <span className="text-green-600 font-medium">🔄 Anual</span>
+                        )}
                         {!r.ativo && <span className="text-red-500 font-medium">Inativa</span>}
                       </div>
                       {r.unidades && r.unidades.length > 0 && (
@@ -396,7 +493,7 @@ export default function BloqueiosPage() {
         </div>
       </section>
 
-      {/* Bloqueios Manuais / Liberações */}
+      {/* Bloqueios Manuais - igual antes */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -458,92 +555,209 @@ export default function BloqueiosPage() {
         </div>
       </section>
 
-      {/* Dialog de Regras */}
+      {/* ===== Dialog de Regras (completo) ===== */}
       <Dialog open={isRegraDialogOpen} onOpenChange={(o) => !o && closeRegraDialog()}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editRegraId ? "Editar Regra" : "Nova Regra"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {/* Descrição */}
             <div className="space-y-2">
               <Label>Descrição *</Label>
-              <Input value={regraForm.descricao ?? ""} onChange={(e) => setRegraForm({ ...regraForm, descricao: e.target.value })} placeholder="Ex: Natal, Black Friday..." />
+              <Input
+                value={regraForm.descricao ?? ""}
+                onChange={(e) => setRegraForm({ ...regraForm, descricao: e.target.value })}
+                placeholder="Ex: Natal, Black Friday..."
+              />
             </div>
+
+            {/* Tipo */}
             <div className="space-y-2">
               <Label>Tipo *</Label>
-              <select value={regraForm.tipo ?? "fixa_anual"} onChange={(e) => setRegraForm({ ...regraForm, tipo: e.target.value })} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                <option value="fixa_anual">Fixa Anual (dia/mês fixo)</option>
-                <option value="dinamica">Dinâmica (ex: 2º sábado do mês)</option>
+              <select
+                value={regraForm.tipo ?? "fixa_anual"}
+                onChange={(e) => setRegraForm({ ...regraForm, tipo: e.target.value })}
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="fixa_anual">Fixa (dia/mês fixo)</option>
+                <option value="dinamica">Dinâmica (ex: 2º sábado)</option>
                 <option value="pos_pagamento">Pós-Pagamento (1º sábado e domingo após dia 5)</option>
               </select>
             </div>
+
+            {/* Aplicação */}
+            <div className="space-y-2">
+              <Label>Aplicação *</Label>
+              <select
+                value={regraForm.aplicacao ?? "anual"}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setRegraForm({
+                    ...regraForm,
+                    aplicacao: val,
+                    ano_referencia: val === "unica" ? new Date().getFullYear() : null,
+                  });
+                }}
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="anual">🔄 Anual (repetir todo ano)</option>
+                <option value="unica">🔹 Única vez (aplicar apenas em um ano)</option>
+              </select>
+            </div>
+
+            {regraForm.aplicacao === "unica" && (
+              <div className="space-y-2">
+                <Label>Ano de Referência *</Label>
+                <Input
+                  type="number"
+                  value={regraForm.ano_referencia || ""}
+                  onChange={(e) => setRegraForm({ ...regraForm, ano_referencia: parseInt(e.target.value) })}
+                  min={2000}
+                  max={2100}
+                  placeholder="Ex: 2026"
+                />
+              </div>
+            )}
+
+            {/* Campos específicos por tipo */}
             {regraForm.tipo === "fixa_anual" && (
-              <div className="grid grid-cols-2 gap-3">
+              <>
+                {/* Meses */}
                 <div className="space-y-2">
-                  <Label>Mês *</Label>
-                  <select value={regraForm.mes ?? ""} onChange={(e) => setRegraForm({ ...regraForm, mes: Number(e.target.value) })} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    <option value="">Selecione</option>
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                      <option key={m} value={m}>{getMonthName(m)}</option>
+                  <div className="flex items-center justify-between">
+                    <Label>Meses *</Label>
+                    <Button variant="ghost" size="sm" onClick={toggleAllMeses}>
+                      {regraForm.meses?.length === MESES.length ? "Desmarcar todos" : "Marcar todos"}
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto border border-border rounded-lg p-3">
+                    {MESES.map(m => (
+                      <div key={m} className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setRegraForm(prev => ({
+                            ...prev,
+                            meses: toggleArrayItem(prev.meses || [], m)
+                          }))}
+                          className={cn(
+                            "size-5 rounded border-2 flex items-center justify-center transition-all",
+                            regraForm.meses?.includes(m)
+                              ? "bg-primary border-primary text-white"
+                              : "border-muted-foreground/30 hover:border-primary/50"
+                          )}
+                        >
+                          {regraForm.meses?.includes(m) && <Check className="size-3" />}
+                        </button>
+                        <Label className="text-sm cursor-pointer">{getMonthName(m)}</Label>
+                      </div>
                     ))}
-                  </select>
+                  </div>
                 </div>
+
+                {/* Dias */}
                 <div className="space-y-2">
-                  <Label>Dia (1-31) *</Label>
-                  <Input type="number" min={1} max={31} value={regraForm.dia ?? ""} onChange={(e) => setRegraForm({ ...regraForm, dia: Number(e.target.value) })} />
+                  <div className="flex items-center justify-between">
+                    <Label>Dias</Label>
+                    <Button variant="ghost" size="sm" onClick={toggleAllDias}>
+                      {regraForm.dias?.length === DIAS.length ? "Desmarcar todos" : "Marcar todos"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Selecione os dias do mês. (Se nenhum selecionado = todos os dias)</p>
+                  <div className="grid grid-cols-7 gap-1 max-h-40 overflow-y-auto border border-border rounded-lg p-3">
+                    {DIAS.map(d => (
+                      <div key={d} className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setRegraForm(prev => ({
+                            ...prev,
+                            dias: toggleArrayItem(prev.dias || [], d)
+                          }))}
+                          className={cn(
+                            "size-6 rounded border-2 flex items-center justify-center transition-all text-xs",
+                            regraForm.dias?.includes(d)
+                              ? "bg-primary border-primary text-white"
+                              : "border-muted-foreground/30 hover:border-primary/50"
+                          )}
+                        >
+                          {regraForm.dias?.includes(d) ? <Check className="size-3" /> : d}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </>
             )}
+
             {regraForm.tipo === "dinamica" && (
-              <div className="grid grid-cols-2 gap-3">
+              <>
                 <div className="space-y-2">
                   <Label>Mês *</Label>
-                  <select value={regraForm.mes ?? ""} onChange={(e) => setRegraForm({ ...regraForm, mes: Number(e.target.value) })} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <select
+                    value={regraForm.meses?.[0] ?? ""}
+                    onChange={(e) => setRegraForm({ ...regraForm, meses: [parseInt(e.target.value)] })}
+                    className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
                     <option value="">Selecione</option>
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                    {MESES.map(m => (
                       <option key={m} value={m}>{getMonthName(m)}</option>
                     ))}
                   </select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Dia da Semana *</Label>
-                  <select value={regraForm.dia_semana ?? ""} onChange={(e) => setRegraForm({ ...regraForm, dia_semana: Number(e.target.value) })} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    <option value="">Selecione</option>
-                    <option value="0">Domingo</option>
-                    <option value="1">Segunda-feira</option>
-                    <option value="2">Terça-feira</option>
-                    <option value="3">Quarta-feira</option>
-                    <option value="4">Quinta-feira</option>
-                    <option value="5">Sexta-feira</option>
-                    <option value="6">Sábado</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Dia da Semana *</Label>
+                    <select
+                      value={regraForm.dia_semana ?? ""}
+                      onChange={(e) => setRegraForm({ ...regraForm, dia_semana: parseInt(e.target.value) })}
+                      className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <option value="">Selecione</option>
+                      <option value="0">Domingo</option>
+                      <option value="1">Segunda</option>
+                      <option value="2">Terça</option>
+                      <option value="3">Quarta</option>
+                      <option value="4">Quinta</option>
+                      <option value="5">Sexta</option>
+                      <option value="6">Sábado</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Ordinal *</Label>
+                    <select
+                      value={regraForm.ordinal ?? ""}
+                      onChange={(e) => setRegraForm({ ...regraForm, ordinal: parseInt(e.target.value) })}
+                      className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <option value="">Selecione</option>
+                      <option value="1">Primeiro</option>
+                      <option value="2">Segundo</option>
+                      <option value="3">Terceiro</option>
+                      <option value="4">Quarto</option>
+                      <option value="5">Quinto</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="col-span-2 space-y-2">
-                  <Label>Ordinal *</Label>
-                  <select value={regraForm.ordinal ?? ""} onChange={(e) => setRegraForm({ ...regraForm, ordinal: Number(e.target.value) })} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    <option value="">Selecione</option>
-                    <option value="1">Primeiro</option>
-                    <option value="2">Segundo</option>
-                    <option value="3">Terceiro</option>
-                    <option value="4">Quarto</option>
-                    <option value="5">Quinto</option>
-                  </select>
-                </div>
-              </div>
+              </>
             )}
+
             {regraForm.tipo === "pos_pagamento" && (
               <div className="space-y-2">
                 <Label>Mês *</Label>
-                <select value={regraForm.mes ?? ""} onChange={(e) => setRegraForm({ ...regraForm, mes: Number(e.target.value) })} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <select
+                  value={regraForm.meses?.[0] ?? ""}
+                  onChange={(e) => setRegraForm({ ...regraForm, meses: [parseInt(e.target.value)] })}
+                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
                   <option value="">Selecione</option>
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                  {MESES.map(m => (
                     <option key={m} value={m}>{getMonthName(m)}</option>
                   ))}
                 </select>
               </div>
             )}
 
-            {/* Seleção de Unidades */}
+            {/* Unidades */}
             <div className="space-y-2">
               <Label className="text-base font-semibold">Unidades (opcional)</Label>
               <p className="text-sm text-muted-foreground">
@@ -570,8 +784,15 @@ export default function BloqueiosPage() {
               </div>
             </div>
 
+            {/* Ativo */}
             <div className="flex items-center gap-2">
-              <input type="checkbox" id="ativo" checked={regraForm.ativo ?? true} onChange={(e) => setRegraForm({ ...regraForm, ativo: e.target.checked })} className="size-4" />
+              <input
+                type="checkbox"
+                id="ativo"
+                checked={regraForm.ativo ?? true}
+                onChange={(e) => setRegraForm({ ...regraForm, ativo: e.target.checked })}
+                className="size-4"
+              />
               <Label htmlFor="ativo">Ativa</Label>
             </div>
           </div>
@@ -582,7 +803,7 @@ export default function BloqueiosPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de Datas Manuais */}
+      {/* Dialog de Datas Manuais (igual) */}
       <Dialog open={isDataDialogOpen} onOpenChange={(o) => !o && closeDataDialog()}>
         <DialogContent className="max-w-md">
           <DialogHeader>
