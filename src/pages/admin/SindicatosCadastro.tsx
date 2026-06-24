@@ -6,7 +6,6 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -36,11 +35,7 @@ import {
   Plus,
   Pencil,
   Trash2,
-  FileText,
-  Download,
-  Eye,
   Building2,
-  Upload,
   Check,
 } from "lucide-react";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
@@ -71,19 +66,8 @@ interface Sindicato {
   cnpj: string | null;
   tipo: "laboral" | "patronal" | null;
   contato_whatsapp: string | null;
-  grupo_id: string | null;
   created_at: string;
   updated_at: string;
-}
-
-interface DocumentoSindicato {
-  id: string;
-  sindicato_id: string;
-  ano: number;
-  tipo_documento: "act" | "cct";
-  storage_path: string;
-  nome_pdf: string | null;
-  created_at: string;
 }
 
 interface Unidade {
@@ -96,73 +80,29 @@ interface Cargo {
   nome: string;
 }
 
-const TIPOS_DOCUMENTO = [
-  { value: "act", label: "ACT (Acordo Coletivo de Trabalho)" },
-  { value: "cct", label: "CCT (Convenção Coletiva de Trabalho)" },
-];
+type TipoSindicato = "patronal" | "laboral";
 
-export default function Sindicatos() {
+export default function SindicatosCadastro() {
   const [sindicatos, setSindicatos] = useState<Sindicato[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [cargos, setCargos] = useState<Cargo[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  // --- Estado da ficha unificada ---
+  // Estados para o modal de cadastro/edição (reutilizado para ambos)
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editando, setEditando] = useState<{ grupoId: string | null; patronal: Sindicato | null; laboral: Sindicato | null }>({
-    grupoId: null,
-    patronal: null,
-    laboral: null,
-  });
-
-  const [patronalForm, setPatronalForm] = useState({
+  const [tipoEditando, setTipoEditando] = useState<TipoSindicato>("patronal");
+  const [editando, setEditando] = useState<Sindicato | null>(null);
+  const [form, setForm] = useState({
     nome: "",
     cnpj: "",
     contato_whatsapp: "",
   });
   const [unidadesSelecionadas, setUnidadesSelecionadas] = useState<string[]>([]);
-
-  const [laboralForm, setLaboralForm] = useState({
-    nome: "",
-    cnpj: "",
-    contato_whatsapp: "",
-  });
   const [cargosSelecionados, setCargosSelecionados] = useState<string[]>([]);
 
-  // --- Diálogo de documentos ---
-  const [docDialogOpen, setDocDialogOpen] = useState(false);
-  const [sindicatoSelecionado, setSindicatoSelecionado] = useState<Sindicato | null>(null);
-  const [documentos, setDocumentos] = useState<DocumentoSindicato[]>([]);
-  const [loadingDocs, setLoadingDocs] = useState(false);
-  const [docForm, setDocForm] = useState({
-    ano: new Date().getFullYear(),
-    tipo_documento: "act" as "act" | "cct",
-    arquivo: null as File | null,
-  });
-  const [uploadingDoc, setUploadingDoc] = useState(false);
-
-  // --- Edição de documento ---
-  const [editDocDialogOpen, setEditDocDialogOpen] = useState(false);
-  const [editandoDoc, setEditandoDoc] = useState<DocumentoSindicato | null>(null);
-  const [editDocForm, setEditDocForm] = useState({
-    ano: new Date().getFullYear(),
-    tipo_documento: "act" as "act" | "cct",
-  });
-
-  // --- Exclusão e preview ---
-  const [confirmDelete, setConfirmDelete] = useState<{ grupoId: string | null; patronal: Sindicato | null; laboral: Sindicato | null }>({
-    grupoId: null,
-    patronal: null,
-    laboral: null,
-  });
-  const [deletingDoc, setDeletingDoc] = useState<DocumentoSindicato | null>(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  // Filtros
-  const [filtroNome, setFiltroNome] = useState("");
-  const [filtroTipo, setFiltroTipo] = useState("todos");
+  // Confirmação de exclusão
+  const [confirmDelete, setConfirmDelete] = useState<Sindicato | null>(null);
 
   // --- Loaders ---
   const loadData = useCallback(async () => {
@@ -193,431 +133,183 @@ export default function Sindicatos() {
     loadData();
   }, [loadData]);
 
-  const loadDocumentos = useCallback(async (sindicatoId: string) => {
-    setLoadingDocs(true);
-    try {
-      const { data, error } = await supabase
-        .from("documentos_sindicato")
-        .select("*")
-        .eq("sindicato_id", sindicatoId)
-        .order("ano", { ascending: false });
-
-      if (error) throw error;
-      setDocumentos(data ?? []);
-    } catch (error) {
-      console.error("Erro ao carregar documentos:", error);
-      toast.error("Erro ao carregar documentos");
-    } finally {
-      setLoadingDocs(false);
-    }
-  }, []);
-
   // --- Handlers de formatação ---
-  const handleCNPJChange = (setter: any, field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    setter((prev: any) => ({ ...prev, [field]: formatCNPJ(e.target.value) }));
+  const handleCNPJChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm({ ...form, cnpj: formatCNPJ(e.target.value) });
   };
-  const handleWhatsAppChange = (setter: any, field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    setter((prev: any) => ({ ...prev, [field]: formatWhatsApp(e.target.value) }));
+  const handleWhatsAppChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm({ ...form, contato_whatsapp: formatWhatsApp(e.target.value) });
   };
 
-  // --- Abrir diálogo de documentos ---
-  const abrirDocDialog = (sindicato: Sindicato) => {
-    setSindicatoSelecionado(sindicato);
-    setDocForm({
-      ano: new Date().getFullYear(),
-      tipo_documento: "act",
-      arquivo: null,
+  // --- Abrir modal para novo cadastro ---
+  const abrirNovo = (tipo: TipoSindicato) => {
+    setTipoEditando(tipo);
+    setEditando(null);
+    setForm({ nome: "", cnpj: "", contato_whatsapp: "" });
+    setUnidadesSelecionadas([]);
+    setCargosSelecionados([]);
+    setDialogOpen(true);
+  };
+
+  // --- Abrir modal para edição ---
+  const abrirEdicao = (sindicato: Sindicato) => {
+    setTipoEditando(sindicato.tipo as TipoSindicato);
+    setEditando(sindicato);
+    setForm({
+      nome: sindicato.nome,
+      cnpj: sindicato.cnpj ? formatCNPJ(sindicato.cnpj) : "",
+      contato_whatsapp: sindicato.contato_whatsapp ? formatWhatsApp(sindicato.contato_whatsapp) : "",
     });
-    setDocDialogOpen(true);
-    loadDocumentos(sindicato.id);
+    setUnidadesSelecionadas([]);
+    setCargosSelecionados([]);
+    // Carregar vínculos
+    if (sindicato.tipo === "patronal") {
+      supabase
+        .from("sindicato_unidades")
+        .select("unidade_id")
+        .eq("sindicato_id", sindicato.id)
+        .then(({ data }) => {
+          setUnidadesSelecionadas(data?.map(d => d.unidade_id) ?? []);
+        });
+    } else if (sindicato.tipo === "laboral") {
+      supabase
+        .from("sindicato_cargos")
+        .select("cargo_id")
+        .eq("sindicato_id", sindicato.id)
+        .then(({ data }) => {
+          setCargosSelecionados(data?.map(d => d.cargo_id) ?? []);
+        });
+    }
+    setDialogOpen(true);
   };
 
-  // --- Edição de documento (corrigida) ---
-  const abrirEdicaoDoc = (doc: DocumentoSindicato) => {
-    console.log("📝 Abrindo edição do documento:", doc);
-    setEditandoDoc(doc);
-    setEditDocForm({
-      ano: doc.ano,
-      tipo_documento: doc.tipo_documento,
-    });
-    setEditDocDialogOpen(true);
-  };
-
-  const salvarEdicaoDoc = async () => {
-    if (!editandoDoc) {
-      console.error("❌ Nenhum documento selecionado para editar");
-      toast.error("Erro: documento não selecionado");
+  // --- Salvar (criar ou atualizar) ---
+  const salvarSindicato = async () => {
+    if (!form.nome.trim()) {
+      toast.error("Nome do sindicato é obrigatório");
       return;
     }
 
-    console.log("💾 Salvando edição do documento:", {
-      id: editandoDoc.id,
-      novoAno: editDocForm.ano,
-      novoTipo: editDocForm.tipo_documento,
-    });
-
-    try {
-      const { data, error } = await supabase
-        .from("documentos_sindicato")
-        .update({
-          ano: editDocForm.ano,
-          tipo_documento: editDocForm.tipo_documento,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", editandoDoc.id)
-        .select();
-
-      if (error) {
-        console.error("❌ Erro no update:", error);
-        toast.error("Erro ao atualizar documento: " + error.message);
-        return;
-      }
-
-      console.log("✅ Documento atualizado com sucesso:", data);
-      toast.success("Documento atualizado!");
-
-      // Fechar diálogo de edição
-      setEditDocDialogOpen(false);
-      setEditandoDoc(null);
-
-      // 🔥 FORÇA RECARREGAMENTO GERAL (mais seguro)
-      console.log("🔄 Recarregando todos os dados (loadData) para garantir atualização");
-      await loadData();
-
-      // Se o diálogo de documentos estiver aberto, recarregar também a lista específica
-      if (sindicatoSelecionado) {
-        console.log("🔄 Recarregando documentos do sindicato específico:", sindicatoSelecionado.id);
-        await loadDocumentos(sindicatoSelecionado.id);
-      } else {
-        console.warn("⚠️ Nenhum sindicato selecionado para recarregar documentos específicos");
-      }
-    } catch (error) {
-      console.error("❌ Erro inesperado:", error);
-      toast.error("Erro ao editar documento");
-    }
-  };
-
-  // --- Abrir edição da ficha ---
-  const abrirEdicao = async (sindicato: Sindicato) => {
-    setBusy(true);
-    try {
-      let grupoId = sindicato.grupo_id;
-      let patronal: Sindicato | null = null;
-      let laboral: Sindicato | null = null;
-
-      if (grupoId) {
-        const { data: grupo } = await supabase
-          .from("sindicatos")
-          .select("*")
-          .eq("grupo_id", grupoId);
-        patronal = grupo?.find((s: any) => s.tipo === "patronal") || null;
-        laboral = grupo?.find((s: any) => s.tipo === "laboral") || null;
-      } else {
-        const { data } = await supabase
-          .from("sindicatos")
-          .select("*")
-          .or(`nome.eq.${sindicato.nome},cnpj.eq.${sindicato.cnpj}`)
-          .neq("id", sindicato.id);
-        const outro = data?.find((s: any) => s.tipo !== sindicato.tipo) || null;
-        patronal = sindicato.tipo === "patronal" ? sindicato : outro;
-        laboral = sindicato.tipo === "patronal" ? outro : sindicato;
-        if (patronal && laboral) {
-          grupoId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
-          await supabase.from("sindicatos").update({ grupo_id: grupoId }).eq("id", patronal.id);
-          await supabase.from("sindicatos").update({ grupo_id: grupoId }).eq("id", laboral.id);
-          const { data: updated } = await supabase.from("sindicatos").select("*").eq("grupo_id", grupoId);
-          patronal = updated?.find((s: any) => s.tipo === "patronal") || null;
-          laboral = updated?.find((s: any) => s.tipo === "laboral") || null;
-        }
-      }
-
-      setEditando({ grupoId, patronal, laboral });
-
-      if (patronal) {
-        setPatronalForm({
-          nome: patronal.nome,
-          cnpj: patronal.cnpj ? formatCNPJ(patronal.cnpj) : "",
-          contato_whatsapp: patronal.contato_whatsapp ? formatWhatsApp(patronal.contato_whatsapp) : "",
-        });
-        const { data: vinculos } = await supabase
-          .from("sindicato_unidades")
-          .select("unidade_id")
-          .eq("sindicato_id", patronal.id);
-        setUnidadesSelecionadas(vinculos?.map(v => v.unidade_id) ?? []);
-      } else {
-        setPatronalForm({ nome: "", cnpj: "", contato_whatsapp: "" });
-        setUnidadesSelecionadas([]);
-      }
-
-      if (laboral) {
-        setLaboralForm({
-          nome: laboral.nome,
-          cnpj: laboral.cnpj ? formatCNPJ(laboral.cnpj) : "",
-          contato_whatsapp: laboral.contato_whatsapp ? formatWhatsApp(laboral.contato_whatsapp) : "",
-        });
-        const { data: vinculos } = await supabase
-          .from("sindicato_cargos")
-          .select("cargo_id")
-          .eq("sindicato_id", laboral.id);
-        setCargosSelecionados(vinculos?.map(v => v.cargo_id) ?? []);
-      } else {
-        setLaboralForm({ nome: "", cnpj: "", contato_whatsapp: "" });
-        setCargosSelecionados([]);
-      }
-
-      setDialogOpen(true);
-    } catch (error) {
-      console.error("Erro ao abrir edição:", error);
-      toast.error("Erro ao carregar dados para edição");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // --- Salvar ficha unificada ---
-  const salvarFichaUnificada = async () => {
-    if (!patronalForm.nome.trim()) {
-      toast.error("Nome do sindicato patronal é obrigatório");
-      return;
-    }
-    if (unidadesSelecionadas.length === 0) {
+    // Validações específicas
+    if (tipoEditando === "patronal" && unidadesSelecionadas.length === 0) {
       toast.error("Selecione pelo menos uma unidade para o sindicato patronal");
       return;
     }
-    if (!laboralForm.nome.trim()) {
-      toast.error("Nome do sindicato laboral é obrigatório");
-      return;
-    }
-    if (cargosSelecionados.length === 0) {
+    if (tipoEditando === "laboral" && cargosSelecionados.length === 0) {
       toast.error("Selecione pelo menos um cargo para o sindicato laboral");
       return;
     }
 
     setBusy(true);
     try {
-      let grupoId = editando.grupoId;
-      if (!grupoId) {
-        grupoId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
-      }
-
-      // 1. Patronal
-      const patronalDados = {
-        nome: patronalForm.nome.trim(),
-        cnpj: patronalForm.cnpj ? onlyNumbers(patronalForm.cnpj) : null,
-        tipo: "patronal" as const,
-        contato_whatsapp: patronalForm.contato_whatsapp ? onlyNumbers(patronalForm.contato_whatsapp) : null,
-        grupo_id: grupoId,
+      const dados = {
+        nome: form.nome.trim(),
+        cnpj: form.cnpj ? onlyNumbers(form.cnpj) : null,
+        tipo: tipoEditando,
+        contato_whatsapp: form.contato_whatsapp ? onlyNumbers(form.contato_whatsapp) : null,
         updated_at: new Date().toISOString(),
       };
 
-      let patronalId: string;
-      if (editando.patronal) {
+      let id: string;
+      if (editando) {
         const { error } = await supabase
           .from("sindicatos")
-          .update(patronalDados)
-          .eq("id", editando.patronal.id);
+          .update(dados)
+          .eq("id", editando.id);
         if (error) throw error;
-        patronalId = editando.patronal.id;
+        id = editando.id;
+        toast.success("Sindicato atualizado!");
       } else {
         const { data, error } = await supabase
           .from("sindicatos")
-          .insert(patronalDados)
+          .insert(dados)
           .select("id")
           .single();
         if (error) throw error;
-        patronalId = data.id;
+        id = data.id;
+        toast.success("Sindicato criado!");
       }
 
-      await supabase.from("sindicato_unidades").delete().eq("sindicato_id", patronalId);
-      if (unidadesSelecionadas.length > 0) {
-        const inserts = unidadesSelecionadas.map(unidade_id => ({
-          sindicato_id: patronalId,
-          unidade_id,
-        }));
-        const { error } = await supabase.from("sindicato_unidades").insert(inserts);
-        if (error) throw error;
-      }
-
-      // 2. Laboral
-      const laboralDados = {
-        nome: laboralForm.nome.trim(),
-        cnpj: laboralForm.cnpj ? onlyNumbers(laboralForm.cnpj) : null,
-        tipo: "laboral" as const,
-        contato_whatsapp: laboralForm.contato_whatsapp ? onlyNumbers(laboralForm.contato_whatsapp) : null,
-        grupo_id: grupoId,
-        updated_at: new Date().toISOString(),
-      };
-
-      let laboralId: string;
-      if (editando.laboral) {
-        const { error } = await supabase
-          .from("sindicatos")
-          .update(laboralDados)
-          .eq("id", editando.laboral.id);
-        if (error) throw error;
-        laboralId = editando.laboral.id;
+      // Atualizar vínculos
+      if (tipoEditando === "patronal") {
+        await supabase.from("sindicato_unidades").delete().eq("sindicato_id", id);
+        if (unidadesSelecionadas.length > 0) {
+          const inserts = unidadesSelecionadas.map(unidade_id => ({
+            sindicato_id: id,
+            unidade_id,
+          }));
+          await supabase.from("sindicato_unidades").insert(inserts);
+        }
       } else {
-        const { data, error } = await supabase
-          .from("sindicatos")
-          .insert(laboralDados)
-          .select("id")
-          .single();
-        if (error) throw error;
-        laboralId = data.id;
+        await supabase.from("sindicato_cargos").delete().eq("sindicato_id", id);
+        if (cargosSelecionados.length > 0) {
+          const inserts = cargosSelecionados.map(cargo_id => ({
+            sindicato_id: id,
+            cargo_id,
+          }));
+          await supabase.from("sindicato_cargos").insert(inserts);
+        }
       }
 
-      await supabase.from("sindicato_cargos").delete().eq("sindicato_id", laboralId);
-      if (cargosSelecionados.length > 0) {
-        const inserts = cargosSelecionados.map(cargo_id => ({
-          sindicato_id: laboralId,
-          cargo_id,
-        }));
-        const { error } = await supabase.from("sindicato_cargos").insert(inserts);
-        if (error) throw error;
-      }
-
-      toast.success("Ficha salva com sucesso!");
       setDialogOpen(false);
-      setEditando({ grupoId: null, patronal: null, laboral: null });
-      setPatronalForm({ nome: "", cnpj: "", contato_whatsapp: "" });
-      setLaboralForm({ nome: "", cnpj: "", contato_whatsapp: "" });
+      setEditando(null);
+      setForm({ nome: "", cnpj: "", contato_whatsapp: "" });
       setUnidadesSelecionadas([]);
       setCargosSelecionados([]);
       loadData();
     } catch (error) {
-      console.error("Erro ao salvar ficha:", error);
-      toast.error("Erro ao salvar ficha", { description: (error as Error).message });
+      console.error("Erro ao salvar:", error);
+      toast.error("Erro ao salvar", { description: (error as Error).message });
     } finally {
       setBusy(false);
     }
   };
 
-  // --- Excluir grupo ---
-  const excluirGrupo = async () => {
-    const ids = [];
-    if (confirmDelete.patronal) ids.push(confirmDelete.patronal.id);
-    if (confirmDelete.laboral) ids.push(confirmDelete.laboral.id);
-    if (ids.length === 0) return;
-
+  // --- Excluir ---
+  const excluirSindicato = async () => {
+    if (!confirmDelete) return;
     setBusy(true);
     try {
-      for (const id of ids) {
-        const { data: docs } = await supabase
-          .from("documentos_sindicato")
-          .select("storage_path")
-          .eq("sindicato_id", id);
-        if (docs && docs.length > 0) {
-          const paths = docs.map(d => d.storage_path);
-          await supabase.storage.from("sindicatos").remove(paths);
-        }
+      // Remover vínculos e documentos (se houver)
+      await supabase.from("sindicato_unidades").delete().eq("sindicato_id", confirmDelete.id);
+      await supabase.from("sindicato_cargos").delete().eq("sindicato_id", confirmDelete.id);
+      // Remover documentos do storage (se houver)
+      const { data: docs } = await supabase
+        .from("documentos_sindicato")
+        .select("storage_path")
+        .eq("sindicato_id", confirmDelete.id);
+      if (docs && docs.length > 0) {
+        const paths = docs.map(d => d.storage_path);
+        await supabase.storage.from("sindicatos").remove(paths);
       }
-      const { error } = await supabase.from("sindicatos").delete().in("id", ids);
+      await supabase.from("documentos_sindicato").delete().eq("sindicato_id", confirmDelete.id);
+
+      const { error } = await supabase
+        .from("sindicatos")
+        .delete()
+        .eq("id", confirmDelete.id);
       if (error) throw error;
-      toast.success("Grupo de sindicatos excluído!");
-      setConfirmDelete({ grupoId: null, patronal: null, laboral: null });
+
+      toast.success("Sindicato excluído!");
+      setConfirmDelete(null);
       loadData();
     } catch (error) {
       console.error("Erro ao excluir:", error);
-      toast.error("Erro ao excluir grupo", { description: (error as Error).message });
+      toast.error("Erro ao excluir sindicato");
     } finally {
       setBusy(false);
     }
   };
 
-  // --- Documentos (upload, delete, preview, download) ---
-  const uploadDocumento = async () => {
-    if (!sindicatoSelecionado) return;
-    if (!docForm.arquivo) {
-      toast.error("Selecione um arquivo PDF");
-      return;
-    }
-
-    setUploadingDoc(true);
-    try {
-      const path = `sindicato_${sindicatoSelecionado.id}/${docForm.tipo_documento}_${docForm.ano}.pdf`;
-      await supabase.storage.from("sindicatos").upload(path, docForm.arquivo, { upsert: true });
-      await supabase.from("documentos_sindicato").insert({
-        sindicato_id: sindicatoSelecionado.id,
-        ano: docForm.ano,
-        tipo_documento: docForm.tipo_documento,
-        storage_path: path,
-        nome_pdf: docForm.arquivo.name,
-      });
-      toast.success("Documento anexado!");
-      setDocForm({ ...docForm, arquivo: null });
-      loadDocumentos(sindicatoSelecionado.id);
-    } catch (error) {
-      console.error("Erro no upload:", error);
-      toast.error("Erro ao anexar documento");
-    } finally {
-      setUploadingDoc(false);
-    }
-  };
-
-  const excluirDocumento = async () => {
-    if (!deletingDoc) return;
-    try {
-      await supabase.storage.from("sindicatos").remove([deletingDoc.storage_path]);
-      await supabase.from("documentos_sindicato").delete().eq("id", deletingDoc.id);
-      toast.success("Documento removido!");
-      setDeletingDoc(null);
-      if (sindicatoSelecionado) loadDocumentos(sindicatoSelecionado.id);
-    } catch (error) {
-      console.error("Erro ao excluir documento:", error);
-      toast.error("Erro ao excluir documento");
-    }
-  };
-
-  const handleDownload = async (doc: DocumentoSindicato) => {
-    const { data } = await supabase.storage.from("sindicatos").createSignedUrl(doc.storage_path, 60);
-    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
-    else toast.error("Erro ao gerar link");
-  };
-
-  const handlePreview = async (doc: DocumentoSindicato) => {
-    const { data } = await supabase.storage.from("sindicatos").createSignedUrl(doc.storage_path, 60);
-    if (data?.signedUrl) {
-      setPreviewUrl(data.signedUrl);
-      setPreviewOpen(true);
-    } else toast.error("Erro ao gerar visualização");
-  };
-
   // --- Helpers ---
-  const getTipoLabel = (tipo: string | null) => (tipo === "patronal" ? "Patronal" : tipo === "laboral" ? "Laboral" : "—");
-  const getDocTipoLabel = (tipo: string) => TIPOS_DOCUMENTO.find(t => t.value === tipo)?.label || tipo;
-
   const toggleUnidade = (id: string) =>
     setUnidadesSelecionadas(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
   const toggleCargo = (id: string) =>
     setCargosSelecionados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
-  // --- Agrupamento ---
-  const grupos = useMemo(() => {
-    const map = new Map<string, { patronal: Sindicato | null; laboral: Sindicato | null }>();
-    for (const s of sindicatos) {
-      const key = s.grupo_id || s.id;
-      if (!map.has(key)) {
-        map.set(key, { patronal: null, laboral: null });
-      }
-      const grupo = map.get(key)!;
-      if (s.tipo === "patronal") grupo.patronal = s;
-      else if (s.tipo === "laboral") grupo.laboral = s;
-    }
-    return Array.from(map.values());
-  }, [sindicatos]);
-
-  const gruposFiltrados = useMemo(() => {
-    return grupos.filter(g => {
-      const p = g.patronal;
-      const l = g.laboral;
-      const nomeMatch = (p?.nome || "").toLowerCase().includes(filtroNome.toLowerCase()) ||
-                        (l?.nome || "").toLowerCase().includes(filtroNome.toLowerCase());
-      const tipoMatch = filtroTipo === "todos" ||
-                        (filtroTipo === "patronal" && p) ||
-                        (filtroTipo === "laboral" && l);
-      return nomeMatch && tipoMatch;
-    });
-  }, [grupos, filtroNome, filtroTipo]);
+  const getSindicatosPorTipo = (tipo: TipoSindicato) =>
+    sindicatos.filter(s => s.tipo === tipo);
 
   // --- Renderização ---
   return (
@@ -625,319 +317,222 @@ export default function Sindicatos() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-            <Building2 className="size-6 text-primary" /> Sindicatos
+            <Building2 className="size-6 text-primary" /> Cadastro de Sindicatos
           </h1>
-          <p className="text-muted-foreground mt-1">Cadastro unificado de sindicatos patronal e laboral.</p>
+          <p className="text-muted-foreground mt-1">
+            Gerencie sindicatos patronais e laborais separadamente.
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <FavoritarBotao rota="/admin/sindicatos" label="Sindicatos" icone="Building2" />
-          <Button onClick={() => {
-            setEditando({ grupoId: null, patronal: null, laboral: null });
-            setPatronalForm({ nome: "", cnpj: "", contato_whatsapp: "" });
-            setLaboralForm({ nome: "", cnpj: "", contato_whatsapp: "" });
-            setUnidadesSelecionadas([]);
-            setCargosSelecionados([]);
-            setDialogOpen(true);
-          }}>
-            <Plus className="size-4 mr-2" /> Nova Ficha
-          </Button>
-        </div>
-      </div>
-
-      {/* Filtros */}
-      <div className="bg-card border border-border rounded-2xl p-4 flex flex-wrap gap-4 items-end">
-        <div className="space-y-2 flex-1 min-w-[200px]">
-          <Label className="text-xs font-bold uppercase text-muted-foreground">Buscar</Label>
-          <Input placeholder="Nome..." value={filtroNome} onChange={e => setFiltroNome(e.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <Label className="text-xs font-bold uppercase text-muted-foreground">Tipo</Label>
-          <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Todos" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos</SelectItem>
-              <SelectItem value="patronal">Patronal</SelectItem>
-              <SelectItem value="laboral">Laboral</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <Button variant="ghost" size="sm" onClick={() => { setFiltroNome(""); setFiltroTipo("todos"); }}>Limpar</Button>
+        <FavoritarBotao rota="/admin/sindicatos/cadastro" label="Cadastro Sindicatos" icone="Building2" />
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center p-12"><Loader2 className="size-8 animate-spin text-muted-foreground" /></div>
-      ) : gruposFiltrados.length === 0 ? (
-        <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">Nenhum grupo de sindicatos cadastrado.</div>
+        <div className="flex items-center justify-center p-12">
+          <Loader2 className="size-8 animate-spin text-muted-foreground" />
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {gruposFiltrados.map((g, idx) => {
-            const p = g.patronal;
-            const l = g.laboral;
-            return (
-              <Card key={idx} className="border-border shadow-sm hover:shadow-md transition-all">
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between">
-                    <CardTitle className="text-lg truncate">
-                      {p?.nome && l?.nome ? (
-                        <span>{p.nome} / {l.nome}</span>
-                      ) : (
-                        p?.nome || l?.nome || "Sem nome"
-                      )}
-                    </CardTitle>
-                    <div className="flex gap-1">
-                      <Badge variant={p ? "secondary" : "outline"}>{p ? "Patronal" : "—"}</Badge>
-                      <Badge variant={l ? "default" : "outline"}>{l ? "Laboral" : "—"}</Badge>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {p && (
-                    <div className="text-sm">
-                      <span className="font-medium">Patronal:</span> {p.nome}
-                      {p.cnpj && <span className="text-muted-foreground ml-2">CNPJ: {formatCNPJ(p.cnpj)}</span>}
-                      {p.contato_whatsapp && <span className="text-muted-foreground ml-2">WhatsApp: {formatWhatsApp(p.contato_whatsapp)}</span>}
-                    </div>
-                  )}
-                  {l && (
-                    <div className="text-sm">
-                      <span className="font-medium">Laboral:</span> {l.nome}
-                      {l.cnpj && <span className="text-muted-foreground ml-2">CNPJ: {formatCNPJ(l.cnpj)}</span>}
-                      {l.contato_whatsapp && <span className="text-muted-foreground ml-2">WhatsApp: {formatWhatsApp(l.contato_whatsapp)}</span>}
-                    </div>
-                  )}
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                      onClick={() => {
-                        const target = p || l;
-                        if (target) abrirDocDialog(target);
-                      }}
-                    >
-                      <FileText className="size-4 mr-1" /> Documentos
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8"
-                      onClick={() => {
-                        const target = p || l;
-                        if (target) abrirEdicao(target);
-                      }}
-                    >
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 text-red-500"
-                      onClick={() => setConfirmDelete({ grupoId: p?.grupo_id || l?.grupo_id || null, patronal: p, laboral: l })}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* -------- SINDICATOS PATRONAIS -------- */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-primary">Patronais</h2>
+              <Button onClick={() => abrirNovo("patronal")}>
+                <Plus className="size-4 mr-2" /> Novo Patronal
+              </Button>
+            </div>
+            {getSindicatosPorTipo("patronal").length === 0 ? (
+              <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
+                Nenhum sindicato patronal cadastrado.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {getSindicatosPorTipo("patronal").map(s => (
+                  <Card key={s.id} className="border-border shadow-sm">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between">
+                        <CardTitle className="text-base">{s.nome}</CardTitle>
+                        <Badge variant="secondary">Patronal</Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-1 text-sm">
+                      {s.cnpj && <div><span className="font-medium">CNPJ:</span> {formatCNPJ(s.cnpj)}</div>}
+                      {s.contato_whatsapp && <div><span className="font-medium">WhatsApp:</span> {formatWhatsApp(s.contato_whatsapp)}</div>}
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <Button variant="ghost" size="sm" onClick={() => abrirEdicao(s)}>
+                          <Pencil className="size-4 mr-1" /> Editar
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-red-500" onClick={() => setConfirmDelete(s)}>
+                          <Trash2 className="size-4 mr-1" /> Excluir
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* -------- SINDICATOS LABORAIS -------- */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-primary">Laborais</h2>
+              <Button onClick={() => abrirNovo("laboral")}>
+                <Plus className="size-4 mr-2" /> Novo Laboral
+              </Button>
+            </div>
+            {getSindicatosPorTipo("laboral").length === 0 ? (
+              <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
+                Nenhum sindicato laboral cadastrado.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {getSindicatosPorTipo("laboral").map(s => (
+                  <Card key={s.id} className="border-border shadow-sm">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between">
+                        <CardTitle className="text-base">{s.nome}</CardTitle>
+                        <Badge variant="default">Laboral</Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-1 text-sm">
+                      {s.cnpj && <div><span className="font-medium">CNPJ:</span> {formatCNPJ(s.cnpj)}</div>}
+                      {s.contato_whatsapp && <div><span className="font-medium">WhatsApp:</span> {formatWhatsApp(s.contato_whatsapp)}</div>}
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <Button variant="ghost" size="sm" onClick={() => abrirEdicao(s)}>
+                          <Pencil className="size-4 mr-1" /> Editar
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-red-500" onClick={() => setConfirmDelete(s)}>
+                          <Trash2 className="size-4 mr-1" /> Excluir
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* === DIALOG UNIFICADO === */}
+      {/* Modal de cadastro/edição (reutilizado) */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {editando.patronal?.nome && editando.laboral?.nome ? (
-                `${editando.patronal.nome} / ${editando.laboral.nome}`
-              ) : (
-                editando.patronal?.nome || editando.laboral?.nome || "Nova Ficha"
-              )}
+              {editando ? "Editar" : "Novo"} Sindicato {tipoEditando === "patronal" ? "Patronal" : "Laboral"}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-6 py-4">
-            {/* ---- Patronal ---- */}
-            <div className="space-y-4 border-b border-border pb-6">
-              <h3 className="text-lg font-semibold text-primary">Sindicato Patronal</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Nome *</Label><Input value={patronalForm.nome} onChange={e => setPatronalForm({ ...patronalForm, nome: e.target.value })} placeholder="Nome" /></div>
-                <div className="space-y-2"><Label>CNPJ</Label><Input value={patronalForm.cnpj} onChange={handleCNPJChange(setPatronalForm, "cnpj")} placeholder="00.000.000/0000-00" maxLength={18} /></div>
-              </div>
-              <div className="space-y-2"><Label>WhatsApp</Label><Input value={patronalForm.contato_whatsapp} onChange={handleWhatsAppChange(setPatronalForm, "contato_whatsapp")} placeholder="(62) 99999-9999" maxLength={15} /></div>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nome *</Label>
+              <Input
+                value={form.nome}
+                onChange={(e) => setForm({ ...form, nome: e.target.value })}
+                placeholder="Nome do sindicato"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>CNPJ</Label>
+              <Input
+                value={form.cnpj}
+                onChange={handleCNPJChange}
+                placeholder="00.000.000/0000-00"
+                maxLength={18}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>WhatsApp</Label>
+              <Input
+                value={form.contato_whatsapp}
+                onChange={handleWhatsAppChange}
+                placeholder="(62) 99999-9999"
+                maxLength={15}
+              />
+            </div>
+
+            {tipoEditando === "patronal" && (
               <div className="space-y-3">
                 <Label className="text-base font-semibold">Unidades Representadas *</Label>
                 <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-border rounded-lg p-3">
                   {unidades.map(un => (
                     <div key={un.id} className="flex items-center gap-2">
-                      <button type="button" onClick={() => toggleUnidade(un.id)} className={cn("size-5 rounded border-2 flex items-center justify-center", unidadesSelecionadas.includes(un.id) ? "bg-primary border-primary text-white" : "border-muted-foreground/30")}>
+                      <button
+                        type="button"
+                        onClick={() => toggleUnidade(un.id)}
+                        className={cn(
+                          "size-5 rounded border-2 flex items-center justify-center transition-all",
+                          unidadesSelecionadas.includes(un.id)
+                            ? "bg-primary border-primary text-white"
+                            : "border-muted-foreground/30 hover:border-primary/50"
+                        )}
+                      >
                         {unidadesSelecionadas.includes(un.id) && <Check className="size-3" />}
                       </button>
                       <Label className="text-sm cursor-pointer">{un.nome}</Label>
                     </div>
                   ))}
                 </div>
-                {unidadesSelecionadas.length === 0 && <p className="text-xs text-red-500">* Selecione pelo menos uma unidade</p>}
+                {unidadesSelecionadas.length === 0 && (
+                  <p className="text-xs text-red-500">* Selecione pelo menos uma unidade</p>
+                )}
               </div>
-            </div>
+            )}
 
-            {/* ---- Laboral ---- */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-primary">Sindicato Laboral</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Nome *</Label><Input value={laboralForm.nome} onChange={e => setLaboralForm({ ...laboralForm, nome: e.target.value })} placeholder="Nome" /></div>
-                <div className="space-y-2"><Label>CNPJ</Label><Input value={laboralForm.cnpj} onChange={handleCNPJChange(setLaboralForm, "cnpj")} placeholder="00.000.000/0000-00" maxLength={18} /></div>
-              </div>
-              <div className="space-y-2"><Label>WhatsApp</Label><Input value={laboralForm.contato_whatsapp} onChange={handleWhatsAppChange(setLaboralForm, "contato_whatsapp")} placeholder="(62) 99999-9999" maxLength={15} /></div>
+            {tipoEditando === "laboral" && (
               <div className="space-y-3">
                 <Label className="text-base font-semibold">Cargos Representados *</Label>
                 <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-border rounded-lg p-3">
                   {cargos.map(cg => (
                     <div key={cg.id} className="flex items-center gap-2">
-                      <button type="button" onClick={() => toggleCargo(cg.id)} className={cn("size-5 rounded border-2 flex items-center justify-center", cargosSelecionados.includes(cg.id) ? "bg-primary border-primary text-white" : "border-muted-foreground/30")}>
+                      <button
+                        type="button"
+                        onClick={() => toggleCargo(cg.id)}
+                        className={cn(
+                          "size-5 rounded border-2 flex items-center justify-center transition-all",
+                          cargosSelecionados.includes(cg.id)
+                            ? "bg-primary border-primary text-white"
+                            : "border-muted-foreground/30 hover:border-primary/50"
+                        )}
+                      >
                         {cargosSelecionados.includes(cg.id) && <Check className="size-3" />}
                       </button>
                       <Label className="text-sm cursor-pointer">{cg.nome}</Label>
                     </div>
                   ))}
                 </div>
-                {cargosSelecionados.length === 0 && <p className="text-xs text-red-500">* Selecione pelo menos um cargo</p>}
+                {cargosSelecionados.length === 0 && (
+                  <p className="text-xs text-red-500">* Selecione pelo menos um cargo</p>
+                )}
               </div>
-            </div>
+            )}
           </div>
-
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={salvarFichaUnificada} disabled={busy}>
+            <Button onClick={salvarSindicato} disabled={busy}>
               {busy ? <Loader2 className="size-4 animate-spin mr-1" /> : null}
-              {editando.patronal || editando.laboral ? "Salvar" : "Cadastrar"}
+              {editando ? "Salvar" : "Cadastrar"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* === DIÁLOGO DE DOCUMENTOS (gerenciamento) === */}
-      <Dialog open={docDialogOpen} onOpenChange={open => !open && setDocDialogOpen(false)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="size-5 text-primary" />
-              Documentos - {sindicatoSelecionado?.nome}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="border border-dashed rounded-xl p-4 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Ano</Label><Input type="number" value={docForm.ano} onChange={e => setDocForm({ ...docForm, ano: parseInt(e.target.value) || new Date().getFullYear() })} /></div>
-              <div className="space-y-2"><Label>Tipo</Label><Select value={docForm.tipo_documento} onValueChange={(v: any) => setDocForm({ ...docForm, tipo_documento: v })}><SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger><SelectContent>{TIPOS_DOCUMENTO.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent></Select></div>
-            </div>
-            <Input type="file" accept=".pdf" onChange={e => setDocForm({ ...docForm, arquivo: e.target.files?.[0] || null })} />
-            {docForm.arquivo && <p className="text-xs text-muted-foreground">{docForm.arquivo.name}</p>}
-            <Button onClick={uploadDocumento} disabled={uploadingDoc}>{uploadingDoc ? <Loader2 className="size-4 animate-spin mr-1" /> : <Upload className="size-4 mr-1" />} Anexar</Button>
-          </div>
-          <div className="space-y-2">
-            <h4 className="font-semibold">Documentos Anexados</h4>
-            {loadingDocs ? <div className="flex justify-center p-4"><Loader2 className="size-6 animate-spin" /></div>
-            : documentos.length === 0 ? <div className="text-center text-muted-foreground p-4">Nenhum documento.</div>
-            : documentos.map(doc => (
-              <div key={doc.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                <div><div className="font-medium">{getDocTipoLabel(doc.tipo_documento)}</div><div className="text-sm text-muted-foreground">{doc.ano} • {doc.nome_pdf || "PDF"}</div></div>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={() => abrirEdicaoDoc(doc)}>
-                    <Pencil className="size-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => handlePreview(doc)}><Eye className="size-4" /></Button>
-                  <Button variant="ghost" size="icon" onClick={() => handleDownload(doc)}><Download className="size-4" /></Button>
-                  <Button variant="ghost" size="icon" className="text-red-500" onClick={() => setDeletingDoc(doc)}><Trash2 className="size-4" /></Button>
-                </div>
-              </div>
-            ))}
-          </div>
-          <DialogFooter><Button variant="ghost" onClick={() => setDocDialogOpen(false)}>Fechar</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* === DIÁLOGO DE EDIÇÃO DE DOCUMENTO (corrigido) === */}
-      <Dialog open={editDocDialogOpen} onOpenChange={(open) => {
-        if (!open) {
-          setEditandoDoc(null);
-          setEditDocDialogOpen(false);
-        }
-      }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Editar Documento</DialogTitle>
-            <DialogDescription>
-              Altere o ano ou o tipo do documento. O arquivo permanece o mesmo.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Ano</Label>
-              <Input
-                type="number"
-                value={editDocForm.ano}
-                onChange={e => setEditDocForm({ ...editDocForm, ano: parseInt(e.target.value) || new Date().getFullYear() })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Tipo</Label>
-              <Select
-                value={editDocForm.tipo_documento}
-                onValueChange={(v: any) => setEditDocForm({ ...editDocForm, tipo_documento: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIPOS_DOCUMENTO.map(t => (
-                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              O arquivo em si não é alterado, apenas os metadados.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setEditDocDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={salvarEdicaoDoc}>Salvar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Confirmação de exclusão de grupo */}
-      <AlertDialog open={!!confirmDelete.grupoId || !!confirmDelete.patronal || !!confirmDelete.laboral} onOpenChange={o => !o && setConfirmDelete({ grupoId: null, patronal: null, laboral: null })}>
+      {/* Confirmação de exclusão */}
+      <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Excluir ambos os sindicatos?</AlertDialogTitle><AlertDialogDescription>Isso removerá também os documentos. Ação irreversível.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {confirmDelete?.nome}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Todos os vínculos e documentos associados também serão removidos. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={excluirGrupo} className="bg-red-600 text-white hover:bg-red-700">{busy ? <Loader2 className="size-4 animate-spin" /> : "Excluir"}</AlertDialogAction>
+            <AlertDialogAction onClick={excluirSindicato} className="bg-red-600 text-white hover:bg-red-700">
+              {busy ? <Loader2 className="size-4 animate-spin" /> : "Excluir"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Confirmação de exclusão de documento */}
-      <AlertDialog open={!!deletingDoc} onOpenChange={o => !o && setDeletingDoc(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Excluir documento?</AlertDialogTitle><AlertDialogDescription>Ação irreversível.</AlertDialogDescription></AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={excluirDocumento} className="bg-red-600 text-white hover:bg-red-700">Excluir</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Preview */}
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
-          <DialogHeader><DialogTitle>Visualização</DialogTitle></DialogHeader>
-          <div className="flex-1 min-h-[500px] bg-muted/20 rounded-lg overflow-hidden">
-            {previewUrl ? <iframe src={previewUrl} className="w-full h-[600px] border-0" /> : <div className="flex items-center justify-center h-full text-muted-foreground">Carregando...</div>}
-          </div>
-          <DialogFooter><Button variant="outline" onClick={() => setPreviewOpen(false)}>Fechar</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
