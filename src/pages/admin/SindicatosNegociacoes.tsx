@@ -44,6 +44,7 @@ import {
   Check,
   Filter,
   X,
+  Calendar,
 } from "lucide-react";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
 import { cn } from "@/lib/utils";
@@ -59,19 +60,14 @@ interface Negociacao {
   id: string;
   sindicato_patronal_id: string;
   sindicato_laboral_id: string;
-  mes: number;          // 1-12
   ano: number;
+  mes: number;
   tipo_documento: "act" | "cct";
   storage_path: string;
   nome_pdf: string | null;
   created_at: string;
   updated_at: string;
 }
-
-const TIPOS_DOCUMENTO = [
-  { value: "act", label: "ACT (Acordo Coletivo de Trabalho)" },
-  { value: "cct", label: "CCT (Convenção Coletiva de Trabalho)" },
-];
 
 const MESES = [
   { value: 1, label: "Janeiro" },
@@ -88,6 +84,11 @@ const MESES = [
   { value: 12, label: "Dezembro" },
 ];
 
+const TIPOS_DOCUMENTO = [
+  { value: "act", label: "ACT (Acordo Coletivo de Trabalho)" },
+  { value: "cct", label: "CCT (Convenção Coletiva de Trabalho)" },
+];
+
 export default function SindicatosNegociacoes() {
   const [negociacoes, setNegociacoes] = useState<Negociacao[]>([]);
   const [sindicatos, setSindicatos] = useState<Sindicato[]>([]);
@@ -98,7 +99,6 @@ export default function SindicatosNegociacoes() {
   const [filtroPatronal, setFiltroPatronal] = useState<string>("todos");
   const [filtroLaboral, setFiltroLaboral] = useState<string>("todos");
   const [filtroAno, setFiltroAno] = useState<string>("todos");
-  const [filtroMes, setFiltroMes] = useState<string>("todos");
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
 
   // --- Dialog de cadastro/edição ---
@@ -107,8 +107,8 @@ export default function SindicatosNegociacoes() {
   const [form, setForm] = useState({
     sindicato_patronal_id: "none",
     sindicato_laboral_id: "none",
-    mes: new Date().getMonth() + 1, // 1-12
     ano: new Date().getFullYear(),
+    mes: new Date().getMonth() + 1,
     tipo_documento: "act" as "act" | "cct",
     arquivo: null as File | null,
   });
@@ -126,7 +126,7 @@ export default function SindicatosNegociacoes() {
     setLoading(true);
     try {
       const [negRes, sindRes] = await Promise.all([
-        supabase.from("negociacoes").select("*").order("ano", { ascending: false }).order("mes", { ascending: false }),
+        supabase.from("negociacoes").select("*").order("ano", { ascending: false }),
         supabase.from("sindicatos").select("id, nome, tipo").order("nome"),
       ]);
 
@@ -158,27 +158,25 @@ export default function SindicatosNegociacoes() {
     setForm({
       sindicato_patronal_id: negociacao.sindicato_patronal_id,
       sindicato_laboral_id: negociacao.sindicato_laboral_id,
-      mes: negociacao.mes || 1,
       ano: negociacao.ano,
+      mes: negociacao.mes || 1,
       tipo_documento: negociacao.tipo_documento,
       arquivo: null,
     });
     setDialogOpen(true);
   };
 
-  // --- Verificação de duplicidade ---
-  const verificarDuplicidade = async () => {
-    // Se for edição, ignora a própria negociação
-    const query = supabase
+  // 🔥 Validação de duplicidade (apenas ano base, ignorando mês)
+  const verificarDuplicidade = async (patronalId: string, laboralId: string, ano: number, idAtual?: string) => {
+    let query = supabase
       .from("negociacoes")
       .select("id")
-      .eq("sindicato_patronal_id", form.sindicato_patronal_id)
-      .eq("sindicato_laboral_id", form.sindicato_laboral_id)
-      .eq("mes", form.mes)
-      .eq("ano", form.ano);
+      .eq("sindicato_patronal_id", patronalId)
+      .eq("sindicato_laboral_id", laboralId)
+      .eq("ano", ano);
 
-    if (editando) {
-      query.neq("id", editando.id);
+    if (idAtual) {
+      query = query.neq("id", idAtual);
     }
 
     const { data, error } = await query;
@@ -196,21 +194,29 @@ export default function SindicatosNegociacoes() {
       return;
     }
 
-    setBusy(true);
+    // 🔥 Verificar duplicidade (ano base, ignora mês)
     try {
-      // 🔥 Verificar duplicidade
-      const isDuplicado = await verificarDuplicidade();
-      if (isDuplicado) {
-        toast.error(
-          "Já existe uma negociação cadastrada para este mesmo par de sindicatos e data base (Mês/Ano).",
-          { duration: 6000 }
-        );
+      const duplicado = await verificarDuplicidade(
+        form.sindicato_patronal_id,
+        form.sindicato_laboral_id,
+        form.ano,
+        editando?.id
+      );
+      if (duplicado) {
+        toast.error("Já existe uma negociação entre estes sindicatos para o ano base informado.");
         return;
       }
+    } catch (error) {
+      console.error("Erro ao verificar duplicidade:", error);
+      toast.error("Erro ao verificar duplicidade");
+      return;
+    }
 
+    setBusy(true);
+    try {
       let path = "";
       if (form.arquivo) {
-        path = `negociacoes/${form.sindicato_patronal_id}_${form.sindicato_laboral_id}_${form.ano}_${form.mes}.pdf`;
+        path = `negociacoes/${form.sindicato_patronal_id}_${form.sindicato_laboral_id}_${form.ano}.pdf`;
         const { error: uploadError } = await supabase.storage
           .from("sindicatos")
           .upload(path, form.arquivo, { upsert: true });
@@ -224,8 +230,8 @@ export default function SindicatosNegociacoes() {
       const dados = {
         sindicato_patronal_id: form.sindicato_patronal_id,
         sindicato_laboral_id: form.sindicato_laboral_id,
-        mes: form.mes,
         ano: form.ano,
+        mes: form.mes,
         tipo_documento: form.tipo_documento,
         storage_path: path,
         nome_pdf: form.arquivo ? form.arquivo.name : editando?.nome_pdf,
@@ -249,8 +255,8 @@ export default function SindicatosNegociacoes() {
       setForm({
         sindicato_patronal_id: "none",
         sindicato_laboral_id: "none",
-        mes: new Date().getMonth() + 1,
         ano: new Date().getFullYear(),
+        mes: new Date().getMonth() + 1,
         tipo_documento: "act",
         arquivo: null,
       });
@@ -268,11 +274,13 @@ export default function SindicatosNegociacoes() {
     setBusy(true);
     try {
       await supabase.storage.from("sindicatos").remove([confirmDelete.storage_path]);
+
       const { error } = await supabase
         .from("negociacoes")
         .delete()
         .eq("id", confirmDelete.id);
       if (error) throw error;
+
       toast.success("Negociação excluída!");
       setConfirmDelete(null);
       loadData();
@@ -314,15 +322,9 @@ export default function SindicatosNegociacoes() {
     return s ? s.nome : "—";
   };
 
-  const getSindicatoTipo = (id: string) => {
-    if (id === "none") return "";
-    const s = sindicatos.find(s => s.id === id);
-    return s?.tipo === "patronal" ? "Patronal" : "Laboral";
-  };
-
   const getMesLabel = (mes: number) => {
     const m = MESES.find(m => m.value === mes);
-    return m ? m.label : "—";
+    return m ? m.label : mes;
   };
 
   // --- Filtros ---
@@ -331,20 +333,14 @@ export default function SindicatosNegociacoes() {
       const matchPatronal = filtroPatronal === "todos" || neg.sindicato_patronal_id === filtroPatronal;
       const matchLaboral = filtroLaboral === "todos" || neg.sindicato_laboral_id === filtroLaboral;
       const matchAno = filtroAno === "todos" || neg.ano === parseInt(filtroAno);
-      const matchMes = filtroMes === "todos" || neg.mes === parseInt(filtroMes);
       const matchTipo = filtroTipo === "todos" || neg.tipo_documento === filtroTipo;
-      return matchPatronal && matchLaboral && matchAno && matchMes && matchTipo;
+      return matchPatronal && matchLaboral && matchAno && matchTipo;
     });
-  }, [negociacoes, filtroPatronal, filtroLaboral, filtroAno, filtroMes, filtroTipo]);
+  }, [negociacoes, filtroPatronal, filtroLaboral, filtroAno, filtroTipo]);
 
   const anosDisponiveis = useMemo(() => {
     const anos = new Set(negociacoes.map(n => n.ano));
     return Array.from(anos).sort((a, b) => b - a);
-  }, [negociacoes]);
-
-  const mesesDisponiveis = useMemo(() => {
-    const meses = new Set(negociacoes.map(n => n.mes));
-    return Array.from(meses).sort((a, b) => a - b);
   }, [negociacoes]);
 
   const sindicatosPatronais = sindicatos.filter(s => s.tipo === "patronal");
@@ -369,8 +365,8 @@ export default function SindicatosNegociacoes() {
             setForm({
               sindicato_patronal_id: "none",
               sindicato_laboral_id: "none",
-              mes: new Date().getMonth() + 1,
               ano: new Date().getFullYear(),
+              mes: new Date().getMonth() + 1,
               tipo_documento: "act",
               arquivo: null,
             });
@@ -382,7 +378,7 @@ export default function SindicatosNegociacoes() {
       </div>
 
       {/* Filtros */}
-      <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 items-end">
+      <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
         <div className="space-y-1">
           <Label className="text-xs font-bold uppercase text-muted-foreground">Patronal</Label>
           <Select value={filtroPatronal} onValueChange={setFiltroPatronal}>
@@ -426,21 +422,6 @@ export default function SindicatosNegociacoes() {
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs font-bold uppercase text-muted-foreground">Mês Base</Label>
-          <Select value={filtroMes} onValueChange={setFiltroMes}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Todos" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos</SelectItem>
-              {mesesDisponiveis.map(m => {
-                const mesLabel = MESES.find(mm => mm.value === m)?.label || m;
-                return <SelectItem key={m} value={String(m)}>{mesLabel}</SelectItem>;
-              })}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
           <Label className="text-xs font-bold uppercase text-muted-foreground">Tipo</Label>
           <Select value={filtroTipo} onValueChange={setFiltroTipo}>
             <SelectTrigger className="w-full">
@@ -462,7 +443,6 @@ export default function SindicatosNegociacoes() {
               setFiltroPatronal("todos");
               setFiltroLaboral("todos");
               setFiltroAno("todos");
-              setFiltroMes("todos");
               setFiltroTipo("todos");
             }}
           >
@@ -488,9 +468,11 @@ export default function SindicatosNegociacoes() {
                   <CardTitle className="text-lg truncate">
                     {getSindicatoNome(neg.sindicato_patronal_id)} / {getSindicatoNome(neg.sindicato_laboral_id)}
                   </CardTitle>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="secondary">
-                      Data Base: {getMesLabel(neg.mes)} / {neg.ano}
+                  <div className="flex items-center gap-2">
+                    {/* 🔥 Data Base: Mês/Ano */}
+                    <Badge variant="secondary" className="flex items-center gap-1">
+                      <Calendar className="size-3" />
+                      Data Base: {getMesLabel(neg.mes || 1)}/{neg.ano}
                     </Badge>
                     <Badge variant="outline">
                       {TIPOS_DOCUMENTO.find(t => t.value === neg.tipo_documento)?.label || neg.tipo_documento}
@@ -684,7 +666,7 @@ export default function SindicatosNegociacoes() {
             <DialogTitle>Visualização do Documento</DialogTitle>
             <DialogDescription>
               {selectedNegociacao
-                ? `${getSindicatoNome(selectedNegociacao.sindicato_patronal_id)} / ${getSindicatoNome(selectedNegociacao.sindicato_laboral_id)} - ${getMesLabel(selectedNegociacao.mes)}/${selectedNegociacao.ano}`
+                ? `${getSindicatoNome(selectedNegociacao.sindicato_patronal_id)} / ${getSindicatoNome(selectedNegociacao.sindicato_laboral_id)} - ${getMesLabel(selectedNegociacao.mes || 1)}/${selectedNegociacao.ano}`
                 : ""}
             </DialogDescription>
           </DialogHeader>
