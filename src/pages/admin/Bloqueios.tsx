@@ -285,7 +285,7 @@ export default function BloqueiosPage() {
     switch (tipo) {
       case "fixa_anual": return "Fixa Anual (dia/mês)";
       case "dinamica": return "Dinâmica (ex: 2º sábado)";
-      case "pos_pagamento": return "Pós-Pagamento (1º sáb após dia 5)";
+      case "pos_pagamento": return "Pós-Pagamento (1º sáb e dom após dia 5)";
       default: return tipo;
     }
   };
