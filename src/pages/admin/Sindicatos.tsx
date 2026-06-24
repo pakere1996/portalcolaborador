@@ -232,7 +232,7 @@ export default function Sindicatos() {
     loadDocumentos(sindicato.id);
   };
 
-  // --- Edição de documento (com logs) ---
+  // --- Edição de documento (corrigida) ---
   const abrirEdicaoDoc = (doc: DocumentoSindicato) => {
     console.log("📝 Abrindo edição do documento:", doc);
     setEditandoDoc(doc);
@@ -276,15 +276,20 @@ export default function Sindicatos() {
       console.log("✅ Documento atualizado com sucesso:", data);
       toast.success("Documento atualizado!");
 
+      // Fechar diálogo de edição
       setEditDocDialogOpen(false);
       setEditandoDoc(null);
 
+      // 🔥 FORÇA RECARREGAMENTO GERAL (mais seguro)
+      console.log("🔄 Recarregando todos os dados (loadData) para garantir atualização");
+      await loadData();
+
+      // Se o diálogo de documentos estiver aberto, recarregar também a lista específica
       if (sindicatoSelecionado) {
-        console.log("🔄 Recarregando documentos do sindicato:", sindicatoSelecionado.id);
+        console.log("🔄 Recarregando documentos do sindicato específico:", sindicatoSelecionado.id);
         await loadDocumentos(sindicatoSelecionado.id);
       } else {
-        console.warn("⚠️ Nenhum sindicato selecionado para recarregar documentos");
-        await loadData();
+        console.warn("⚠️ Nenhum sindicato selecionado para recarregar documentos específicos");
       }
     } catch (error) {
       console.error("❌ Erro inesperado:", error);
@@ -851,7 +856,7 @@ export default function Sindicatos() {
         </DialogContent>
       </Dialog>
 
-      {/* === DIÁLOGO DE EDIÇÃO DE DOCUMENTO (com logs e correção) === */}
+      {/* === DIÁLOGO DE EDIÇÃO DE DOCUMENTO (corrigido) === */}
       <Dialog open={editDocDialogOpen} onOpenChange={(open) => {
         if (!open) {
           setEditandoDoc(null);
