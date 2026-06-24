@@ -19,7 +19,13 @@ import HomeAdmin from "./pages/admin/HomeAdmin";
 import Colaboradores from "./pages/admin/Colaboradores";
 import Cargos from "./pages/admin/Cargos";
 import Unidades from "./pages/admin/Unidades";
-import Sindicatos from "./pages/admin/Sindicatos"; // 🔥 NOVO
+
+// Sindicatos – novo módulo com submenus
+import SindicatosCadastro from "./pages/admin/Sindicatos"; // cadastro unificado (patronal + laboral)
+import SindicatosNegociacoes from "./pages/admin/SindicatosNegociacoes"; // negociações (a ser criado)
+import SindicatosHub from "./pages/admin/SindicatosHub"; // hub do módulo (a ser criado)
+
+// Outras páginas admin
 import FolgasDashboard from "./pages/admin/FolgasHub";
 import Solicitacoes from "./pages/admin/Solicitacoes";
 import Aprovacoes from "./pages/admin/Aprovacoes";
@@ -96,7 +102,11 @@ function AuthenticatedRoutes() {
               <Route path="/admin/colaboradores" element={<Colaboradores />} />
               <Route path="/admin/cargos" element={<Cargos />} />
               <Route path="/admin/unidades" element={<Unidades />} />
-              <Route path="/admin/sindicatos" element={<Sindicatos />} /> {/* 🔥 NOVO */}
+
+              {/* Sindicatos – módulo próprio com submenus */}
+              <Route path="/admin/sindicatos" element={<SindicatosHub />} />
+              <Route path="/admin/sindicatos/cadastro" element={<SindicatosCadastro />} />
+              <Route path="/admin/sindicatos/negociacoes" element={<SindicatosNegociacoes />} />
 
               {/* Folgas Group */}
               <Route path="/admin/folgas" element={<FolgasDashboard />} />
@@ -105,7 +115,7 @@ function AuthenticatedRoutes() {
               <Route path="/admin/trocas" element={<TrocasAdmin />} />
               <Route path="/admin/bloqueios" element={<Bloqueios />} />
 
-              {/* Documentos Group – ordem é importante */}
+              {/* Documentos Group */}
               <Route path="/admin/documentos" element={<DocumentosHub />} />
               <Route path="/admin/documentos/contracheque" element={<DocumentosContracheque />} />
               <Route path="/admin/documentos/ponto" element={<DocumentosPontoAdmin />} />
