@@ -20,10 +20,10 @@ import Colaboradores from "./pages/admin/Colaboradores";
 import Cargos from "./pages/admin/Cargos";
 import Unidades from "./pages/admin/Unidades";
 
-// Sindicatos – novo módulo com submenus
-import SindicatosCadastro from "./pages/admin/SindicatosCadastro";
-import SindicatoNegociacoes from "./pages/admin/SindicatoNegociacoes";
-import SindicatoHub from "./pages/admin/SindicatoHub";
+// Sindicatos – módulo com submenus
+import SindicatosCadastro from "./pages/admin/SindicatosCadastro"; // renomeado
+import SindicatosNegociacoes from "./pages/admin/SindicatosNegociacoes";
+import SindicatosHub from "./pages/admin/SindicatosHub";
 
 // Outras páginas admin
 import FolgasDashboard from "./pages/admin/FolgasHub";
