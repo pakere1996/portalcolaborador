@@ -70,10 +70,30 @@ export default function CalendarioPage() {
     const endDate = new Date(year, month0 + 1, 0);
     const end = ymd(endDate);
 
+    // Buscar perfil do usuário para obter unidade
+    const { data: myProfile } = await supabase
+      .from("profiles")
+      .select("unidade_id")
+      .eq("id", user.id)
+      .single();
+
+    const minhaUnidade = myProfile?.unidade_id;
+
+    // Construir condição de filtro para datas bloqueadas
+    let filterCondition = `unidade_id.is.null`;
+    if (minhaUnidade) {
+      filterCondition = `unidade_id.is.null,unidade_id.eq.${minhaUnidade}`;
+    }
+
     try {
       const [fRes, bRes, pRes, limRes, pendRes, prioRes] = await Promise.all([
         supabase.from("folgas").select("*").gte("data", start).lte("data", end),
-        supabase.from("datas_bloqueadas").select("*").gte("data", start).lte("data", end),
+        supabase
+          .from("datas_bloqueadas")
+          .select("*")
+          .gte("data", start)
+          .lte("data", end)
+          .or(filterCondition),
         supabase.from("profiles").select("*").eq("ativo", true),
         supabase.from("dia_config").select("*").gte("data", start).lte("data", end),
         supabase.from("solicitacoes_especiais").select("*").eq("status", "pendente").gte("data", start).lte("data", end),
