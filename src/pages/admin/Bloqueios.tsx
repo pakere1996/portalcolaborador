@@ -38,14 +38,12 @@ export default function BloqueiosPage() {
   const [anoFiltro, setAnoFiltro] = useState(new Date().getFullYear());
   const [mesFiltro, setMesFiltro] = useState<string>("all");
 
-  // Controle de diálogos
   const [isRegraDialogOpen, setIsRegraDialogOpen] = useState(false);
   const [isDataDialogOpen, setIsDataDialogOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
-      // Carregar unidades ativas
       const { data: unidadesData } = await supabase
         .from("unidades")
         .select("id, nome")
@@ -53,14 +51,12 @@ export default function BloqueiosPage() {
         .order("nome");
       setUnidades(unidadesData ?? []);
 
-      // Carregar regras com seus vínculos de unidades
       const { data: regrasData, error: regrasError } = await supabase
         .from("bloqueio_regras")
         .select("*")
         .order("created_at", { ascending: false });
       if (regrasError) throw regrasError;
 
-      // Para cada regra, buscar suas unidades
       const regrasComUnidades = await Promise.all(
         (regrasData ?? []).map(async (regra) => {
           const { data: vincData } = await supabase
@@ -77,14 +73,12 @@ export default function BloqueiosPage() {
       );
       setRegras(regrasComUnidades);
 
-      // Carregar datas bloqueadas
       const { data: datasData, error: datasError } = await supabase
         .from("datas_bloqueadas")
         .select("*")
         .order("data", { ascending: true });
       if (datasError) throw datasError;
       setDatasBloqueadas(datasData ?? []);
-
     } catch (e) {
       toast.error("Erro ao carregar dados", { description: (e as Error).message });
     } finally {
@@ -112,7 +106,6 @@ export default function BloqueiosPage() {
     if (r) {
       setEditRegraId(r.id);
       setRegraForm({ ...r });
-      // Carregar unidades vinculadas
       const { data: vincData } = await supabase
         .from("bloqueio_regra_unidades")
         .select("unidade_id")
@@ -147,14 +140,12 @@ export default function BloqueiosPage() {
       let regraId = editRegraId;
 
       if (editRegraId) {
-        // Atualizar regra
         const { error } = await supabase
           .from("bloqueio_regras")
           .update(regraForm)
           .eq("id", editRegraId);
         if (error) throw error;
       } else {
-        // Criar nova regra
         const { data, error } = await supabase
           .from("bloqueio_regras")
           .insert(regraForm)
@@ -164,7 +155,6 @@ export default function BloqueiosPage() {
         regraId = data.id;
       }
 
-      // Atualizar vínculos com unidades (deleta todos e insere os selecionados)
       if (regraId) {
         await supabase
           .from("bloqueio_regra_unidades")
@@ -194,7 +184,6 @@ export default function BloqueiosPage() {
   };
 
   const deleteRegra = async (id: string) => {
-    // Os vínculos serão deletados em cascata (ON DELETE CASCADE)
     const { error } = await supabase.from("bloqueio_regras").delete().eq("id", id);
     if (error) return toast.error(error.message);
     toast.success("Regra excluída");
@@ -294,7 +283,6 @@ export default function BloqueiosPage() {
     return new Date(2000, month - 1, 1).toLocaleString('pt-BR', { month: 'long' });
   };
 
-  // --- Renderização ---
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -357,10 +345,9 @@ export default function BloqueiosPage() {
                         <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">{getTipoLabel(r.tipo ?? "")}</span>
                         {r.tipo === "fixa_anual" && <span>Dia {r.dia} de {getMonthName(r.mes ?? 1)}</span>}
                         {r.tipo === "dinamica" && <span>{["Primeiro","Segundo","Terceiro","Quarto","Quinto"][(r.ordinal ?? 1) - 1]} {["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"][r.dia_semana ?? 0]} de {getMonthName(r.mes ?? 1)}</span>}
-                        {r.tipo === "pos_pagamento" && <span>1º Sábado após dia 5 de {getMonthName(r.mes ?? 1)}</span>}
+                        {r.tipo === "pos_pagamento" && <span>1º Sábado e 1º Domingo após dia 5 de {getMonthName(r.mes ?? 1)}</span>}
                         {!r.ativo && <span className="text-red-500 font-medium">Inativa</span>}
                       </div>
-                      {/* Exibir unidades vinculadas */}
                       {r.unidades && r.unidades.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
                           <Building2 className="size-3 text-muted-foreground" />
@@ -487,7 +474,7 @@ export default function BloqueiosPage() {
               <select value={regraForm.tipo ?? "fixa_anual"} onChange={(e) => setRegraForm({ ...regraForm, tipo: e.target.value })} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 <option value="fixa_anual">Fixa Anual (dia/mês fixo)</option>
                 <option value="dinamica">Dinâmica (ex: 2º sábado do mês)</option>
-                <option value="pos_pagamento">Pós-Pagamento (1º sáb após dia 5)</option>
+                <option value="pos_pagamento">Pós-Pagamento (1º sábado e domingo após dia 5)</option>
               </select>
             </div>
             {regraForm.tipo === "fixa_anual" && (
