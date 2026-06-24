@@ -70,6 +70,7 @@ interface Sindicato {
   cnpj: string | null;
   tipo: "laboral" | "patronal" | null;
   contato_whatsapp: string | null;
+  grupo_id: string | null; // 🔥 NOVO
   created_at: string;
   updated_at: string;
 }
@@ -108,7 +109,8 @@ export default function Sindicatos() {
 
   // --- Estado da ficha unificada ---
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editando, setEditando] = useState<{ patronal: Sindicato | null; laboral: Sindicato | null }>({
+  const [editando, setEditando] = useState<{ grupoId: string | null; patronal: Sindicato | null; laboral: Sindicato | null }>({
+    grupoId: null,
     patronal: null,
     laboral: null,
   });
@@ -136,12 +138,9 @@ export default function Sindicatos() {
     arquivo: null as File | null,
   });
 
-  // --- Diálogo de documentos (para visualização/gerenciamento) ---
+  // --- Documentos (diálogo para gerenciar) ---
   const [docDialogOpen, setDocDialogOpen] = useState(false);
-  const [grupoSelecionado, setGrupoSelecionado] = useState<{ patronal: Sindicato | null; laboral: Sindicato | null }>({
-    patronal: null,
-    laboral: null,
-  });
+  const [sindicatoSelecionado, setSindicatoSelecionado] = useState<Sindicato | null>(null);
   const [documentos, setDocumentos] = useState<DocumentoSindicato[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [docForm, setDocForm] = useState({
@@ -152,7 +151,8 @@ export default function Sindicatos() {
   const [uploadingDoc, setUploadingDoc] = useState(false);
 
   // --- Exclusão e preview ---
-  const [confirmDelete, setConfirmDelete] = useState<{ patronal: Sindicato | null; laboral: Sindicato | null }>({
+  const [confirmDelete, setConfirmDelete] = useState<{ grupoId: string | null; patronal: Sindicato | null; laboral: Sindicato | null }>({
+    grupoId: null,
     patronal: null,
     laboral: null,
   });
@@ -193,14 +193,13 @@ export default function Sindicatos() {
     loadData();
   }, [loadData]);
 
-  const loadDocumentos = useCallback(async (sindicatoIds: string[]) => {
-    if (sindicatoIds.length === 0) return;
+  const loadDocumentos = useCallback(async (sindicatoId: string) => {
     setLoadingDocs(true);
     try {
       const { data, error } = await supabase
         .from("documentos_sindicato")
         .select("*")
-        .in("sindicato_id", sindicatoIds)
+        .eq("sindicato_id", sindicatoId)
         .order("ano", { ascending: false });
 
       if (error) throw error;
@@ -221,38 +220,99 @@ export default function Sindicatos() {
     setter((prev: any) => ({ ...prev, [field]: formatWhatsApp(e.target.value) }));
   };
 
-  // --- Abrir diálogo de documentos (para gerenciamento) ---
-  const abrirDocDialog = async (patronal: Sindicato | null, laboral: Sindicato | null) => {
-    const ids = [];
-    if (patronal) ids.push(patronal.id);
-    if (laboral) ids.push(laboral.id);
-    if (ids.length === 0) return;
-
-    setGrupoSelecionado({ patronal, laboral });
+  // --- Abrir diálogo de documentos ---
+  const abrirDocDialog = (sindicato: Sindicato) => {
+    setSindicatoSelecionado(sindicato);
     setDocForm({
       ano: new Date().getFullYear(),
       tipo_documento: "act",
       arquivo: null,
     });
     setDocDialogOpen(true);
-    await loadDocumentos(ids);
+    loadDocumentos(sindicato.id);
   };
 
-  // --- Abrir ficha unificada para edição ---
+  // --- Abrir ficha para edição (pelo grupo_id) ---
   const abrirEdicao = async (sindicato: Sindicato) => {
-    const { data: outros } = await supabase
+    // Buscar o grupo completo
+    let grupoId = sindicato.grupo_id;
+    if (!grupoId) {
+      // Fallback: se não tiver grupo_id, tenta buscar pelo nome/CNPJ (legado)
+      const { data } = await supabase
+        .from("sindicatos")
+        .select("*")
+        .or(`nome.eq.${sindicato.nome},cnpj.eq.${sindicato.cnpj}`)
+        .neq("id", sindicato.id);
+      const outro = data?.find((s: any) => s.tipo !== sindicato.tipo) || null;
+      const patronal = sindicato.tipo === "patronal" ? sindicato : outro;
+      const laboral = sindicato.tipo === "patronal" ? outro : sindicato;
+      grupoId = patronal?.grupo_id || laboral?.grupo_id || null;
+      if (!grupoId) {
+        // Se não tiver grupo_id, geramos um novo para agrupar na edição
+        grupoId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
+        // Atualizar ambos com o novo grupo_id
+        if (patronal) {
+          await supabase.from("sindicatos").update({ grupo_id: grupoId }).eq("id", patronal.id);
+        }
+        if (laboral) {
+          await supabase.from("sindicatos").update({ grupo_id: grupoId }).eq("id", laboral.id);
+        }
+        // Recarregar dados
+        await loadData();
+        // Reobter os sindicatos atualizados
+        const { data: updated } = await supabase
+          .from("sindicatos")
+          .select("*")
+          .eq("grupo_id", grupoId);
+        const p = updated?.find((s: any) => s.tipo === "patronal") || null;
+        const l = updated?.find((s: any) => s.tipo === "laboral") || null;
+        setEditando({ grupoId, patronal: p, laboral: l });
+        // Preencher forms
+        if (p) {
+          setPatronalForm({
+            nome: p.nome,
+            cnpj: p.cnpj ? formatCNPJ(p.cnpj) : "",
+            contato_whatsapp: p.contato_whatsapp ? formatWhatsApp(p.contato_whatsapp) : "",
+          });
+          const { data: vinculos } = await supabase
+            .from("sindicato_unidades")
+            .select("unidade_id")
+            .eq("sindicato_id", p.id);
+          setUnidadesSelecionadas(vinculos?.map(v => v.unidade_id) ?? []);
+        } else {
+          setPatronalForm({ nome: "", cnpj: "", contato_whatsapp: "" });
+          setUnidadesSelecionadas([]);
+        }
+        if (l) {
+          setLaboralForm({
+            nome: l.nome,
+            cnpj: l.cnpj ? formatCNPJ(l.cnpj) : "",
+            contato_whatsapp: l.contato_whatsapp ? formatWhatsApp(l.contato_whatsapp) : "",
+          });
+          const { data: vinculos } = await supabase
+            .from("sindicato_cargos")
+            .select("cargo_id")
+            .eq("sindicato_id", l.id);
+          setCargosSelecionados(vinculos?.map(v => v.cargo_id) ?? []);
+        } else {
+          setLaboralForm({ nome: "", cnpj: "", contato_whatsapp: "" });
+          setCargosSelecionados([]);
+        }
+        setDialogOpen(true);
+        return;
+      }
+    }
+
+    // Buscar ambos pelo grupo_id
+    const { data: grupo } = await supabase
       .from("sindicatos")
       .select("*")
-      .or(`nome.eq.${sindicato.nome},cnpj.eq.${sindicato.cnpj}`)
-      .neq("id", sindicato.id);
+      .eq("grupo_id", grupoId);
 
-    const outro = outros?.find((s: any) => s.tipo !== sindicato.tipo) || null;
+    const patronal = grupo?.find((s: any) => s.tipo === "patronal") || null;
+    const laboral = grupo?.find((s: any) => s.tipo === "laboral") || null;
 
-    const isPatronal = sindicato.tipo === "patronal";
-    const patronal = isPatronal ? sindicato : outro;
-    const laboral = isPatronal ? outro : sindicato;
-
-    setEditando({ patronal, laboral });
+    setEditando({ grupoId, patronal, laboral });
 
     if (patronal) {
       setPatronalForm({
@@ -286,37 +346,10 @@ export default function Sindicatos() {
       setCargosSelecionados([]);
     }
 
-    // Carregar documento existente (se houver)
-    const ids = [];
-    if (patronal) ids.push(patronal.id);
-    if (laboral) ids.push(laboral.id);
-    if (ids.length > 0) {
-      const { data: docs } = await supabase
-        .from("documentos_sindicato")
-        .select("*")
-        .in("sindicato_id", ids)
-        .order("ano", { ascending: false })
-        .limit(1);
-      if (docs && docs.length > 0) {
-        const doc = docs[0];
-        setDocumentoForm({
-          ano: doc.ano,
-          tipo_documento: doc.tipo_documento,
-          arquivo: null,
-        });
-      } else {
-        setDocumentoForm({
-          ano: new Date().getFullYear(),
-          tipo_documento: "act",
-          arquivo: null,
-        });
-      }
-    }
-
     setDialogOpen(true);
   };
 
-  // --- Salvar ficha unificada com documento único ---
+  // --- Salvar ficha unificada com grupo ---
   const salvarFichaUnificada = async () => {
     if (!patronalForm.nome.trim()) {
       toast.error("Nome do sindicato patronal é obrigatório");
@@ -337,12 +370,19 @@ export default function Sindicatos() {
 
     setBusy(true);
     try {
+      // Gerar grupo_id (se não tiver)
+      let grupoId = editando.grupoId;
+      if (!grupoId) {
+        grupoId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
+      }
+
       // 1. Salvar/atualizar patronal
       const patronalDados = {
         nome: patronalForm.nome.trim(),
         cnpj: patronalForm.cnpj ? onlyNumbers(patronalForm.cnpj) : null,
         tipo: "patronal" as const,
         contato_whatsapp: patronalForm.contato_whatsapp ? onlyNumbers(patronalForm.contato_whatsapp) : null,
+        grupo_id: grupoId,
         updated_at: new Date().toISOString(),
       };
 
@@ -380,6 +420,7 @@ export default function Sindicatos() {
         cnpj: laboralForm.cnpj ? onlyNumbers(laboralForm.cnpj) : null,
         tipo: "laboral" as const,
         contato_whatsapp: laboralForm.contato_whatsapp ? onlyNumbers(laboralForm.contato_whatsapp) : null,
+        grupo_id: grupoId,
         updated_at: new Date().toISOString(),
       };
 
@@ -411,25 +452,48 @@ export default function Sindicatos() {
         await supabase.from("sindicato_cargos").insert(inserts);
       }
 
-      // 5. Upload do documento único (se houver)
+      // 5. Documento único (ACT/CCT) – associado a ambos ou a um dos sindicatos?
+      // Como a ACT é única, vamos associá-la ao sindicato patronal (ou criar uma tabela separada, mas vamos manter em documentos_sindicato)
+      // Para simplificar, vamos salvar o documento vinculado ao patronal (ou criar uma tabela de documentos_grupo, mas isso exigiria mais alterações).
+      // Vou salvar no patronal, mas com um campo indicando que é do grupo.
       if (documentoForm.arquivo) {
-        const path = `sindicato_documento/${documentoForm.tipo_documento}_${documentoForm.ano}_${Date.now()}.pdf`;
+        const path = `grupo_${grupoId}/${documentoForm.tipo_documento}_${documentoForm.ano}.pdf`;
         const { error: uploadError } = await supabase.storage
           .from("sindicatos")
           .upload(path, documentoForm.arquivo, { upsert: true });
         if (uploadError) throw uploadError;
 
-        // Vincular documento a ambos os sindicatos
-        const docs = [
-          { sindicato_id: patronalId, ano: documentoForm.ano, tipo_documento: documentoForm.tipo_documento, storage_path: path, nome_pdf: documentoForm.arquivo.name },
-          { sindicato_id: laboralId, ano: documentoForm.ano, tipo_documento: documentoForm.tipo_documento, storage_path: path, nome_pdf: documentoForm.arquivo.name },
-        ];
-        await supabase.from("documentos_sindicato").insert(docs);
+        // Verificar se já existe documento para este ano/tipo no grupo (patronal)
+        const { data: existing } = await supabase
+          .from("documentos_sindicato")
+          .select("id")
+          .eq("sindicato_id", patronalId)
+          .eq("ano", documentoForm.ano)
+          .eq("tipo_documento", documentoForm.tipo_documento)
+          .maybeSingle();
+
+        if (existing) {
+          // Atualizar
+          await supabase
+            .from("documentos_sindicato")
+            .update({ storage_path: path, nome_pdf: documentoForm.arquivo.name })
+            .eq("id", existing.id);
+        } else {
+          // Inserir
+          await supabase.from("documentos_sindicato").insert({
+            sindicato_id: patronalId,
+            ano: documentoForm.ano,
+            tipo_documento: documentoForm.tipo_documento,
+            storage_path: path,
+            nome_pdf: documentoForm.arquivo.name,
+          });
+        }
       }
 
       toast.success("Ficha salva com sucesso!");
       setDialogOpen(false);
-      setEditando({ patronal: null, laboral: null });
+      setEditando({ grupoId: null, patronal: null, laboral: null });
+      // Reset forms
       setPatronalForm({ nome: "", cnpj: "", contato_whatsapp: "" });
       setLaboralForm({ nome: "", cnpj: "", contato_whatsapp: "" });
       setUnidadesSelecionadas([]);
@@ -444,8 +508,8 @@ export default function Sindicatos() {
     }
   };
 
-  // --- Excluir par de sindicatos ---
-  const excluirPar = async () => {
+  // --- Excluir grupo ---
+  const excluirGrupo = async () => {
     const ids = [];
     if (confirmDelete.patronal) ids.push(confirmDelete.patronal.id);
     if (confirmDelete.laboral) ids.push(confirmDelete.laboral.id);
@@ -453,34 +517,33 @@ export default function Sindicatos() {
 
     setBusy(true);
     try {
-      // Remover documentos do storage
-      const { data: docs } = await supabase
-        .from("documentos_sindicato")
-        .select("storage_path")
-        .in("sindicato_id", ids);
-      if (docs && docs.length > 0) {
-        const paths = docs.map(d => d.storage_path);
-        await supabase.storage.from("sindicatos").remove(paths);
+      // Remover documentos do storage para ambos
+      for (const id of ids) {
+        const { data: docs } = await supabase
+          .from("documentos_sindicato")
+          .select("storage_path")
+          .eq("sindicato_id", id);
+        if (docs && docs.length > 0) {
+          const paths = docs.map(d => d.storage_path);
+          await supabase.storage.from("sindicatos").remove(paths);
+        }
       }
       const { error } = await supabase.from("sindicatos").delete().in("id", ids);
       if (error) throw error;
-      toast.success("Sindicatos excluídos!");
-      setConfirmDelete({ patronal: null, laboral: null });
+      toast.success("Grupo de sindicatos excluído!");
+      setConfirmDelete({ grupoId: null, patronal: null, laboral: null });
       loadData();
     } catch (error) {
       console.error("Erro ao excluir:", error);
-      toast.error("Erro ao excluir sindicatos");
+      toast.error("Erro ao excluir grupo", { description: (error as Error).message });
     } finally {
       setBusy(false);
     }
   };
 
-  // --- Documentos (upload adicional, delete, preview, download) no diálogo de gerenciamento ---
-  const uploadDocumentoAdicional = async () => {
-    if (!grupoSelecionado.patronal || !grupoSelecionado.laboral) {
-      toast.error("Selecione um grupo válido");
-      return;
-    }
+  // --- Documentos (upload, delete, preview, download) ---
+  const uploadDocumento = async () => {
+    if (!sindicatoSelecionado) return;
     if (!docForm.arquivo) {
       toast.error("Selecione um arquivo PDF");
       return;
@@ -488,22 +551,18 @@ export default function Sindicatos() {
 
     setUploadingDoc(true);
     try {
-      const path = `sindicato_documento/${docForm.tipo_documento}_${docForm.ano}_${Date.now()}.pdf`;
-      const { error: uploadError } = await supabase.storage
-        .from("sindicatos")
-        .upload(path, docForm.arquivo, { upsert: true });
-      if (uploadError) throw uploadError;
-
-      const docs = [
-        { sindicato_id: grupoSelecionado.patronal.id, ano: docForm.ano, tipo_documento: docForm.tipo_documento, storage_path: path, nome_pdf: docForm.arquivo.name },
-        { sindicato_id: grupoSelecionado.laboral.id, ano: docForm.ano, tipo_documento: docForm.tipo_documento, storage_path: path, nome_pdf: docForm.arquivo.name },
-      ];
-      await supabase.from("documentos_sindicato").insert(docs);
-
+      const path = `sindicato_${sindicatoSelecionado.id}/${docForm.tipo_documento}_${docForm.ano}.pdf`;
+      await supabase.storage.from("sindicatos").upload(path, docForm.arquivo, { upsert: true });
+      await supabase.from("documentos_sindicato").insert({
+        sindicato_id: sindicatoSelecionado.id,
+        ano: docForm.ano,
+        tipo_documento: docForm.tipo_documento,
+        storage_path: path,
+        nome_pdf: docForm.arquivo.name,
+      });
       toast.success("Documento anexado!");
       setDocForm({ ...docForm, arquivo: null });
-      const ids = [grupoSelecionado.patronal.id, grupoSelecionado.laboral.id];
-      await loadDocumentos(ids);
+      loadDocumentos(sindicatoSelecionado.id);
     } catch (error) {
       console.error("Erro no upload:", error);
       toast.error("Erro ao anexar documento");
@@ -519,10 +578,7 @@ export default function Sindicatos() {
       await supabase.from("documentos_sindicato").delete().eq("id", deletingDoc.id);
       toast.success("Documento removido!");
       setDeletingDoc(null);
-      const ids = [];
-      if (grupoSelecionado.patronal) ids.push(grupoSelecionado.patronal.id);
-      if (grupoSelecionado.laboral) ids.push(grupoSelecionado.laboral.id);
-      if (ids.length > 0) await loadDocumentos(ids);
+      if (sindicatoSelecionado) loadDocumentos(sindicatoSelecionado.id);
     } catch (error) {
       console.error("Erro ao excluir documento:", error);
       toast.error("Erro ao excluir documento");
@@ -551,31 +607,34 @@ export default function Sindicatos() {
   const toggleCargo = (id: string) =>
     setCargosSelecionados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
-  // --- Agrupamento para listagem ---
+  // --- Agrupamento por grupo_id ---
   const grupos = useMemo(() => {
-    const gruposMap = new Map<string, { patronal: Sindicato | null; laboral: Sindicato | null }>();
-    const patronais = sindicatos.filter(s => s.tipo === "patronal");
-    const laborais = sindicatos.filter(s => s.tipo === "laboral");
-
-    const used = new Set<string>();
-    for (const p of patronais) {
-      const chave = p.nome || p.cnpj || p.id;
-      if (used.has(chave)) continue;
-      const laboral = laborais.find(l => l.nome === p.nome || l.cnpj === p.cnpj);
-      gruposMap.set(chave, { patronal: p, laboral: laboral || null });
-      used.add(chave);
-      if (laboral) used.add(laboral.nome || laboral.cnpj || laboral.id);
-    }
-    for (const l of laborais) {
-      const chave = l.nome || l.cnpj || l.id;
-      if (!gruposMap.has(chave) && !used.has(chave)) {
-        gruposMap.set(chave, { patronal: null, laboral: l });
-        used.add(chave);
+    const map = new Map<string, { patronal: Sindicato | null; laboral: Sindicato | null }>();
+    // Agrupar por grupo_id
+    for (const s of sindicatos) {
+      if (!s.grupo_id) {
+        // Se não tiver grupo_id, criar um grupo fictício com o id do próprio sindicato
+        const key = s.id;
+        if (!map.has(key)) {
+          map.set(key, { patronal: null, laboral: null });
+        }
+        const grupo = map.get(key)!;
+        if (s.tipo === "patronal") grupo.patronal = s;
+        else if (s.tipo === "laboral") grupo.laboral = s;
+      } else {
+        const key = s.grupo_id;
+        if (!map.has(key)) {
+          map.set(key, { patronal: null, laboral: null });
+        }
+        const grupo = map.get(key)!;
+        if (s.tipo === "patronal") grupo.patronal = s;
+        else if (s.tipo === "laboral") grupo.laboral = s;
       }
     }
-    return Array.from(gruposMap.values());
+    return Array.from(map.values());
   }, [sindicatos]);
 
+  // Filtro por nome ou tipo
   const gruposFiltrados = useMemo(() => {
     return grupos.filter(g => {
       const p = g.patronal;
@@ -602,7 +661,7 @@ export default function Sindicatos() {
         <div className="flex items-center gap-2">
           <FavoritarBotao rota="/admin/sindicatos" label="Sindicatos" icone="Building2" />
           <Button onClick={() => {
-            setEditando({ patronal: null, laboral: null });
+            setEditando({ grupoId: null, patronal: null, laboral: null });
             setPatronalForm({ nome: "", cnpj: "", contato_whatsapp: "" });
             setLaboralForm({ nome: "", cnpj: "", contato_whatsapp: "" });
             setUnidadesSelecionadas([]);
@@ -677,7 +736,10 @@ export default function Sindicatos() {
                       variant="outline"
                       size="sm"
                       className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                      onClick={() => abrirDocDialog(p, l)}
+                      onClick={() => {
+                        const target = p || l;
+                        if (target) abrirDocDialog(target);
+                      }}
                     >
                       <FileText className="size-4 mr-1" /> Documentos
                     </Button>
@@ -696,7 +758,7 @@ export default function Sindicatos() {
                       variant="ghost"
                       size="icon"
                       className="size-8 text-red-500"
-                      onClick={() => setConfirmDelete({ patronal: p, laboral: l })}
+                      onClick={() => setConfirmDelete({ grupoId: p?.grupo_id || l?.grupo_id || null, patronal: p, laboral: l })}
                     >
                       <Trash2 className="size-4" />
                     </Button>
@@ -708,7 +770,7 @@ export default function Sindicatos() {
         </div>
       )}
 
-      {/* === DIALOG UNIFICADO (Patronal + Laboral + Documento Único) === */}
+      {/* === DIALOG UNIFICADO === */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -763,17 +825,17 @@ export default function Sindicatos() {
               </div>
             </div>
 
-            {/* ---- Documento Único (ACT/CCT) ---- */}
-            <div className="space-y-4">
+            {/* ---- ACT/CCT único ---- */}
+            <div className="space-y-4 border-t border-border pt-4">
               <h3 className="text-lg font-semibold text-primary">Acordo Coletivo (ACT/CCT)</h3>
-              <p className="text-sm text-muted-foreground">Anexe o documento que representa a negociação entre patronal e laboral.</p>
+              <p className="text-sm text-muted-foreground">Anexe o documento que representa a negociação entre os dois sindicatos para o ano selecionado.</p>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Ano</Label>
+                  <Label className="text-xs">Ano</Label>
                   <Input type="number" value={documentoForm.ano} onChange={e => setDocumentoForm({ ...documentoForm, ano: parseInt(e.target.value) || new Date().getFullYear() })} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Tipo</Label>
+                  <Label className="text-xs">Tipo</Label>
                   <Select value={documentoForm.tipo_documento} onValueChange={(v: any) => setDocumentoForm({ ...documentoForm, tipo_documento: v })}>
                     <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
                     <SelectContent>
@@ -806,7 +868,7 @@ export default function Sindicatos() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="size-5 text-primary" />
-              Documentos do Grupo
+              Documentos - {sindicatoSelecionado?.nome}
             </DialogTitle>
           </DialogHeader>
           <div className="border border-dashed rounded-xl p-4 space-y-4">
@@ -816,7 +878,7 @@ export default function Sindicatos() {
             </div>
             <Input type="file" accept=".pdf" onChange={e => setDocForm({ ...docForm, arquivo: e.target.files?.[0] || null })} />
             {docForm.arquivo && <p className="text-xs text-muted-foreground">{docForm.arquivo.name}</p>}
-            <Button onClick={uploadDocumentoAdicional} disabled={uploadingDoc}>{uploadingDoc ? <Loader2 className="size-4 animate-spin mr-1" /> : <Upload className="size-4 mr-1" />} Anexar</Button>
+            <Button onClick={uploadDocumento} disabled={uploadingDoc}>{uploadingDoc ? <Loader2 className="size-4 animate-spin mr-1" /> : <Upload className="size-4 mr-1" />} Anexar</Button>
           </div>
           <div className="space-y-2">
             <h4 className="font-semibold">Documentos Anexados</h4>
@@ -837,13 +899,13 @@ export default function Sindicatos() {
         </DialogContent>
       </Dialog>
 
-      {/* Confirmação de exclusão de par */}
-      <AlertDialog open={!!confirmDelete.patronal || !!confirmDelete.laboral} onOpenChange={o => !o && setConfirmDelete({ patronal: null, laboral: null })}>
+      {/* Confirmação de exclusão de grupo */}
+      <AlertDialog open={!!confirmDelete.grupoId || !!confirmDelete.patronal || !!confirmDelete.laboral} onOpenChange={o => !o && setConfirmDelete({ grupoId: null, patronal: null, laboral: null })}>
         <AlertDialogContent>
           <AlertDialogHeader><AlertDialogTitle>Excluir ambos os sindicatos?</AlertDialogTitle><AlertDialogDescription>Isso removerá também os documentos. Ação irreversível.</AlertDialogDescription></AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={excluirPar} className="bg-red-600 text-white hover:bg-red-700">{busy ? <Loader2 className="size-4 animate-spin" /> : "Excluir"}</AlertDialogAction>
+            <AlertDialogAction onClick={excluirGrupo} className="bg-red-600 text-white hover:bg-red-700">{busy ? <Loader2 className="size-4 animate-spin" /> : "Excluir"}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
