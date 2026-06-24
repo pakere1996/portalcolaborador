@@ -120,6 +120,15 @@ export default function Unidades() {
   const [novoCargoSindicatoId, setNovoCargoSindicatoId] =
     useState<string>("none");
 
+  // Estados para criação rápida
+  const [openNovoCargo, setOpenNovoCargo] = useState(false);
+  const [openNovoSindicato, setOpenNovoSindicato] = useState(false);
+  const [novoCargoForm, setNovoCargoForm] = useState({ nome: "", descricao: "" });
+  const [novoSindicatoForm, setNovoSindicatoForm] = useState({
+    nome: "",
+    tipo: "laboral" as "laboral" | "patronal",
+  });
+
   // Carregar listagem principal
   const load = async () => {
     const { data: unidades, error } = await supabase
@@ -264,6 +273,67 @@ export default function Unidades() {
         ? prev.filter((id) => id !== sindicatoId)
         : [...prev, sindicatoId]
     );
+  };
+
+  // Criação rápida de novo cargo
+  const criarNovoCargo = async () => {
+    if (!novoCargoForm.nome.trim()) {
+      toast.error("Nome do cargo é obrigatório.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data, error } = await supabase
+        .from("cargos")
+        .insert({
+          nome: novoCargoForm.nome.trim(),
+          descricao: novoCargoForm.descricao.trim() || null,
+        })
+        .select();
+      if (error) throw error;
+      toast.success("Cargo criado com sucesso!");
+      setOpenNovoCargo(false);
+      setNovoCargoForm({ nome: "", descricao: "" });
+      await loadAuxData();
+      if (data && data[0]) {
+        setNovoCargoId(data[0].id);
+      }
+    } catch (e: any) {
+      toast.error("Erro ao criar cargo", { description: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Criação rápida de novo sindicato
+  const criarNovoSindicato = async () => {
+    if (!novoSindicatoForm.nome.trim()) {
+      toast.error("Nome do sindicato é obrigatório.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data, error } = await supabase
+        .from("sindicatos")
+        .insert({
+          nome: novoSindicatoForm.nome.trim(),
+          tipo: novoSindicatoForm.tipo,
+        })
+        .select();
+      if (error) throw error;
+      toast.success("Sindicato criado com sucesso!");
+      setOpenNovoSindicato(false);
+      setNovoSindicatoForm({ nome: "", tipo: "laboral" });
+      await loadAuxData();
+      // Se for laboral e estiver no contexto de adicionar cargo, pré-selecionar
+      if (novoSindicatoForm.tipo === "laboral" && data && data[0]) {
+        setNovoCargoSindicatoId(data[0].id);
+      }
+    } catch (e: any) {
+      toast.error("Erro ao criar sindicato", { description: e.message });
+    } finally {
+      setBusy(false);
+    }
   };
 
   // Salvar edição (unidade + associações)
@@ -432,6 +502,7 @@ export default function Unidades() {
                 <DialogTitle>Nova unidade</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-4">
+                {/* ... campos iguais aos anteriores ... */}
                 <div className="space-y-2">
                   <Label>Nome da Unidade *</Label>
                   <Input
@@ -762,9 +833,21 @@ export default function Unidades() {
 
             {/* Seção: Sindicatos Patronais */}
             <div>
-              <h3 className="font-semibold text-lg flex items-center gap-2">
-                <Users className="size-5" /> Sindicatos Patronais
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-lg flex items-center gap-2">
+                  <Users className="size-5" /> Sindicatos Patronais
+                </h3>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setNovoSindicatoForm({ nome: "", tipo: "patronal" });
+                    setOpenNovoSindicato(true);
+                  }}
+                >
+                  <Plus className="size-4 mr-1" /> Novo Patronal
+                </Button>
+              </div>
               <p className="text-sm text-muted-foreground">
                 Selecione os sindicatos patronais que representam esta unidade.
               </p>
@@ -785,16 +868,7 @@ export default function Unidades() {
                 ))}
                 {sindicatosPatronais.length === 0 && (
                   <p className="text-sm text-muted-foreground col-span-2">
-                    Nenhum sindicato patronal cadastrado.{" "}
-                    <Button
-                      variant="link"
-                      className="p-0 h-auto"
-                      onClick={() => {
-                        /* navegar para cadastro de sindicatos */
-                      }}
-                    >
-                      Cadastrar
-                    </Button>
+                    Nenhum sindicato patronal cadastrado.
                   </p>
                 )}
               </div>
@@ -863,40 +937,65 @@ export default function Unidades() {
               <div className="mt-4 flex flex-wrap items-end gap-3">
                 <div className="flex-1 min-w-[150px]">
                   <Label className="text-xs">Cargo</Label>
-                  <Select
-                    value={novoCargoId}
-                    onValueChange={setNovoCargoId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um cargo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {cargosGlobais.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={novoCargoId}
+                      onValueChange={setNovoCargoId}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Selecione um cargo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cargosGlobais.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-9"
+                      onClick={() => setOpenNovoCargo(true)}
+                      title="Novo cargo"
+                    >
+                      <Plus className="size-4" />
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex-1 min-w-[150px]">
                   <Label className="text-xs">Sindicato Laboral</Label>
-                  <Select
-                    value={novoCargoSindicatoId}
-                    onValueChange={setNovoCargoSindicatoId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Opcional" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Nenhum</SelectItem>
-                      {sindicatosLaborais.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={novoCargoSindicatoId}
+                      onValueChange={setNovoCargoSindicatoId}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Opcional" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Nenhum</SelectItem>
+                        {sindicatosLaborais.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-9"
+                      onClick={() => {
+                        setNovoSindicatoForm({ nome: "", tipo: "laboral" });
+                        setOpenNovoSindicato(true);
+                      }}
+                      title="Novo sindicato laboral"
+                    >
+                      <Plus className="size-4" />
+                    </Button>
+                  </div>
                 </div>
                 <Button
                   variant="outline"
@@ -921,6 +1020,94 @@ export default function Unidades() {
                   <Save className="size-4 mr-2" /> Salvar Alterações
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de criação rápida de novo cargo */}
+      <Dialog open={openNovoCargo} onOpenChange={setOpenNovoCargo}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo Cargo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nome do Cargo *</Label>
+              <Input
+                value={novoCargoForm.nome}
+                onChange={(e) =>
+                  setNovoCargoForm({ ...novoCargoForm, nome: e.target.value })
+                }
+                placeholder="Ex: Pizzaiolo Sênior"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Descrição (opcional)</Label>
+              <Input
+                value={novoCargoForm.descricao}
+                onChange={(e) =>
+                  setNovoCargoForm({ ...novoCargoForm, descricao: e.target.value })
+                }
+                placeholder="Breve descrição"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpenNovoCargo(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={criarNovoCargo} disabled={busy}>
+              {busy ? "Criando..." : "Criar Cargo"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de criação rápida de novo sindicato */}
+      <Dialog open={openNovoSindicato} onOpenChange={setOpenNovoSindicato}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo Sindicato</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nome do Sindicato *</Label>
+              <Input
+                value={novoSindicatoForm.nome}
+                onChange={(e) =>
+                  setNovoSindicatoForm({
+                    ...novoSindicatoForm,
+                    nome: e.target.value,
+                  })
+                }
+                placeholder="Ex: Sindicato dos Pizzaiolos"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Tipo</Label>
+              <Select
+                value={novoSindicatoForm.tipo}
+                onValueChange={(value: "laboral" | "patronal") =>
+                  setNovoSindicatoForm({ ...novoSindicatoForm, tipo: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="laboral">Laboral</SelectItem>
+                  <SelectItem value="patronal">Patronal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpenNovoSindicato(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={criarNovoSindicato} disabled={busy}>
+              {busy ? "Criando..." : "Criar Sindicato"}
             </Button>
           </DialogFooter>
         </DialogContent>
