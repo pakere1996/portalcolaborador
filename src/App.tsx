@@ -20,9 +20,10 @@ import Colaboradores from "./pages/admin/Colaboradores";
 import Cargos from "./pages/admin/Cargos";
 import Unidades from "./pages/admin/Unidades";
 
-// Sindicatos – agora como subpáginas do Cadastro (Opção A)
+// Sindicatos
 import SindicatosCadastro from "./pages/admin/SindicatosCadastro";
 import SindicatosNegociacoes from "./pages/admin/SindicatosNegociacoes";
+import SindicatosHub from "./pages/admin/SindicatosHub";
 
 // Outras páginas admin
 import FolgasDashboard from "./pages/admin/FolgasHub";
@@ -97,17 +98,24 @@ function AuthenticatedRoutes() {
               <Route path="/admin/cadastro" element={<CadastroHub />} />
               <Route path="/admin/comunicacao" element={<ComunicacaoHub />} />
 
-              {/* Cadastro Group – itens planos (Opção A) */}
+              {/* Cadastro Group */}
               <Route path="/admin/colaboradores" element={<Colaboradores />} />
               <Route path="/admin/cargos" element={<Cargos />} />
               <Route path="/admin/unidades" element={<Unidades />} />
+              
+              {/* Sindicatos – Cadastro agora em /admin/cadastro/sindicatos */}
               <Route path="/admin/cadastro/sindicatos" element={<SindicatosCadastro />} />
-              <Route path="/admin/cadastro/act-cct" element={<SindicatosNegociacoes />} />
-
-              {/* Redirecionamentos para rotas antigas (evitar quebra) */}
+              {/* Redirecionamento da rota antiga */}
               <Route path="/admin/sindicatos/cadastro" element={<Navigate to="/admin/cadastro/sindicatos" replace />} />
-              <Route path="/admin/sindicatos/negociacoes" element={<Navigate to="/admin/cadastro/act-cct" replace />} />
+              
+              {/* Sindicatos Hub (se ainda existir) – pode redirecionar para CadastroHub ou manter */}
               <Route path="/admin/sindicatos" element={<Navigate to="/admin/cadastro" replace />} />
+
+              {/* ACT-CCT agora em /admin/documentos/act-cct */}
+              <Route path="/admin/documentos/act-cct" element={<SindicatosNegociacoes />} />
+              {/* Redirecionamentos de rotas antigas */}
+              <Route path="/admin/sindicatos/negociacoes" element={<Navigate to="/admin/documentos/act-cct" replace />} />
+              <Route path="/admin/cadastro/act-cct" element={<Navigate to="/admin/documentos/act-cct" replace />} />
 
               {/* Folgas Group */}
               <Route path="/admin/folgas" element={<FolgasDashboard />} />
@@ -124,13 +132,17 @@ function AuthenticatedRoutes() {
               <Route path="/admin/documentos/historico" element={<DocumentosHistoricoCompleto />} />
               <Route path="/admin/documentos/atestados" element={<AtestadosAdmin />} />
               <Route path="/admin/documentos/disciplinar" element={<RegistrosDisciplinaresAdmin />} />
-              
+              {/* ACT-CCT já está definido acima */}
+
               {/* Comunicação Group */}
               <Route path="/admin/mensagens" element={<MensagensAdmin />} />
               <Route path="/admin/avisos" element={<QuadroAvisosAdmin />} />
               
               {/* Setup */}
               <Route path="/admin/setup" element={<SetupAdmin />} />
+
+              {/* Catch-all admin */}
+              <Route path="/admin/*" element={<Navigate to="/admin/home" replace />} />
             </>
           ) : (
             <>
