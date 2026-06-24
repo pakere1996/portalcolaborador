@@ -18,6 +18,7 @@ export interface DateStatus {
   label?: string;
   occupancy?: number;
   limit?: number;
+  adminCanOverride?: boolean; // Indica que admin pode interagir mesmo bloqueado
 }
 
 export interface FolgaRecord {
@@ -109,6 +110,7 @@ export function getMonthDays(year: number, month0: number): Date[] {
 }
 
 export function autoBlockedDatesForMonth(year: number, month0: number): { date: string; reason: string }[] {
+  // Esta função não é mais usada diretamente, pois os bloqueios são gerados no banco.
   return [];
 }
 
@@ -156,15 +158,16 @@ export function calculateDateStatus(params: {
     return { status: "available", label: "Seu aniversário", reason: "Data reservada para você", occupancy: 0, limit: 1 };
   }
 
+  // 🔹 VERIFICAÇÃO DE BLOQUEIO – AGORA ADMIN TAMBÉM VÊ VISUALMENTE
   const manual = manualBlocked.get(iso);
-if (manual && !manual.liberada) {
-  if (isAdmin) {
-    // Admin vê o bloqueio, mas pode interagir
-    return { status: "blocked", reason: manual.reason, adminCanOverride: true };
-  } else {
-    return { status: "blocked", reason: manual.reason };
+  if (manual && !manual.liberada) {
+    if (isAdmin) {
+      // Admin vê o bloqueio visualmente, mas pode interagir (adminCanOverride = true)
+      return { status: "blocked", reason: manual.reason, adminCanOverride: true };
+    } else {
+      return { status: "blocked", reason: manual.reason };
+    }
   }
-}
 
   const myFolga = myUserId && allFolgas.find(f => f.user_id === myUserId && f.data === iso);
   if (!isAdmin && myFolga) {
@@ -208,9 +211,6 @@ if (manual && !manual.liberada) {
     (f.tipo === 'sabado' || f.tipo === 'domingo') &&
     f.extra !== true
   ).length;
-
-  const totalOccupied = monthlyCount + allFolgas.filter(f => f.data === iso && f.extra === true).length +
-    (allProfiles.filter(p => p.folga_fixa_semana === date.getDay() && !canceledFolgas.some(c => c.user_id === p.id && c.data === iso)).length);
 
   if (!isAdmin && monthlyCount >= limit) {
     return { status: "taken", label: "Lotado", reason: "Limite de folgas mensais atingido", occupancy: monthlyCount, limit };
