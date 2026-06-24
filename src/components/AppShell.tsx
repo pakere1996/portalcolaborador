@@ -25,7 +25,7 @@ import {
   Bell,
   Coins,
   ListChecks,
-  Scale, // ícone para Sindicatos
+  Scale,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
@@ -53,7 +53,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [docsOpen, setDocsOpen] = useState(false);
   const [cadastroOpen, setCadastroOpen] = useState(false);
   const [comunicacaoOpen, setComunicacaoOpen] = useState(false);
-  const [sindicatosOpen, setSindicatosOpen] = useState(false); // 🔥 NOVO
+  const [sindicatosOpen, setSindicatosOpen] = useState(false);
 
   const toggleMenu = useCallback(
     (menu: "folgas" | "docs" | "cadastro" | "comunicacao" | "sindicatos") => {
@@ -64,9 +64,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         comunicacao: setComunicacaoOpen,
         sindicatos: setSindicatosOpen,
       };
-      // Fecha todos os outros
       Object.values(setters).forEach((setter) => setter(false));
-      // Abre/fecha o clicado
       const currentState = {
         folgas: folgasOpen,
         docs: docsOpen,
@@ -88,12 +86,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isAdmin = getIsAdmin();
   const homePath = isAdmin ? "/admin/home" : "/home";
 
-  // Fecha o menu mobile ao mudar de página
   useEffect(() => {
     setOpen(false);
   }, [path]);
 
-  // Abre automaticamente o submenu correto baseado na URL
   useEffect(() => {
     const shouldOpen = {
       cadastro:
@@ -114,7 +110,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         path.startsWith("/admin/bloqueios") ||
         path === "/admin/folgas",
       sindicatos:
-        path.startsWith("/admin/sindicatos") || // 🔥 NOVO
+        path.startsWith("/admin/sindicatos") ||
         path === "/admin/sindicatos",
     };
 
@@ -122,10 +118,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setDocsOpen(shouldOpen.docs);
     setCadastroOpen(shouldOpen.cadastro);
     setComunicacaoOpen(shouldOpen.comunicacao);
-    setSindicatosOpen(shouldOpen.sindicatos); // 🔥 NOVO
+    setSindicatosOpen(shouldOpen.sindicatos);
   }, [path]);
 
-  // Navegação do colaborador (submenus)
+  // Navegação do colaborador
   const employeeFolgaNav: NavItem[] = [
     { to: "/calendario", label: "Calendário", icon: Calendar },
     { to: "/trocas", label: "Trocas", icon: ArrowLeftRight },
@@ -138,15 +134,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
   ];
 
-  // 🔥 ADMIN: submenus (itens expansíveis)
+  // ADMIN: submenus
   const adminCadastroNav: NavItem[] = [
     { to: "/admin/colaboradores", label: "Colaboradores", icon: Users },
     { to: "/admin/cargos", label: "Cargos", icon: Briefcase },
     { to: "/admin/unidades", label: "Unidades", icon: Building2 },
-    // Sindicatos removido daqui – agora módulo próprio
   ];
 
-  const adminSindicatosNav: NavItem[] = [ // 🔥 NOVO
+  const adminSindicatosNav: NavItem[] = [
     { to: "/admin/sindicatos/cadastro", label: "Cadastro", icon: Users },
     { to: "/admin/sindicatos/negociacoes", label: "Negociações", icon: FileText },
   ];
@@ -183,7 +178,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         : "text-muted-foreground hover:text-foreground hover:bg-accent"
     );
 
-  // 🔥 Renderiza um item principal com submenu expansível (apenas para admin)
   const renderAdminMenuItem = (
     label: string,
     Icon: LucideIcon,
@@ -279,7 +273,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </NavLink>
 
           {isAdmin ? (
-            // 🔥 ADMIN: menus com links + submenus expansíveis
             <>
               {renderAdminMenuItem(
                 "Cadastro",
@@ -292,7 +285,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
               {renderAdminMenuItem(
                 "Sindicatos",
-                Scale, // ícone de balança
+                Scale,
                 "/admin/sindicatos",
                 sindicatosOpen,
                 () => toggleMenu("sindicatos"),
@@ -327,7 +320,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               )}
             </>
           ) : (
-            // 🔥 COLABORADOR: menus com submenus (mantido)
             <>
               <NavLink
                 to="/perfil"
@@ -337,7 +329,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <span>Meu Cadastro</span>
               </NavLink>
 
-              {/* Folgas - submenu para colaborador */}
               <div className="space-y-1">
                 <div className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-muted-foreground">
                   <Calendar className="size-4" />
@@ -357,7 +348,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
 
-              {/* Documentos - submenu para colaborador */}
               <div className="space-y-1">
                 <div className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-muted-foreground">
                   <FileText className="size-4" />
