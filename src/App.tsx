@@ -19,6 +19,7 @@ import HomeAdmin from "./pages/admin/HomeAdmin";
 import Colaboradores from "./pages/admin/Colaboradores";
 import Cargos from "./pages/admin/Cargos";
 import Unidades from "./pages/admin/Unidades";
+import Sindicatos from "./pages/admin/Sindicatos"; // 🔥 NOVO
 import FolgasDashboard from "./pages/admin/FolgasHub";
 import Solicitacoes from "./pages/admin/Solicitacoes";
 import Aprovacoes from "./pages/admin/Aprovacoes";
@@ -95,6 +96,7 @@ function AuthenticatedRoutes() {
               <Route path="/admin/colaboradores" element={<Colaboradores />} />
               <Route path="/admin/cargos" element={<Cargos />} />
               <Route path="/admin/unidades" element={<Unidades />} />
+              <Route path="/admin/sindicatos" element={<Sindicatos />} /> {/* 🔥 NOVO */}
 
               {/* Folgas Group */}
               <Route path="/admin/folgas" element={<FolgasDashboard />} />
@@ -108,7 +110,6 @@ function AuthenticatedRoutes() {
               <Route path="/admin/documentos/contracheque" element={<DocumentosContracheque />} />
               <Route path="/admin/documentos/ponto" element={<DocumentosPontoAdmin />} />
               <Route path="/admin/documentos/adiantamento" element={<DocumentosAdiantamento />} />
-              {/* 🔥 A rota mais específica DEVE vir antes de rotas genéricas */}
               <Route path="/admin/documentos/historico" element={<DocumentosHistoricoCompleto />} />
               <Route path="/admin/documentos/atestados" element={<AtestadosAdmin />} />
               <Route path="/admin/documentos/disciplinar" element={<RegistrosDisciplinaresAdmin />} />
