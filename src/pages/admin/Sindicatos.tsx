@@ -1,3 +1,4 @@
+// src/pages/admin/Sindicatos.tsx
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,27 @@ import {
 } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
+import { cn } from "@/lib/utils";
+
+// 🔥 Funções de formatação
+const onlyNumbers = (value: string) => value.replace(/\D/g, "");
+
+const formatCNPJ = (value: string) => {
+  const clean = onlyNumbers(value);
+  if (clean.length <= 2) return clean;
+  if (clean.length <= 5) return clean.replace(/^(\d{2})(\d{0,3})/, "$1.$2");
+  if (clean.length <= 8) return clean.replace(/^(\d{2})(\d{3})(\d{0,3})/, "$1.$2.$3");
+  if (clean.length <= 12) return clean.replace(/^(\d{2})(\d{3})(\d{3})(\d{0,4})/, "$1.$2.$3/$4");
+  return clean.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, "$1.$2.$3/$4-$5");
+};
+
+const formatWhatsApp = (value: string) => {
+  const clean = onlyNumbers(value);
+  if (clean.length <= 2) return clean;
+  if (clean.length <= 6) return clean.replace(/^(\d{2})(\d{0,4})/, "($1) $2");
+  if (clean.length <= 10) return clean.replace(/^(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3");
+  return clean.replace(/^(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3");
+};
 
 interface Sindicato {
   id: string;
@@ -163,20 +185,43 @@ export default function Sindicatos() {
     loadDocumentos(sindicato.id);
   };
 
-  // Salvar sindicato
+  // 🔥 Handlers com máscara
+  const handleCNPJChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    const formatted = formatCNPJ(raw);
+    setForm({ ...form, cnpj: formatted });
+  };
+
+  const handleWhatsAppChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    const formatted = formatWhatsApp(raw);
+    setForm({ ...form, contato_whatsapp: formatted });
+  };
+
+  // Salvar sindicato (com validação e limpeza)
   const salvarSindicato = async () => {
+    // Validação: nome obrigatório
     if (!form.nome.trim()) {
       toast.error("Nome do sindicato é obrigatório");
+      return;
+    }
+    // 🔥 Validação: tipo obrigatório
+    if (!form.tipo) {
+      toast.error("Selecione o tipo do sindicato (Laboral ou Patronal)");
       return;
     }
 
     setBusy(true);
     try {
+      // Limpa máscaras para salvar apenas números
+      const cleanCNPJ = form.cnpj ? onlyNumbers(form.cnpj) : null;
+      const cleanWhatsApp = form.contato_whatsapp ? onlyNumbers(form.contato_whatsapp) : null;
+
       const dados = {
         nome: form.nome.trim(),
-        cnpj: form.cnpj.trim() || null,
-        tipo: form.tipo || null,
-        contato_whatsapp: form.contato_whatsapp.trim() || null,
+        cnpj: cleanCNPJ,
+        tipo: form.tipo, // agora sempre preenchido
+        contato_whatsapp: cleanWhatsApp,
         updated_at: new Date().toISOString(),
       };
 
@@ -336,15 +381,18 @@ export default function Sindicatos() {
     }
   };
 
-  const getTipoLabel = (tipo: string) => {
-    return TIPOS_SINDICATO.find(t => t.value === tipo)?.label || tipo;
+  // 🔥 Funções de label com fallback
+  const getTipoLabel = (tipo: string | null) => {
+    if (!tipo) return "—";
+    const found = TIPOS_SINDICATO.find(t => t.value === tipo);
+    return found ? found.label : tipo;
   };
 
   const getDocTipoLabel = (tipo: string) => {
     return TIPOS_DOCUMENTO.find(t => t.value === tipo)?.label || tipo;
   };
 
-  // Filtros (opcional)
+  // Filtros
   const [filtroNome, setFiltroNome] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("todos");
 
@@ -417,19 +465,19 @@ export default function Sindicatos() {
                 <div className="flex items-start justify-between">
                   <CardTitle className="text-lg truncate">{s.nome}</CardTitle>
                   <Badge variant={s.tipo === "laboral" ? "default" : "secondary"}>
-                    {getTipoLabel(s.tipo || "")}
+                    {getTipoLabel(s.tipo)}
                   </Badge>
                 </div>
               </CardHeader>
               <CardContent className="space-y-2">
                 {s.cnpj && (
                   <div className="text-sm text-muted-foreground">
-                    <span className="font-medium">CNPJ:</span> {s.cnpj}
+                    <span className="font-medium">CNPJ:</span> {formatCNPJ(s.cnpj)}
                   </div>
                 )}
                 {s.contato_whatsapp && (
                   <div className="text-sm text-muted-foreground">
-                    <span className="font-medium">WhatsApp:</span> {s.contato_whatsapp}
+                    <span className="font-medium">WhatsApp:</span> {formatWhatsApp(s.contato_whatsapp)}
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2 mt-3">
@@ -449,9 +497,9 @@ export default function Sindicatos() {
                       setEditando(s);
                       setForm({
                         nome: s.nome,
-                        cnpj: s.cnpj || "",
+                        cnpj: s.cnpj ? formatCNPJ(s.cnpj) : "",
                         tipo: s.tipo || "",
-                        contato_whatsapp: s.contato_whatsapp || "",
+                        contato_whatsapp: s.contato_whatsapp ? formatWhatsApp(s.contato_whatsapp) : "",
                       });
                       setDialogOpen(true);
                     }}
@@ -492,30 +540,35 @@ export default function Sindicatos() {
               <Label>CNPJ</Label>
               <Input
                 value={form.cnpj}
-                onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
+                onChange={handleCNPJChange}
                 placeholder="00.000.000/0000-00"
+                maxLength={18}
               />
             </div>
             <div className="space-y-2">
-              <Label>Tipo</Label>
+              <Label>Tipo *</Label>
               <Select
                 value={form.tipo}
                 onValueChange={(v) => setForm({ ...form, tipo: v as "laboral" | "patronal" })}
               >
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
                 <SelectContent>
                   {TIPOS_SINDICATO.map(t => (
                     <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {!form.tipo && (
+                <p className="text-xs text-red-500 font-medium mt-1">* Obrigatório</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Contato WhatsApp</Label>
               <Input
                 value={form.contato_whatsapp}
-                onChange={(e) => setForm({ ...form, contato_whatsapp: e.target.value })}
+                onChange={handleWhatsAppChange}
                 placeholder="(62) 99999-9999"
+                maxLength={15}
               />
             </div>
           </div>
