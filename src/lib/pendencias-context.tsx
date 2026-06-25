@@ -40,6 +40,7 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
 
     setLoading(true);
     try {
+      // Buscar pendências adiadas
       const { data: adiados, error: adiadosError } = await supabase
         .from("pendencias_adiadas")
         .select("tipo_pendencia, identificador, data_reexibicao")
@@ -57,7 +58,7 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
       const hoje = new Date();
       hoje.setHours(0, 0, 0, 0);
 
-      // 2. Solicitações de exceção pendentes
+      // 1. Solicitações de exceção pendentes
       try {
         const { data: excecoes, error: excecoesError } = await supabase
           .from("solicitacoes_especiais")
@@ -102,7 +103,7 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
         console.warn("Erro ao buscar solicitações de exceção:", error);
       }
 
-      // 3. Documentos
+      // 2. Documentos (contracheque, adiantamento, folha de ponto)
       const mesVigente = hoje.getMonth() + 1;
       const anoVigente = hoje.getFullYear();
       const diaHoje = hoje.getDate();
@@ -205,7 +206,7 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
         }
       }
 
-      // 4. Negociações coletivas
+      // 3. Negociações coletivas
       try {
         for (const unidade of unidades) {
           const { data: negociacao, error: negError } = await supabase
@@ -227,7 +228,7 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
 
           if (negociacao && negociacao.length > 0) {
             const ultima = negociacao[0];
-            const dataBase = new Date(ultima.ano, ultima.mes - 1, 1);
+            // Vencimento: último dia do mês da data base + 1 ano
             dataVencimento = new Date(ultima.ano + 1, ultima.mes - 1, 0);
             const dataInicioAtraso = new Date(dataVencimento);
             dataInicioAtraso.setDate(dataInicioAtraso.getDate() + 1);
@@ -278,7 +279,7 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
   const adiarPendencia = async (identificadorUnico: string, dias: number) => {
     if (!user) return;
     try {
-      const [tipo, ...resto] = identificadorUnico.split('-');
+      const [tipo] = identificadorUnico.split('-');
       const dataReexibicao = new Date();
       dataReexibicao.setDate(dataReexibicao.getDate() + dias);
       const dataStr = dataReexibicao.toISOString().split("T")[0];
