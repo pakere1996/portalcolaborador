@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useAtestadosPendentes } from "@/lib/atestados-pendentes-context";
+import { usePendencias } from "@/lib/pendencias-context";
 import { useFavoritos } from "@/lib/useFavoritos";
 import { AniversariantesWidget } from "@/components/AniversariantesWidget";
 import { FavoritosGrid } from "@/components/FavoritosGrid";
@@ -21,7 +22,8 @@ import { toast } from "sonner";
 import { X } from "lucide-react";
 
 export default function AdminHomeAdminPage() {
-  const { pendentes, totalPendentes, loading: loadingAtestados, showNotification, setShowNotification } = useAtestadosPendentes();
+  const { pendentes: atestadosPendentes, totalPendentes, loading: loadingAtestados, showNotification, setShowNotification } = useAtestadosPendentes();
+  const { pendencias: outrasPendencias, loading: loadingPendencias } = usePendencias();
   const { favoritos, loading: loadingFavoritos } = useFavoritos();
 
   // Toast de notificação
@@ -50,23 +52,18 @@ export default function AdminHomeAdminPage() {
 
       {/* 🔥 Grid: Pendências (esquerda) + Aniversariantes (direita) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Pendências */}
         <PendenciasWidget
-          pendentes={pendentes}
-          totalPendentes={totalPendentes}
-          loading={loadingAtestados}
-          titulo="Pendências"
-          emptyMessage="Nenhuma pendência no momento."
-          viewAllLink="/admin/documentos/atestados"
+          titulo="Pendências do Sistema"
+          emptyMessage="Tudo em dia! 🎉"
+          viewAllLink="/admin/folgas"
           viewAllLabel="Ver todas"
-          maxItems={5}
+          maxItems={6}
         />
 
-        {/* Aniversariantes */}
         <AniversariantesWidget />
       </div>
 
-      {/* 🔥 Favoritos – ocupando largura total, com cards ajustados */}
+      {/* 🔥 Favoritos */}
       <FavoritosGrid />
 
       {/* AlertDialog – notificação em tela */}
@@ -89,7 +86,7 @@ export default function AdminHomeAdminPage() {
               Existem <strong>{totalPendentes}</strong> atestado(s) aguardando sua aprovação.
               <br />
               <br />
-              {pendentes.map((p) => (
+              {atestadosPendentes.map((p) => (
                 <div key={p.id} className="flex items-center gap-2 mt-1 text-sm">
                   <span className="font-medium">{p.colaborador_nome}</span>
                   <span className="text-muted-foreground">
