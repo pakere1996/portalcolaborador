@@ -46,31 +46,37 @@ import {
   Stethoscope,
   Clock,
   Star as StarIcon,
+  Home,
+  Scale,
+  Megaphone,
 } from "lucide-react";
 
 const iconMap: Record<string, any> = {
-  Users: Users,
-  Briefcase: Briefcase,
-  Building2: Building2,
-  Shield: Shield,
-  Calendar: Calendar,
-  ClipboardList: ClipboardList,
-  UserCheck: UserCheck,
-  ArrowLeftRight: ArrowLeftRight,
-  Ban: Ban,
-  FileText: FileText,
-  FileWarning: FileWarning,
-  ShieldAlert: ShieldAlert,
-  MessageSquare: MessageSquare,
-  Bell: Bell,
-  Coins: Coins,
-  ListChecks: ListChecks,
-  Gavel: Gavel,
-  Stethoscope: Stethoscope,
-  Clock: Clock,
+  Users,
+  Briefcase,
+  Building2,
+  Shield,
+  Calendar,
+  ClipboardList,
+  UserCheck,
+  ArrowLeftRight,
+  Ban,
+  FileText,
+  FileWarning,
+  ShieldAlert,
+  MessageSquare,
+  Bell,
+  Coins,
+  ListChecks,
+  Gavel,
+  Stethoscope,
+  Clock,
+  Home,
+  Scale,
+  Megaphone,
 };
 
-// 🔥 Card arrastável (com transição suave da versão que funcionava)
+// 🔥 Card arrastável com altura fixa e texto em 2 linhas
 function SortableFavoritoCard({ favorito }: { favorito: Favorito }) {
   const {
     attributes,
@@ -94,14 +100,16 @@ function SortableFavoritoCard({ favorito }: { favorito: Favorito }) {
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
       <Card
         className={cn(
-          "border-border shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing",
+          "border-border shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing h-full",
           isDragging && "shadow-lg ring-2 ring-primary/50"
         )}
       >
-        <Link to={favorito.rota} className="block" onClick={(e) => e.stopPropagation()}>
-          <CardContent className="p-4 flex items-center gap-3">
-            <IconComponent className="size-5 text-primary shrink-0" />
-            <span className="font-medium text-sm line-clamp-2 break-words">{favorito.label}</span>
+        <Link to={favorito.rota} className="block h-full" onClick={(e) => e.stopPropagation()}>
+          <CardContent className="p-4 h-full flex flex-col items-center justify-center gap-2 min-h-[110px]">
+            <IconComponent className="size-6 text-primary shrink-0" />
+            <span className="text-sm font-medium text-center leading-tight line-clamp-2 break-words w-full">
+              {favorito.label}
+            </span>
           </CardContent>
         </Link>
       </Card>
@@ -114,9 +122,9 @@ function DragOverlayCard({ favorito }: { favorito: Favorito }) {
   const IconComponent = iconMap[favorito.icone] || StarIcon;
   return (
     <Card className="border-primary shadow-lg ring-2 ring-primary/50 bg-white scale-105">
-      <CardContent className="p-4 flex items-center gap-3">
-        <IconComponent className="size-5 text-primary shrink-0" />
-        <span className="font-medium text-sm">{favorito.label}</span>
+      <CardContent className="p-4 flex flex-col items-center justify-center gap-2 min-h-[110px]">
+        <IconComponent className="size-6 text-primary shrink-0" />
+        <span className="text-sm font-medium text-center">{favorito.label}</span>
       </CardContent>
     </Card>
   );
@@ -132,7 +140,7 @@ function TrashZone({ isDragging }: { isDragging: boolean }) {
     <div
       ref={setNodeRef}
       className={cn(
-        "absolute top-3 right-3 z-10 rounded-full p-2 transition-all duration-300",
+        "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-full p-4 transition-all duration-300",
         isDragging
           ? "opacity-100 scale-100 pointer-events-auto"
           : "opacity-0 scale-0 pointer-events-none",
@@ -141,9 +149,9 @@ function TrashZone({ isDragging }: { isDragging: boolean }) {
           : "bg-red-100 text-red-600"
       )}
     >
-      <Trash2 className="size-5" />
+      <Trash2 className="size-8" />
       {isOver && (
-        <span className="absolute -top-7 left-1/2 -translate-x-1/2 text-[10px] font-bold text-red-600 bg-white px-2 py-0.5 rounded shadow whitespace-nowrap">
+        <span className="absolute -top-8 left-1/2 -translate-x-1/2 text-xs font-bold text-red-600 bg-white px-3 py-1 rounded shadow whitespace-nowrap">
           Solte para excluir
         </span>
       )}
@@ -178,7 +186,6 @@ export function FavoritosGrid() {
     setActiveId(null);
     setIsDragging(false);
 
-    // 🔥 Se soltou sobre a lixeira, remover o favorito
     if (over?.id === "trash") {
       const favorito = favoritos.find((f) => f.id === active.id);
       if (favorito) {
@@ -187,7 +194,6 @@ export function FavoritosGrid() {
       return;
     }
 
-    // 🔥 Reordenação normal (com rectSortingStrategy)
     if (active.id !== over?.id && over) {
       const oldIndex = favoritos.findIndex((f) => f.id === active.id);
       const newIndex = favoritos.findIndex((f) => f.id === over.id);
@@ -263,16 +269,15 @@ export function FavoritosGrid() {
         >
           <SortableContext
             items={favoritos.map((f) => f.id)}
-            strategy={rectSortingStrategy} // 🔥 Mantido da versão que funcionava
+            strategy={rectSortingStrategy}
           >
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {favoritos.map((fav) => (
                 <SortableFavoritoCard key={fav.id} favorito={fav} />
               ))}
             </div>
           </SortableContext>
 
-          {/* 🔥 Lixeira dentro do card */}
           <TrashZone isDragging={isDragging} />
 
           <DragOverlay
