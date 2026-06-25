@@ -43,8 +43,25 @@ import {
 } from "@/components/ui/select";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
 import { cn } from "@/lib/utils";
+import { Tables } from "@/integrations/supabase/types";
 
-// --- Formatação (copiada da tela de sindicatos) ---
+// --- Tipos usando a definição do Supabase ---
+type Unidade = Tables<"unidades">;
+type Sindicato = Tables<"sindicatos">;
+type Cargo = Tables<"cargos">;
+
+interface UnidadeWithCounts extends Unidade {
+  cargos_count?: number;
+  sindicatos_patronais_count?: number;
+}
+
+interface UnidadeCargoAssoc {
+  cargo_id: string;
+  sindicato_laboral_id: string | null;
+  cargo_nome?: string;
+}
+
+// --- Formatação ---
 const onlyNumbers = (value: string) => value.replace(/\D/g, "");
 const formatCNPJ = (value: string) => {
   const clean = onlyNumbers(value);
@@ -61,44 +78,6 @@ const formatWhatsApp = (value: string) => {
   if (clean.length <= 10) return clean.replace(/^(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3");
   return clean.replace(/^(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3");
 };
-
-// --- Tipos ---
-type Unidade = {
-  id: string;
-  nome: string;
-  cnpj: string | null;
-  endereco: string | null;
-  cidade: string | null;
-  telefone: string | null;
-  ativo: boolean;
-  possui_relogio_ponto: boolean;
-  tem_adiantamento: boolean;
-  dia_adiantamento: number | null;
-  created_at: string;
-};
-
-type Sindicato = {
-  id: string;
-  nome: string;
-  tipo: "laboral" | "patronal";
-};
-
-type Cargo = {
-  id: string;
-  nome: string;
-  descricao: string | null;
-};
-
-interface UnidadeWithCounts extends Unidade {
-  cargos_count?: number;
-  sindicatos_patronais_count?: number;
-}
-
-interface UnidadeCargoAssoc {
-  cargo_id: string;
-  sindicato_laboral_id: string | null;
-  cargo_nome?: string;
-}
 
 const blank = {
   nome: "",
@@ -134,11 +113,9 @@ export default function Unidades() {
   const [novoCargoId, setNovoCargoId] = useState<string>("");
   const [novoCargoSindicatoId, setNovoCargoSindicatoId] = useState<string>("none");
 
-  // --- Estados para o modal de criação de cargo (completo) ---
+  // Estados para os modais de criação rápida
   const [openNovoCargo, setOpenNovoCargo] = useState(false);
   const [novoCargoForm, setNovoCargoForm] = useState({ nome: "", descricao: "" });
-
-  // --- Estados para o modal de criação de sindicato (completo) ---
   const [openNovoSindicato, setOpenNovoSindicato] = useState(false);
   const [novoSindicatoTipo, setNovoSindicatoTipo] = useState<"laboral" | "patronal">("laboral");
   const [novoSindicatoForm, setNovoSindicatoForm] = useState({
@@ -180,7 +157,7 @@ export default function Unidades() {
     setList(unidadesComContagens);
   };
 
-  // Carregar dados auxiliares (sindicatos, cargos, unidades)
+  // Carregar dados auxiliares
   const loadAuxData = async () => {
     const [patronais, laborais, cargos, unidades] = await Promise.all([
       supabase.from("sindicatos").select("*").eq("tipo", "patronal").order("nome"),
@@ -280,7 +257,7 @@ export default function Unidades() {
     );
   };
 
-  // --- Criação rápida de novo cargo (mesmos campos da tela de cargos) ---
+  // Criação rápida de cargo
   const criarNovoCargo = async () => {
     if (!novoCargoForm.nome.trim()) {
       toast.error("Nome do cargo é obrigatório.");
@@ -305,9 +282,9 @@ export default function Unidades() {
       toast.success("Cargo criado com sucesso!");
       setOpenNovoCargo(false);
       setNovoCargoForm({ nome: "", descricao: "" });
-      await loadAuxData(); // recarrega a lista de cargos globais
+      await loadAuxData();
       if (data && data[0]) {
-        setNovoCargoId(data[0].id); // pré‑seleciona o novo cargo
+        setNovoCargoId(data[0].id);
       }
     } catch (e: any) {
       toast.error("Erro ao criar cargo", { description: e.message });
@@ -316,7 +293,7 @@ export default function Unidades() {
     }
   };
 
-  // --- Criação rápida de novo sindicato (completa, igual à tela de sindicatos) ---
+  // Criação rápida de sindicato
   const abrirNovoSindicato = (tipo: "laboral" | "patronal") => {
     setNovoSindicatoTipo(tipo);
     setNovoSindicatoForm({ nome: "", cnpj: "", contato_whatsapp: "" });
@@ -392,7 +369,7 @@ export default function Unidades() {
     }
   };
 
-  // --- Salvar edição da unidade ---
+  // Salvar edição da unidade
   const saveEdit = async () => {
     if (!editing) return;
     if (!editForm.nome.trim()) {
@@ -508,7 +485,6 @@ export default function Unidades() {
   // ---------- Renderização ----------
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      {/* Cabeçalho */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
@@ -526,7 +502,6 @@ export default function Unidades() {
                 <Plus className="size-4 mr-2" /> Nova Unidade
               </Button>
             </DialogTrigger>
-            {/* ... conteúdo do Dialog de Nova Unidade (mesmo de antes) ... */}
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>Nova unidade</DialogTitle>
@@ -691,14 +666,13 @@ export default function Unidades() {
         </div>
       </div>
 
-      {/* ===== MODAL DE EDIÇÃO DA UNIDADE ===== */}
+      {/* ===== MODAL DE EDIÇÃO ===== */}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar unidade: {editing?.nome}</DialogTitle>
           </DialogHeader>
           <div className="space-y-6 py-4">
-            {/* Dados básicos */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Nome *</Label>
@@ -946,7 +920,7 @@ export default function Unidades() {
         </DialogContent>
       </Dialog>
 
-      {/* ===== MODAL DE CRIAÇÃO DE CARGO (completo) ===== */}
+      {/* ===== MODAL DE CRIAÇÃO DE CARGO ===== */}
       <Dialog open={openNovoCargo} onOpenChange={setOpenNovoCargo}>
         <DialogContent>
           <DialogHeader>
@@ -983,7 +957,7 @@ export default function Unidades() {
         </DialogContent>
       </Dialog>
 
-      {/* ===== MODAL DE CRIAÇÃO DE SINDICATO (completo) ===== */}
+      {/* ===== MODAL DE CRIAÇÃO DE SINDICATO ===== */}
       <Dialog open={openNovoSindicato} onOpenChange={setOpenNovoSindicato}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
