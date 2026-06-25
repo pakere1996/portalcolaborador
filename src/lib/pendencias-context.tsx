@@ -4,15 +4,15 @@ import { useAuth } from "./auth-context";
 import { toast } from "sonner";
 
 export interface Pendencia {
-  id: string; // identificador único gerado localmente
+  id: string;
   tipo: "troca" | "contracheque" | "adiantamento" | "folha_ponto" | "negociacao";
   titulo: string;
   descricao: string;
-  data_referencia: string; // data para calcular atraso (formato YYYY-MM-DD)
+  data_referencia: string;
   rota_resolver: string;
   unidade_id?: string | null;
   colaborador_id?: string | null;
-  identificador_unico: string; // usado para adiamento
+  identificador_unico: string;
 }
 
 interface PendenciaContextType {
@@ -64,28 +64,34 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
           solicitante_id,
           destinatario_id,
           status,
-          solicitante:profiles!trocas_folga_solicitante_id_fkey(nome),
-          destinatario:profiles!trocas_folga_destinatario_id_fkey(nome)
+          solicitante:profiles!solicitante_id(nome),
+          destinatario:profiles!destinatario_id(nome)
         `)
         .eq("status", "pendente");
 
-      if (trocasError) throw trocasError;
+      if (trocasError) {
+        console.warn("Erro ao buscar trocas:", trocasError);
+        // Não interrompe o fluxo, apenas loga o erro
+      } else {
+        trocas?.forEach(t => {
+          const chave = `troca-${t.id}`;
+          if (chaveAdiados.has(chave)) return;
 
-      trocas?.forEach(t => {
-        const chave = `troca-${t.id}`;
-        if (chaveAdiados.has(chave)) return;
+          const dataRef = t.data_destinatario;
+          const solicitanteNome = (t.solicitante as any)?.nome || "Solicitante";
+          const destinatarioNome = (t.destinatario as any)?.nome || "Destinatário";
 
-        const dataRef = t.data_destinatario;
-        pendenciasList.push({
-          id: `troca-${t.id}`,
-          tipo: "troca",
-          titulo: "Troca de folga pendente",
-          descricao: `${t.solicitante?.nome || "Solicitante"} → ${t.destinatario?.nome || "Destinatário"} (${new Date(dataRef).toLocaleDateString("pt-BR")})`,
-          data_referencia: dataRef,
-          rota_resolver: "/admin/solicitacoes",
-          identificador_unico: chave,
+          pendenciasList.push({
+            id: `troca-${t.id}`,
+            tipo: "troca",
+            titulo: "Troca de folga pendente",
+            descricao: `${solicitanteNome} → ${destinatarioNome} (${new Date(dataRef).toLocaleDateString("pt-BR")})`,
+            data_referencia: dataRef,
+            rota_resolver: "/admin/solicitacoes",
+            identificador_unico: chave,
+          });
         });
-      });
+      }
 
       // 3. Documentos (contracheque, adiantamento, folha de ponto)
       const hoje = new Date();
