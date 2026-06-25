@@ -32,33 +32,25 @@ interface Negociacao {
 }
 
 // --- Funções de formatação ---
-const onlyNumbers = (value: string) => value.replace(/\D/g, "");
+const apenasNumeros = (valor: string) => valor.replace(/\D/g, "");
 
-const formatCNPJ = (value: string | null): string => {
-  if (!value) return "";
-  const clean = onlyNumbers(value);
-  if (clean.length <= 2) return clean;
-  if (clean.length <= 5) return clean.replace(/^(\d{2})(\d{0,3})/, "$1.$2");
-  if (clean.length <= 8) return clean.replace(/^(\d{2})(\d{3})(\d{0,3})/, "$1.$2.$3");
-  if (clean.length <= 12) return clean.replace(/^(\d{2})(\d{3})(\d{3})(\d{0,4})/, "$1.$2.$3/$4");
-  return clean.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, "$1.$2.$3/$4-$5");
+const formatarCNPJ = (valor: string | null): string => {
+  if (!valor) return "";
+  const numeros = apenasNumeros(valor);
+  if (numeros.length <= 2) return numeros;
+  if (numeros.length <= 5) return numeros.replace(/^(\d{2})(\d{0,3})/, "$1.$2");
+  if (numeros.length <= 8) return numeros.replace(/^(\d{2})(\d{3})(\d{0,3})/, "$1.$2.$3");
+  if (numeros.length <= 12) return numeros.replace(/^(\d{2})(\d{3})(\d{3})(\d{0,4})/, "$1.$2.$3/$4");
+  return numeros.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, "$1.$2.$3/$4-$5");
 };
 
-const formatWhatsApp = (value: string | null): string => {
-  if (!value) return "";
-  const clean = onlyNumbers(value);
-  if (clean.length <= 2) return clean;
-  if (clean.length <= 6) return clean.replace(/^(\d{2})(\d{0,4})/, "($1) $2");
-  if (clean.length <= 10) return clean.replace(/^(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3");
-  return clean.replace(/^(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3");
-};
-
-// Para gerar o link do WhatsApp, usamos apenas números
-const linkWhatsApp = (whatsapp: string | null): string => {
-  if (!whatsapp) return "#";
-  const numeros = onlyNumbers(whatsapp);
-  if (!numeros) return "#";
-  return `https://wa.me/55${numeros}`;
+const formatarWhatsApp = (valor: string | null): string => {
+  if (!valor) return "";
+  const numeros = apenasNumeros(valor);
+  if (numeros.length <= 2) return numeros;
+  if (numeros.length <= 6) return numeros.replace(/^(\d{2})(\d{0,4})/, "($1) $2");
+  if (numeros.length <= 10) return numeros.replace(/^(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3");
+  return numeros.replace(/^(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3");
 };
 
 export default function DocumentosSindicato() {
@@ -76,6 +68,13 @@ export default function DocumentosSindicato() {
     }
     carregarDados();
   }, [user]);
+
+  // Gerar link do WhatsApp
+  const linkWhatsApp = (whatsapp: string | null): string => {
+    const numeros = apenasNumeros(whatsapp || "");
+    if (!numeros) return "#";
+    return `https://wa.me/55${numeros}`;
+  };
 
   const carregarDados = async () => {
     if (!user?.id) {
@@ -155,7 +154,7 @@ export default function DocumentosSindicato() {
       }
       setCargoNome(cargoNomeEncontrado || profile.cargo);
 
-      // 4. Buscar vínculo do cargo com sindicato laboral
+      // 4. Buscar vínculo do cargo com sindicato laboral na unidade
       const { data: unidadeCargo, error: ucError } = await supabase
         .from("unidade_cargos")
         .select("sindicato_laboral_id")
@@ -193,7 +192,7 @@ export default function DocumentosSindicato() {
       }
       setSindicatoLaboral(sindLaboral);
 
-      // 6. Buscar negociação mais recente (ACT/CCT)
+      // 6. Buscar negociação mais recente
       const { data: negociacaoData, error: negError } = await supabase
         .from("negociacoes")
         .select(`
@@ -216,7 +215,7 @@ export default function DocumentosSindicato() {
       if (negociacaoData) {
         setNegociacao(negociacaoData);
       } else {
-        // Fallback: buscar sem filtrar por unidade
+        // Fallback: negociação sem vínculo de unidade
         const { data: negFallback, error: fallbackError } = await supabase
           .from("negociacoes")
           .select(`
@@ -345,12 +344,12 @@ export default function DocumentosSindicato() {
             {sindicatoLaboral.cnpj && (
               <div>
                 <span className="text-sm text-muted-foreground">CNPJ</span>
-                <p className="font-mono">{formatCNPJ(sindicatoLaboral.cnpj)}</p>
+                <p className="font-mono">{formatarCNPJ(sindicatoLaboral.cnpj)}</p>
               </div>
             )}
             {sindicatoLaboral.contato_whatsapp && (
               <div>
-                <span className="text-sm text-muted-foreground">WhatsApp</span>
+                <span className="text-sm text-muted-foreground">Contato com o Sindicato</span>
                 <div className="mt-1">
                   <Button
                     variant="outline"
@@ -359,7 +358,7 @@ export default function DocumentosSindicato() {
                     onClick={() => window.open(linkWhatsApp(sindicatoLaboral.contato_whatsapp), "_blank")}
                   >
                     <MessageCircle className="size-4 mr-2" />
-                    {formatWhatsApp(sindicatoLaboral.contato_whatsapp)}
+                    {formatarWhatsApp(sindicatoLaboral.contato_whatsapp)}
                   </Button>
                 </div>
               </div>
@@ -371,7 +370,7 @@ export default function DocumentosSindicato() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-xl flex items-center gap-2">
-            <FileText className="size-5 text-primary" /> Documento Coletivo (ACT/CCT)
+            <FileText className="size-5 text-primary" /> Documento Coletivo
           </CardTitle>
         </CardHeader>
         <CardContent>
