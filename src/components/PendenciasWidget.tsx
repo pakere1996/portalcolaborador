@@ -22,7 +22,6 @@ import {
   FileText,
   Coins,
   Scale,
-  Calendar,
   ArrowRight,
   CalendarClock,
 } from "lucide-react";
@@ -37,18 +36,27 @@ interface PendenciasWidgetProps {
   maxItems?: number;
 }
 
+// 🔥 Corrigido: usar 'solicitacao' em vez de 'troca'
 const ICON_MAP = {
-  troca: { icon: UserCheck, color: "text-blue-600", bg: "bg-blue-50" },
+  solicitacao: { icon: UserCheck, color: "text-blue-600", bg: "bg-blue-50" },
   contracheque: { icon: FileText, color: "text-purple-600", bg: "bg-purple-50" },
   adiantamento: { icon: Coins, color: "text-cyan-600", bg: "bg-cyan-50" },
   folha_ponto: { icon: Clock, color: "text-emerald-600", bg: "bg-emerald-50" },
   negociacao: { icon: Scale, color: "text-amber-600", bg: "bg-amber-50" },
 };
 
+const TIPO_LABEL = {
+  solicitacao: "Exceção",
+  contracheque: "Contracheque",
+  adiantamento: "Adiantamento",
+  folha_ponto: "Folha de Ponto",
+  negociacao: "Negociação",
+};
+
 export function PendenciasWidget({
   titulo = "Pendências",
   emptyMessage = "Nenhuma pendência no momento.",
-  viewAllLink = "/admin/documentos/atestados",
+  viewAllLink = "/admin/folgas",
   viewAllLabel = "Ver todas",
   maxItems = 5,
 }: PendenciasWidgetProps) {
@@ -67,7 +75,10 @@ export function PendenciasWidget({
   const temMais = pendencias.length > maxItems;
 
   const handleAdiar = async () => {
-    if (!adiarDialog.identificador) return;
+    if (!adiarDialog.identificador) {
+      toast.error("Identificador da pendência não encontrado.");
+      return;
+    }
     if (adiarDialog.dias < 1) {
       toast.error("Informe um número de dias válido.");
       return;
@@ -130,13 +141,15 @@ export function PendenciasWidget({
         <CardContent className="flex-1 overflow-y-auto max-h-[400px] pr-1">
           <div className="space-y-2">
             {itensExibidos.map((p) => {
-              const IconComponent = ICON_MAP[p.tipo]?.icon || AlertCircle;
-              const colorClass = ICON_MAP[p.tipo]?.color || "text-gray-600";
-              const bgClass = ICON_MAP[p.tipo]?.bg || "bg-gray-50";
+              // 🔥 Acesso seguro ao mapa, com fallback para caso a chave não exista
+              const iconConfig = ICON_MAP[p.tipo as keyof typeof ICON_MAP];
+              const IconComponent = iconConfig?.icon || AlertCircle;
+              const colorClass = iconConfig?.color || "text-gray-600";
+              const bgClass = iconConfig?.bg || "bg-gray-50";
+              const tipoLabel = TIPO_LABEL[p.tipo as keyof typeof TIPO_LABEL] || p.tipo;
 
-              // Usa o cálculo já feito corretamente no context (baseado na data de vencimento)
-              const diffDias = p.dias_atraso;
-              const isAtrasado = diffDias > 0;
+              const diasAtraso = p.dias_atraso ?? 0;
+              const isAtrasado = diasAtraso > 0;
 
               return (
                 <div
@@ -153,13 +166,28 @@ export function PendenciasWidget({
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium">{p.titulo}</span>
                         {isAtrasado && (
-                          <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200 text-[10px]">
+                          <Badge
+                            variant="outline"
+                            className="bg-red-100 text-red-700 border-red-200 text-[10px]"
+                          >
                             <AlertCircle className="size-3 mr-0.5" />
-                            Atrasado {diffDias} dia(s)
+                            Atrasado {diasAtraso} dia{diasAtraso > 1 ? 's' : ''}
+                          </Badge>
+                        )}
+                        {!isAtrasado && diasAtraso === 0 && (
+                          <Badge
+                            variant="outline"
+                            className="bg-green-100 text-green-700 border-green-200 text-[10px]"
+                          >
+                            <CheckCircle2 className="size-3 mr-0.5" />
+                            Hoje
                           </Badge>
                         )}
                       </div>
                       <div className="text-sm text-muted-foreground">{p.descricao}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {tipoLabel} • Vencimento: {new Date(p.data_vencimento + "T00:00:00").toLocaleDateString("pt-BR")}
+                      </div>
                     </div>
                   </div>
                   <div className="flex gap-1 shrink-0 ml-2">
@@ -193,7 +221,6 @@ export function PendenciasWidget({
         </CardContent>
       </Card>
 
-      {/* Dialog para adiar pendência */}
       <Dialog open={adiarDialog.open} onOpenChange={(open) => !open && setAdiarDialog({ open: false, identificador: null, dias: 1 })}>
         <DialogContent className="max-w-sm rounded-2xl">
           <DialogHeader>
