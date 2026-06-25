@@ -42,22 +42,41 @@ export default function DocumentosSindicato() {
   const [cargoNome, setCargoNome] = useState<string>("");
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     carregarDados();
   }, [user]);
 
   const carregarDados = async () => {
+    if (!user?.id) {
+      toast.error("Usuário não identificado.");
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       // 1. Buscar perfil do colaborador
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("unidade_id, cargo_id, nome")
-        .eq("id", user?.id)
-        .single();
+        .eq("id", user.id)
+        .maybeSingle();
 
-      if (profileError) throw profileError;
-      if (!profile?.unidade_id || !profile?.cargo_id) {
+      if (profileError) {
+        console.error("Erro ao buscar perfil:", profileError);
+        throw profileError;
+      }
+
+      if (!profile) {
+        toast.warning("Perfil não encontrado.");
+        setLoading(false);
+        return;
+      }
+
+      if (!profile.unidade_id || !profile.cargo_id) {
         toast.warning("Seu perfil não está vinculado a uma unidade ou cargo.");
         setLoading(false);
         return;
@@ -65,8 +84,8 @@ export default function DocumentosSindicato() {
 
       // 2. Buscar unidade e cargo
       const [unidadeRes, cargoRes] = await Promise.all([
-        supabase.from("unidades").select("nome").eq("id", profile.unidade_id).single(),
-        supabase.from("cargos").select("nome").eq("id", profile.cargo_id).single(),
+        supabase.from("unidades").select("nome").eq("id", profile.unidade_id).maybeSingle(),
+        supabase.from("cargos").select("nome").eq("id", profile.cargo_id).maybeSingle(),
       ]);
 
       if (unidadeRes.data) setUnidadeNome(unidadeRes.data.nome);
@@ -80,7 +99,11 @@ export default function DocumentosSindicato() {
         .eq("cargo_id", profile.cargo_id)
         .maybeSingle();
 
-      if (ucError) throw ucError;
+      if (ucError) {
+        console.error("Erro ao buscar unidade_cargos:", ucError);
+        throw ucError;
+      }
+
       if (!unidadeCargo?.sindicato_laboral_id) {
         toast.warning("Seu cargo não possui sindicato laboral vinculado.");
         setLoading(false);
@@ -92,10 +115,20 @@ export default function DocumentosSindicato() {
         .from("sindicatos")
         .select("*")
         .eq("id", unidadeCargo.sindicato_laboral_id)
-        .single();
+        .maybeSingle();
 
-      if (slError) throw slError;
-      setSindicatoLaboral(sindLaboral);
+      if (slError) {
+        console.error("Erro ao buscar sindicato laboral:", slError);
+        throw slError;
+      }
+
+      if (sindLaboral) {
+        setSindicatoLaboral(sindLaboral);
+      } else {
+        toast.warning("Sindicato laboral não encontrado.");
+        setLoading(false);
+        return;
+      }
 
       // 5. Buscar sindicatos patronais da unidade
       const { data: vincPatronais, error: vpError } = await supabase
@@ -103,8 +136,12 @@ export default function DocumentosSindicato() {
         .select("sindicato_id")
         .eq("unidade_id", profile.unidade_id);
 
-      if (vpError) throw vpError;
-      const idsPatronais = vincPatronais.map(v => v.sindicato_id);
+      if (vpError) {
+        console.error("Erro ao buscar vínculos patronais:", vpError);
+        throw vpError;
+      }
+
+      const idsPatronais = vincPatronais?.map(v => v.sindicato_id) || [];
       if (idsPatronais.length === 0) {
         toast.warning("Sua unidade não possui sindicato patronal vinculado.");
         setLoading(false);
@@ -115,7 +152,11 @@ export default function DocumentosSindicato() {
         .from("sindicatos")
         .select("*")
         .in("id", idsPatronais);
-      if (spError) throw spError;
+
+      if (spError) {
+        console.error("Erro ao buscar sindicatos patronais:", spError);
+        throw spError;
+      }
       setSindicatosPatronais(sindPatronais || []);
 
       // 6. Buscar negociação mais recente (ACT/CCT)
@@ -134,15 +175,19 @@ export default function DocumentosSindicato() {
         .limit(1)
         .maybeSingle();
 
-      if (negError) throw negError;
+      if (negError) {
+        console.error("Erro ao buscar negociação:", negError);
+        throw negError;
+      }
+
       if (negociacaoData) {
         setNegociacao(negociacaoData);
       } else {
         toast.info("Nenhuma negociação encontrada para seu sindicato e unidade.");
       }
     } catch (error) {
-      console.error(error);
-      toast.error("Erro ao carregar dados sindicais");
+      console.error("Erro no carregamento:", error);
+      toast.error("Erro ao carregar dados sindicais: " + (error as Error).message);
     } finally {
       setLoading(false);
     }
