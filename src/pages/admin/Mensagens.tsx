@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { MessageSquare, Plus, Pencil, Trash2, Send, Loader2, Copy, Mail, Phone } from "lucide-react";
-import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
+import { FavoritarBotao } from "@/components/FavoritarBotao";
 
 interface ModeloMensagem {
   id: string;
@@ -75,7 +75,8 @@ export default function MensagensAdmin() {
   const [busy, setBusy] = useState(false);
 
   const [destinatario, setDestinatario] = useState("todos");
-  const [unidadeId, setUnidadeId] = useState("");
+  // 🔥 CORREÇÃO: valor inicial "todas" em vez de ""
+  const [unidadeId, setUnidadeId] = useState("todas");
   const [colaboradorId, setColaboradorId] = useState("");
   const [modeloSelecionado, setModeloSelecionado] = useState("nenhum");
   const [assunto, setAssunto] = useState("");
@@ -146,7 +147,6 @@ export default function MensagensAdmin() {
 
     setBusy(true);
     try {
-      // Monta lista de destinatários com tipagem explícita
       let destinatarios: Destinatario[] = [];
 
       if (destinatario === "todos") {
@@ -156,7 +156,7 @@ export default function MensagensAdmin() {
           whatsapp: c.whatsapp,
           email: c.email_contato,
         }));
-      } else if (destinatario === "unidade" && unidadeId) {
+      } else if (destinatario === "unidade" && unidadeId && unidadeId !== "todas") {
         destinatarios = colaboradores
           .filter(c => c.unidade_id === unidadeId)
           .map(c => ({
@@ -188,7 +188,6 @@ export default function MensagensAdmin() {
       if (canal === "whatsapp" || canal === "ambos") {
         const comWhatsApp = destinatarios.filter(d => d.whatsapp);
         enviadosWhatsApp = comWhatsApp.length;
-        // Simula envio (na prática, integrar com API real)
         comWhatsApp.forEach(d => console.log(`📱 WhatsApp para ${d.nome}: ${d.whatsapp}`));
       }
 
@@ -203,7 +202,6 @@ export default function MensagensAdmin() {
       if (enviadosEmail > 0) msg += ` ${enviadosEmail} via E-mail.`;
       toast.success(msg);
 
-      // Limpa campos
       setAssunto("");
       setMensagem("");
       setModeloSelecionado("nenhum");
@@ -287,9 +285,8 @@ export default function MensagensAdmin() {
     setMensagem(modelo.corpo);
   };
 
-  // Filtra colaboradores pela unidade selecionada (para o select individual)
   const colaboradoresFiltrados = colaboradores.filter(
-    (c) => !unidadeId || c.unidade_id === unidadeId
+    (c) => unidadeId === "todas" || c.unidade_id === unidadeId
   );
 
   return (
@@ -310,7 +307,6 @@ export default function MensagensAdmin() {
         />
       </div>
 
-      {/* Modelos Rápidos */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Modelos Rápidos</h2>
@@ -357,7 +353,6 @@ export default function MensagensAdmin() {
         )}
       </div>
 
-      {/* Formulário de Envio */}
       <Card className="border-border shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -369,7 +364,7 @@ export default function MensagensAdmin() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Destinatário</Label>
-                <Select value={destinatario} onValueChange={(v) => { setDestinatario(v); setUnidadeId(""); setColaboradorId(""); }}>
+                <Select value={destinatario} onValueChange={(v) => { setDestinatario(v); setUnidadeId("todas"); setColaboradorId(""); }}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="todos">Todos os colaboradores</SelectItem>
@@ -398,7 +393,7 @@ export default function MensagensAdmin() {
                     <Select value={unidadeId} onValueChange={(v) => { setUnidadeId(v); setColaboradorId(""); }}>
                       <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Todas as unidades</SelectItem>
+                        <SelectItem value="todas">Todas as unidades</SelectItem>
                         {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
                       </SelectContent>
                     </Select>
@@ -469,7 +464,6 @@ export default function MensagensAdmin() {
         </CardContent>
       </Card>
 
-      {/* Dialog para criar/editar modelo */}
       <Dialog open={modeloDialogOpen} onOpenChange={setModeloDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -505,7 +499,6 @@ export default function MensagensAdmin() {
         </DialogContent>
       </Dialog>
 
-      {/* Confirmação de exclusão */}
       <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
