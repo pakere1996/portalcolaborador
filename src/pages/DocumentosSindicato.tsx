@@ -6,8 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Building2, FileText, Download, Eye, Users, Calendar, Scale, File } from "lucide-react";
-import { formatBR, parseYMD } from "@/lib/folga-rules";
+import { Building2, FileText, Download, Eye, Users, Scale, File } from "lucide-react";
 
 interface Sindicato {
   id: string;
@@ -58,10 +57,10 @@ export default function DocumentosSindicato() {
 
     setLoading(true);
     try {
-      // 1. Buscar perfil do colaborador
+      // 1. Buscar perfil do colaborador – coluna correta é 'cargo', não 'cargo_id'
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("unidade_id, cargo_id, nome")
+        .select("unidade_id, cargo, nome")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -76,7 +75,7 @@ export default function DocumentosSindicato() {
         return;
       }
 
-      if (!profile.unidade_id || !profile.cargo_id) {
+      if (!profile.unidade_id || !profile.cargo) {
         toast.warning("Seu perfil não está vinculado a uma unidade ou cargo.");
         setLoading(false);
         return;
@@ -85,7 +84,7 @@ export default function DocumentosSindicato() {
       // 2. Buscar unidade e cargo
       const [unidadeRes, cargoRes] = await Promise.all([
         supabase.from("unidades").select("nome").eq("id", profile.unidade_id).maybeSingle(),
-        supabase.from("cargos").select("nome").eq("id", profile.cargo_id).maybeSingle(),
+        supabase.from("cargos").select("nome").eq("id", profile.cargo).maybeSingle(),
       ]);
 
       if (unidadeRes.data) setUnidadeNome(unidadeRes.data.nome);
@@ -96,7 +95,7 @@ export default function DocumentosSindicato() {
         .from("unidade_cargos")
         .select("sindicato_laboral_id")
         .eq("unidade_id", profile.unidade_id)
-        .eq("cargo_id", profile.cargo_id)
+        .eq("cargo_id", profile.cargo) // profile.cargo é o ID do cargo
         .maybeSingle();
 
       if (ucError) {
@@ -266,7 +265,6 @@ export default function DocumentosSindicato() {
         <h1 className="text-2xl md:text-3xl font-bold">Informações Sindicais</h1>
       </div>
 
-      {/* Informações do colaborador */}
       <div className="bg-muted/30 rounded-2xl p-4 flex flex-wrap gap-6 text-sm">
         <div>
           <span className="text-muted-foreground">Unidade</span>
@@ -278,7 +276,6 @@ export default function DocumentosSindicato() {
         </div>
       </div>
 
-      {/* Sindicato Laboral */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-xl flex items-center gap-2">
@@ -307,7 +304,6 @@ export default function DocumentosSindicato() {
         </CardContent>
       </Card>
 
-      {/* Sindicatos Patronais da Unidade */}
       {sindicatosPatronais.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
@@ -327,7 +323,6 @@ export default function DocumentosSindicato() {
         </Card>
       )}
 
-      {/* Negociação / Documento ACT/CCT */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-xl flex items-center gap-2">
