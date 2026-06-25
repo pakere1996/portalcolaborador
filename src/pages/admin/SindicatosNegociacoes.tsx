@@ -84,7 +84,7 @@ export default function SindicatosNegociacoes() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  // Estado do modal de cadastro/edição
+  // Estado do modal
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando, setEditando] = useState<Negociacao | null>(null);
   const [form, setForm] = useState({
@@ -101,40 +101,31 @@ export default function SindicatosNegociacoes() {
   // Confirmação de exclusão
   const [confirmDelete, setConfirmDelete] = useState<Negociacao | null>(null);
 
+  // --- Patronais vinculados por unidade ---
+  const [patronaisVinculados, setPatronaisVinculados] = useState<Sindicato[]>([]);
+
   // --- Loaders ---
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // Buscar unidades ativas
-      const { data: unidadesData, error: unidadesError } = await supabase
-        .from("unidades")
-        .select("id, nome")
-        .eq("ativo", true)
-        .order("nome");
-      if (unidadesError) throw unidadesError;
-      setUnidades(unidadesData ?? []);
-
-      // Buscar sindicatos (todos)
-      const { data: sindicatosData, error: sindicatosError } = await supabase
-        .from("sindicatos")
-        .select("id, nome, tipo")
-        .order("nome");
-      if (sindicatosError) throw sindicatosError;
-      setSindicatos(sindicatosData ?? []);
-
-      // Buscar negociações com dados relacionados (unidade e sindicatos)
-      const { data: negociacoesData, error: negociacoesError } = await supabase
-        .from("negociacoes")
-        .select(`
+      const [unidadesData, sindicatosData, negociacoesData] = await Promise.all([
+        supabase.from("unidades").select("id, nome").eq("ativo", true).order("nome"),
+        supabase.from("sindicatos").select("id, nome, tipo").order("nome"),
+        supabase.from("negociacoes").select(`
           *,
           unidade:unidades(nome),
           sindicato_patronal:sindicatos!negociacoes_sindicato_patronal_id_fkey(nome),
           sindicato_laboral:sindicatos!negociacoes_sindicato_laboral_id_fkey(nome)
-        `)
-        .order("ano", { ascending: false })
-        .order("mes", { ascending: false });
-      if (negociacoesError) throw negociacoesError;
-      setNegociacoes(negociacoesData ?? []);
+        `).order("ano", { ascending: false }).order("mes", { ascending: false })
+      ]);
+
+      if (unidadesData.error) throw unidadesData.error;
+      if (sindicatosData.error) throw sindicatosData.error;
+      if (negociacoesData.error) throw negociacoesData.error;
+
+      setUnidades(unidadesData.data ?? []);
+      setSindicatos(sindicatosData.data ?? []);
+      setNegociacoes(negociacoesData.data ?? []);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
       toast.error("Erro ao carregar dados");
@@ -146,6 +137,28 @@ export default function SindicatosNegociacoes() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Carregar patronais vinculados quando a unidade mudar
+  useEffect(() => {
+    const loadPatronais = async () => {
+      if (!form.unidade_id) {
+        setPatronaisVinculados([]);
+        return;
+      }
+      const { data, error } = await supabase
+        .from("sindicato_unidades")
+        .select("sindicato_id")
+        .eq("unidade_id", form.unidade_id);
+      if (error) {
+        console.error(error);
+        return;
+      }
+      const ids = data.map(item => item.sindicato_id);
+      const vinculados = sindicatos.filter(s => ids.includes(s.id) && s.tipo === "patronal");
+      setPatronaisVinculados(vinculados);
+    };
+    loadPatronais();
+  }, [form.unidade_id, sindicatos]);
 
   // --- Handlers ---
   const handleUnidadeChange = (unidadeId: string) => {
@@ -176,49 +189,6 @@ export default function SindicatosNegociacoes() {
     }
   };
 
-  // Filtrar sindicatos patronais disponíveis para a unidade selecionada
-  const patronaisDisponiveis = useMemo(() => {
-    if (!form.unidade_id) return [];
-    // Buscar sindicatos patronais vinculados à unidade
-    // Precisamos buscar os IDs via tabela sindicato_unidades
-    // Para simplificar, vamos buscar todos e filtrar (mas é ineficiente)
-    // Ideal: fazer uma consulta separada.
-    // Vamos usar os sindicatos já carregados, mas precisamos saber quais estão vinculados.
-    // Vamos carregar separadamente quando a unidade mudar.
-    // Usarei um estado extra para isso.
-    return sindicatos.filter(s => s.tipo === "patronal");
-  }, [form.unidade_id, sindicatos]);
-
-  // Na prática, precisamos buscar os vínculos. Vamos criar um estado para patronaisVinculados.
-  const [patronaisVinculados, setPatronaisVinculados] = useState<Sindicato[]>([]);
-
-  // Carregar patronais vinculados quando a unidade mudar
-  useEffect(() => {
-    const loadPatronais = async () => {
-      if (!form.unidade_id) {
-        setPatronaisVinculados([]);
-        return;
-      }
-      const { data, error } = await supabase
-        .from("sindicato_unidades")
-        .select("sindicato_id")
-        .eq("unidade_id", form.unidade_id);
-      if (error) {
-        console.error(error);
-        return;
-      }
-      const ids = data.map(item => item.sindicato_id);
-      const vinculados = sindicatos.filter(s => ids.includes(s.id) && s.tipo === "patronal");
-      setPatronaisVinculados(vinculados);
-    };
-    loadPatronais();
-  }, [form.unidade_id, sindicatos]);
-
-  // Sindicatos laborais (todos)
-  const laborais = useMemo(() => {
-    return sindicatos.filter(s => s.tipo === "laboral");
-  }, [sindicatos]);
-
   // Abrir modal para novo cadastro
   const abrirNovo = () => {
     setEditando(null);
@@ -232,6 +202,7 @@ export default function SindicatosNegociacoes() {
     });
     setArquivo(null);
     setArquivoAtual(null);
+    setPatronaisVinculados([]);
     setDialogOpen(true);
   };
 
@@ -251,18 +222,22 @@ export default function SindicatosNegociacoes() {
     setDialogOpen(true);
   };
 
-  // Salvar (criar ou atualizar)
+  // Salvar
   const salvarNegociacao = async () => {
-    // Validações
-    if (!form.unidade_id) {
+    // 🔥 VALIDAÇÃO: Converter campos vazios para null
+    const unidadeId = form.unidade_id.trim() || null;
+    const patronalId = form.sindicato_patronal_id.trim() || null;
+    const laboralId = form.sindicato_laboral_id.trim() || null;
+
+    if (!unidadeId) {
       toast.error("Selecione a unidade.");
       return;
     }
-    if (!form.sindicato_patronal_id) {
+    if (!patronalId) {
       toast.error("Selecione o sindicato patronal.");
       return;
     }
-    if (!form.sindicato_laboral_id) {
+    if (!laboralId) {
       toast.error("Selecione o sindicato laboral.");
       return;
     }
@@ -281,8 +256,8 @@ export default function SindicatosNegociacoes() {
       const { data: existing, error: checkError } = await supabase
         .from("negociacoes")
         .select("id")
-        .eq("sindicato_patronal_id", form.sindicato_patronal_id)
-        .eq("sindicato_laboral_id", form.sindicato_laboral_id)
+        .eq("sindicato_patronal_id", patronalId)
+        .eq("sindicato_laboral_id", laboralId)
         .eq("ano", form.ano)
         .neq("id", editando?.id || "");
       if (checkError) throw checkError;
@@ -296,7 +271,6 @@ export default function SindicatosNegociacoes() {
 
       // Upload do arquivo se houver
       if (arquivo) {
-        // Gerar nome único
         const ext = arquivo.name.split(".").pop();
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
         const filePath = `negociacoes/${fileName}`;
@@ -316,9 +290,9 @@ export default function SindicatosNegociacoes() {
       }
 
       const dados = {
-        unidade_id: form.unidade_id,
-        sindicato_patronal_id: form.sindicato_patronal_id,
-        sindicato_laboral_id: form.sindicato_laboral_id,
+        unidade_id: unidadeId,
+        sindicato_patronal_id: patronalId,
+        sindicato_laboral_id: laboralId,
         ano: form.ano,
         mes: form.mes,
         tipo_documento: form.tipo_documento,
@@ -357,7 +331,6 @@ export default function SindicatosNegociacoes() {
     if (!confirmDelete) return;
     setBusy(true);
     try {
-      // Deletar arquivo do storage se existir
       if (confirmDelete.storage_path) {
         await supabase.storage.from("sindicatos").remove([confirmDelete.storage_path]);
       }
@@ -377,7 +350,7 @@ export default function SindicatosNegociacoes() {
     }
   };
 
-  // Download do arquivo
+  // Download
   const downloadArquivo = async (path: string, nome: string) => {
     try {
       const { data, error } = await supabase.storage
@@ -398,7 +371,7 @@ export default function SindicatosNegociacoes() {
     }
   };
 
-  // Visualizar PDF em nova aba
+  // Visualizar PDF
   const visualizarArquivo = async (path: string) => {
     try {
       const { data, error } = await supabase.storage
@@ -425,7 +398,7 @@ export default function SindicatosNegociacoes() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <FavoritarBotao rota="/admin/sindicatos/negociacoes" label="Negociações" icone="FileText" />
+          <FavoritarBotao rota="/admin/documentos/act-cct" label="ACT-CCT" icone="FileText" />
           <Button onClick={abrirNovo}>
             <Plus className="size-4 mr-2" /> Nova Negociação
           </Button>
@@ -512,7 +485,10 @@ export default function SindicatosNegociacoes() {
             {/* Unidade */}
             <div className="space-y-2">
               <Label>Unidade *</Label>
-              <Select value={form.unidade_id} onValueChange={handleUnidadeChange}>
+              <Select
+                value={form.unidade_id}
+                onValueChange={handleUnidadeChange}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione a unidade" />
                 </SelectTrigger>
@@ -524,7 +500,7 @@ export default function SindicatosNegociacoes() {
               </Select>
             </div>
 
-            {/* Sindicato Patronal (filtrado pela unidade) */}
+            {/* Sindicato Patronal */}
             <div className="space-y-2">
               <Label>Sindicato Patronal *</Label>
               <Select
@@ -551,12 +527,15 @@ export default function SindicatosNegociacoes() {
             {/* Sindicato Laboral */}
             <div className="space-y-2">
               <Label>Sindicato Laboral *</Label>
-              <Select value={form.sindicato_laboral_id} onValueChange={handleLaboralChange}>
+              <Select
+                value={form.sindicato_laboral_id}
+                onValueChange={handleLaboralChange}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione o laboral" />
                 </SelectTrigger>
                 <SelectContent>
-                  {laborais.map((s) => (
+                  {sindicatos.filter(s => s.tipo === "laboral").map((s) => (
                     <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
                   ))}
                 </SelectContent>
@@ -577,7 +556,10 @@ export default function SindicatosNegociacoes() {
               </div>
               <div className="space-y-2">
                 <Label>Mês Base *</Label>
-                <Select value={form.mes.toString()} onValueChange={(v) => setForm({ ...form, mes: parseInt(v) })}>
+                <Select
+                  value={form.mes.toString()}
+                  onValueChange={(v) => setForm({ ...form, mes: parseInt(v) })}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -593,7 +575,10 @@ export default function SindicatosNegociacoes() {
             {/* Tipo */}
             <div className="space-y-2">
               <Label>Tipo *</Label>
-              <Select value={form.tipo_documento} onValueChange={(v) => setForm({ ...form, tipo_documento: v as "act" | "cct" })}>
+              <Select
+                value={form.tipo_documento}
+                onValueChange={(v) => setForm({ ...form, tipo_documento: v as "act" | "cct" })}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
