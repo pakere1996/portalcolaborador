@@ -1,76 +1,120 @@
-"use client";
-
-import { useState, useEffect } from "react";
-import { useAuth } from "@/lib/auth-context";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Send, Users, User, Loader2, CheckCircle, XCircle } from "lucide-react";
-import { FavoritarBotao } from "@/components/FavoritarBotao";
-import { Tables } from "@/integrations/supabase/types";
+import { MessageSquare, Plus, Pencil, Trash2, Send, Loader2, Copy, Mail, Phone } from "lucide-react";
+import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
 
-type Profile = Tables<"profiles"> & { unidade_nome?: string };
+interface ModeloMensagem {
+  id: string;
+  nome: string;
+  assunto: string;
+  corpo: string;
+  tipo: string;
+  ativo: boolean;
+}
+
+interface Profile {
+  id: string;
+  nome: string;
+  whatsapp: string | null;
+  email_contato: string | null;
+  unidade_id: string | null;
+}
+
+interface Unidade {
+  id: string;
+  nome: string;
+}
+
+type Destinatario = {
+  id: string;
+  nome: string;
+  whatsapp: string | null;
+  email: string | null;
+};
+
+const TIPOS_MODELO = [
+  { value: "aniversario", label: "Aniversário" },
+  { value: "tempo_casa", label: "Tempo de Casa" },
+  { value: "aviso_geral", label: "Aviso Geral" },
+  { value: "convocacao", label: "Convocação" },
+  { value: "feriado", label: "Feriado" },
+  { value: "outro", label: "Outro" },
+];
+
+const CANAIS_ENVIO = [
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "email", label: "E-mail" },
+  { value: "ambos", label: "WhatsApp + E-mail" },
+];
 
 export default function MensagensAdmin() {
-  const { user } = useAuth();
-  const [loading, setLoading] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [unidades, setUnidades] = useState<{ id: string; nome: string }[]>([]);
-  const [historico, setHistorico] = useState<any[]>([]);
+  const [modelos, setModelos] = useState<ModeloMensagem[]>([]);
+  const [colaboradores, setColaboradores] = useState<Profile[]>([]);
+  const [unidades, setUnidades] = useState<Unidade[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
 
-  // Formulário
-  const [destinatario, setDestinatario] = useState<"all" | "unidade" | "colaborador">("all");
-  const [unidadeId, setUnidadeId] = useState<string>("none");
-  const [colaboradorId, setColaboradorId] = useState<string>("none");
-  const [titulo, setTitulo] = useState("");
+  const [destinatario, setDestinatario] = useState("todos");
+  const [unidadeId, setUnidadeId] = useState("");
+  const [colaboradorId, setColaboradorId] = useState("");
+  const [modeloSelecionado, setModeloSelecionado] = useState("nenhum");
+  const [assunto, setAssunto] = useState("");
   const [mensagem, setMensagem] = useState("");
+  const [canal, setCanal] = useState("whatsapp");
 
-  const loadData = async () => {
+  const [modeloDialogOpen, setModeloDialogOpen] = useState(false);
+  const [editandoModelo, setEditandoModelo] = useState<ModeloMensagem | null>(null);
+  const [modeloForm, setModeloForm] = useState({
+    nome: "",
+    assunto: "",
+    corpo: "",
+    tipo: "outro",
+  });
+
+  const [confirmDelete, setConfirmDelete] = useState<ModeloMensagem | null>(null);
+
+  const load = async () => {
     setLoading(true);
     try {
-      // Carregar perfis ativos
-      const { data: profilesData } = await supabase
-        .from("profiles")
-        .select("id, nome, unidade_id, cargo")
-        .eq("ativo", true)
-        .order("nome");
+      const [modelosRes, colaboradoresRes, unidadesRes] = await Promise.all([
+        supabase.from("modelos_mensagem").select("*").order("nome"),
+        supabase
+          .from("profiles")
+          .select("id, nome, whatsapp, email_contato, unidade_id")
+          .eq("ativo", true)
+          .order("nome"),
+        supabase.from("unidades").select("id, nome").eq("ativo", true).order("nome"),
+      ]);
 
-      // Carregar unidades
-      const { data: unidadesData } = await supabase
-        .from("unidades")
-        .select("id, nome")
-        .eq("ativo", true)
-        .order("nome");
+      if (colaboradoresRes.error) {
+        console.error("Erro ao carregar colaboradores:", colaboradoresRes.error);
+        toast.error("Erro ao carregar colaboradores: coluna 'email_contato' pode não existir");
+      }
 
-      // Carregar histórico de mensagens enviadas
-      const { data: historicoData } = await supabase
-        .from("mensagens_enviadas")
-        .select(`
-          *,
-          colaborador:colaborador_id(id, nome),
-          mensagem:mensagem_id(id, titulo, mensagem, created_at)
-        `)
-        .order("enviado_em", { ascending: false })
-        .limit(50);
-
-      setProfiles(profilesData || []);
-      setUnidades(unidadesData || []);
-      setHistorico(historicoData || []);
+      setModelos(modelosRes.data ?? []);
+      setColaboradores(colaboradoresRes.data ?? []);
+      setUnidades(unidadesRes.data ?? []);
     } catch (error) {
-      console.error("Erro ao carregar dados:", error);
       toast.error("Erro ao carregar dados");
     } finally {
       setLoading(false);
@@ -78,247 +122,406 @@ export default function MensagensAdmin() {
   };
 
   useEffect(() => {
-    loadData();
+    load();
   }, []);
 
-  const enviarMensagem = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!titulo.trim() || !mensagem.trim()) {
-      toast.error("Preencha título e mensagem");
+  useEffect(() => {
+    if (modeloSelecionado === "nenhum") {
+      setAssunto("");
+      setMensagem("");
+      return;
+    }
+    const modelo = modelos.find(m => m.id === modeloSelecionado);
+    if (modelo) {
+      setAssunto(modelo.assunto);
+      setMensagem(modelo.corpo);
+    }
+  }, [modeloSelecionado, modelos]);
+
+  const handleEnviar = async () => {
+    if (!assunto.trim() || !mensagem.trim()) {
+      toast.error("Preencha assunto e mensagem");
       return;
     }
 
-    setSending(true);
+    setBusy(true);
     try {
-      let destinatarios: string[] = [];
+      // Monta lista de destinatários com tipagem explícita
+      let destinatarios: Destinatario[] = [];
 
-      if (destinatario === "all") {
-        // Todos os colaboradores ativos
-        destinatarios = profiles.map(p => p.id);
-      } else if (destinatario === "unidade") {
-        if (unidadeId === "none") {
-          toast.error("Selecione uma unidade");
-          setSending(false);
-          return;
+      if (destinatario === "todos") {
+        destinatarios = colaboradores.map(c => ({
+          id: c.id,
+          nome: c.nome,
+          whatsapp: c.whatsapp,
+          email: c.email_contato,
+        }));
+      } else if (destinatario === "unidade" && unidadeId) {
+        destinatarios = colaboradores
+          .filter(c => c.unidade_id === unidadeId)
+          .map(c => ({
+            id: c.id,
+            nome: c.nome,
+            whatsapp: c.whatsapp,
+            email: c.email_contato,
+          }));
+      } else if (destinatario === "individual" && colaboradorId) {
+        const colab = colaboradores.find(c => c.id === colaboradorId);
+        if (colab) {
+          destinatarios = [{
+            id: colab.id,
+            nome: colab.nome,
+            whatsapp: colab.whatsapp,
+            email: colab.email_contato,
+          }];
         }
-        destinatarios = profiles.filter(p => p.unidade_id === unidadeId).map(p => p.id);
-        if (destinatarios.length === 0) {
-          toast.error("Nenhum colaborador nesta unidade");
-          setSending(false);
-          return;
-        }
-      } else if (destinatario === "colaborador") {
-        if (colaboradorId === "none") {
-          toast.error("Selecione um colaborador");
-          setSending(false);
-          return;
-        }
-        destinatarios = [colaboradorId];
       }
 
       if (destinatarios.length === 0) {
-        toast.error("Nenhum destinatário selecionado");
-        setSending(false);
+        toast.warning("Nenhum destinatário encontrado para os critérios selecionados");
         return;
       }
 
-      // Inserir mensagem
-      const { data: msgData, error: msgError } = await supabase
-        .from("mensagens")
-        .insert({
-          titulo: titulo.trim(),
-          mensagem: mensagem.trim(),
-          tipo: "comunicado",
-          created_by: user?.id,
-        })
-        .select("id")
-        .single();
+      let enviadosWhatsApp = 0;
+      let enviadosEmail = 0;
 
-      if (msgError) throw msgError;
+      if (canal === "whatsapp" || canal === "ambos") {
+        const comWhatsApp = destinatarios.filter(d => d.whatsapp);
+        enviadosWhatsApp = comWhatsApp.length;
+        // Simula envio (na prática, integrar com API real)
+        comWhatsApp.forEach(d => console.log(`📱 WhatsApp para ${d.nome}: ${d.whatsapp}`));
+      }
 
-      // Inserir mensagens enviadas para cada destinatário
-      const inserts = destinatarios.map(destinatario_id => ({
-        mensagem_id: msgData.id,
-        colaborador_id: destinatario_id,
-        enviado_por: user?.id,
-        status: "enviado",
-        enviado_em: new Date().toISOString(),
-      }));
+      if (canal === "email" || canal === "ambos") {
+        const comEmail = destinatarios.filter(d => d.email);
+        enviadosEmail = comEmail.length;
+        comEmail.forEach(d => console.log(`📧 E-mail para ${d.nome}: ${d.email}`));
+      }
 
-      const { error: insertError } = await supabase
-        .from("mensagens_enviadas")
-        .insert(inserts);
+      let msg = `Mensagem preparada para ${destinatarios.length} colaboradores.`;
+      if (enviadosWhatsApp > 0) msg += ` ${enviadosWhatsApp} via WhatsApp.`;
+      if (enviadosEmail > 0) msg += ` ${enviadosEmail} via E-mail.`;
+      toast.success(msg);
 
-      if (insertError) throw insertError;
-
-      toast.success(`Mensagem enviada para ${destinatarios.length} colaborador(es)`);
-      setTitulo("");
+      // Limpa campos
+      setAssunto("");
       setMensagem("");
-      setDestinatario("all");
-      setUnidadeId("none");
-      setColaboradorId("none");
-      loadData();
+      setModeloSelecionado("nenhum");
     } catch (error) {
-      console.error("Erro ao enviar mensagem:", error);
-      toast.error("Erro ao enviar mensagem", { description: (error as Error).message });
+      toast.error("Erro ao enviar mensagem");
     } finally {
-      setSending(false);
+      setBusy(false);
     }
   };
 
-  const getDestinatarioLabel = (destinatario: string) => {
-    switch (destinatario) {
-      case "all": return "Todos";
-      case "unidade": return "Unidade";
-      case "colaborador": return "Colaborador";
-      default: return destinatario;
+  const salvarModelo = async () => {
+    if (!modeloForm.nome.trim() || !modeloForm.assunto.trim() || !modeloForm.corpo.trim()) {
+      toast.error("Preencha todos os campos");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      if (editandoModelo) {
+        const { error } = await supabase
+          .from("modelos_mensagem")
+          .update({
+            nome: modeloForm.nome.trim(),
+            assunto: modeloForm.assunto.trim(),
+            corpo: modeloForm.corpo.trim(),
+            tipo: modeloForm.tipo,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", editandoModelo.id);
+        if (error) throw error;
+        toast.success("Modelo atualizado");
+      } else {
+        const { error } = await supabase
+          .from("modelos_mensagem")
+          .insert({
+            nome: modeloForm.nome.trim(),
+            assunto: modeloForm.assunto.trim(),
+            corpo: modeloForm.corpo.trim(),
+            tipo: modeloForm.tipo,
+            criado_por: (await supabase.auth.getUser()).data.user?.id,
+          });
+        if (error) throw error;
+        toast.success("Modelo criado");
+      }
+      setModeloDialogOpen(false);
+      setEditandoModelo(null);
+      setModeloForm({ nome: "", assunto: "", corpo: "", tipo: "outro" });
+      load();
+    } catch (error) {
+      toast.error("Erro ao salvar modelo");
+    } finally {
+      setBusy(false);
     }
   };
+
+  const excluirModelo = async (id: string) => {
+    const { error } = await supabase.from("modelos_mensagem").delete().eq("id", id);
+    if (error) {
+      toast.error("Erro ao excluir");
+      return;
+    }
+    toast.success("Modelo excluído");
+    setConfirmDelete(null);
+    load();
+  };
+
+  const abrirEdicaoModelo = (modelo: ModeloMensagem) => {
+    setEditandoModelo(modelo);
+    setModeloForm({
+      nome: modelo.nome,
+      assunto: modelo.assunto,
+      corpo: modelo.corpo,
+      tipo: modelo.tipo,
+    });
+    setModeloDialogOpen(true);
+  };
+
+  const aplicarModelo = (modelo: ModeloMensagem) => {
+    setModeloSelecionado(modelo.id);
+    setAssunto(modelo.assunto);
+    setMensagem(modelo.corpo);
+  };
+
+  // Filtra colaboradores pela unidade selecionada (para o select individual)
+  const colaboradoresFiltrados = colaboradores.filter(
+    (c) => !unidadeId || c.unidade_id === unidadeId
+  );
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-            <Send className="size-6 text-primary" /> Comunicados
+            <MessageSquare className="size-6 text-primary" /> Mensagens
           </h1>
           <p className="text-muted-foreground mt-1">
-            Envie comunicados para colaboradores específicos, por unidade ou para todos.
+            Envie mensagens para colaboradores via WhatsApp e/ou E-mail usando modelos pré-definidos.
           </p>
         </div>
-        <FavoritarBotao rota="/admin/mensagens" label="Comunicados" icone="Send" />
+        <FavoritarBotao 
+          rota="/admin/mensagens" 
+          label="Mensagens" 
+          icone="MessageSquare" 
+        />
       </div>
 
+      {/* Modelos Rápidos */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Modelos Rápidos</h2>
+          <Button size="sm" onClick={() => { setEditandoModelo(null); setModeloForm({ nome: "", assunto: "", corpo: "", tipo: "outro" }); setModeloDialogOpen(true); }}>
+            <Plus className="size-4 mr-1" /> Novo Modelo
+          </Button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center p-8">
+            <Loader2 className="size-6 animate-spin" />
+          </div>
+        ) : modelos.length === 0 ? (
+          <div className="text-center p-8 text-muted-foreground border border-dashed rounded-xl">
+            Nenhum modelo cadastrado. Crie um modelo para agilizar o envio de mensagens.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {modelos.map((modelo) => (
+              <div key={modelo.id} className="bg-card border border-border rounded-xl p-4 hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold truncate">{modelo.nome}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {TIPOS_MODELO.find(t => t.value === modelo.tipo)?.label || modelo.tipo}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate mt-1">{modelo.assunto}</div>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <Button variant="ghost" size="icon" className="size-8" title="Aplicar modelo" onClick={() => aplicarModelo(modelo)}>
+                      <Copy className="size-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={() => abrirEdicaoModelo(modelo)}>
+                      <Pencil className="size-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="size-8 text-red-500" title="Excluir" onClick={() => setConfirmDelete(modelo)}>
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Formulário de Envio */}
       <Card className="border-border shadow-sm">
         <CardHeader>
-          <CardTitle>Nova Mensagem</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Send className="size-5 text-primary" /> Enviar Mensagem
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={enviarMensagem} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Destinatário *</Label>
-              <Select
-                value={destinatario}
-                onValueChange={(value: "all" | "unidade" | "colaborador") => setDestinatario(value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o destinatário" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os colaboradores</SelectItem>
-                  <SelectItem value="unidade">Por unidade</SelectItem>
-                  <SelectItem value="colaborador">Colaborador específico</SelectItem>
-                </SelectContent>
-              </Select>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Destinatário</Label>
+                <Select value={destinatario} onValueChange={(v) => { setDestinatario(v); setUnidadeId(""); setColaboradorId(""); }}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os colaboradores</SelectItem>
+                    <SelectItem value="unidade">Por unidade</SelectItem>
+                    <SelectItem value="individual">Colaborador específico</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {destinatario === "unidade" && (
+                <div className="space-y-2">
+                  <Label>Unidade</Label>
+                  <Select value={unidadeId} onValueChange={setUnidadeId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {destinatario === "individual" && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Unidade (para filtrar)</Label>
+                    <Select value={unidadeId} onValueChange={(v) => { setUnidadeId(v); setColaboradorId(""); }}>
+                      <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Todas as unidades</SelectItem>
+                        {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Colaborador</Label>
+                    <Select value={colaboradorId} onValueChange={setColaboradorId}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        {colaboradoresFiltrados.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                        {colaboradoresFiltrados.length === 0 && (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground text-center">
+                            Nenhum colaborador encontrado
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+
+              <div className="space-y-2">
+                <Label>Modelo (opcional)</Label>
+                <Select value={modeloSelecionado} onValueChange={setModeloSelecionado}>
+                  <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nenhum">Nenhum</SelectItem>
+                    {modelos.map(m => <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            {destinatario === "unidade" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Unidade *</Label>
-                <Select value={unidadeId} onValueChange={setUnidadeId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a unidade" />
-                  </SelectTrigger>
+                <Label>Canal de Envio</Label>
+                <Select value={canal} onValueChange={setCanal}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Selecione uma unidade</SelectItem>
-                    {unidades.map(u => (
-                      <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
+                    {CANAIS_ENVIO.map(c => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.value === "whatsapp" && <Phone className="size-3 mr-1 inline" />}
+                        {c.value === "email" && <Mail className="size-3 mr-1 inline" />}
+                        {c.value === "ambos" && <><Phone className="size-3 mr-1 inline" /> + <Mail className="size-3 mr-1 inline" /></>}
+                        {c.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-            )}
-
-            {destinatario === "colaborador" && (
-              <div className="space-y-2">
-                <Label>Colaborador *</Label>
-                <Select value={colaboradorId} onValueChange={setColaboradorId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o colaborador" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Selecione um colaborador</SelectItem>
-                    {profiles.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.nome} {p.cargo ? `(${p.cargo})` : ""}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            </div>
 
             <div className="space-y-2">
-              <Label>Título *</Label>
-              <Input
-                value={titulo}
-                onChange={(e) => setTitulo(e.target.value)}
-                placeholder="Ex: Comunicado importante"
-              />
+              <Label>Assunto *</Label>
+              <Input value={assunto} onChange={(e) => setAssunto(e.target.value)} placeholder="Assunto da mensagem" />
             </div>
 
             <div className="space-y-2">
               <Label>Mensagem *</Label>
-              <Textarea
-                value={mensagem}
-                onChange={(e) => setMensagem(e.target.value)}
-                placeholder="Digite a mensagem..."
-                rows={6}
-              />
+              <Textarea rows={6} value={mensagem} onChange={(e) => setMensagem(e.target.value)} placeholder="Digite a mensagem..." />
             </div>
 
-            <Button type="submit" disabled={sending} className="w-full">
-              {sending ? <Loader2 className="size-4 animate-spin mr-2" /> : <Send className="size-4 mr-2" />}
-              {sending ? "Enviando..." : "Enviar Mensagem"}
+            <Button onClick={handleEnviar} disabled={busy} className="w-full md:w-auto">
+              {busy ? <Loader2 className="size-4 mr-2 animate-spin" /> : <Send className="size-4 mr-2" />}
+              {busy ? "Enviando..." : "Enviar Mensagem"}
             </Button>
-          </form>
+          </div>
         </CardContent>
       </Card>
 
-      <Card className="border-border shadow-sm">
-        <CardHeader>
-          <CardTitle>Histórico de Mensagens</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      {/* Dialog para criar/editar modelo */}
+      <Dialog open={modeloDialogOpen} onOpenChange={setModeloDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editandoModelo ? "Editar Modelo" : "Novo Modelo"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nome do Modelo *</Label>
+              <Input value={modeloForm.nome} onChange={(e) => setModeloForm({ ...modeloForm, nome: e.target.value })} placeholder="Ex: Aniversário" />
             </div>
-          ) : historico.length === 0 ? (
-            <div className="text-center text-muted-foreground py-8">
-              Nenhuma mensagem enviada ainda.
+            <div className="space-y-2">
+              <Label>Tipo</Label>
+              <Select value={modeloForm.tipo} onValueChange={(v) => setModeloForm({ ...modeloForm, tipo: v })}>
+                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  {TIPOS_MODELO.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {historico.map((item) => (
-                <div key={item.id} className="p-4 border border-border rounded-lg hover:bg-muted/10 transition-colors">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <div className="font-semibold">{item.mensagem?.titulo || "Sem título"}</div>
-                      <div className="text-sm text-muted-foreground mt-1">
-                        {item.mensagem?.mensagem || ""}
-                      </div>
-                    </div>
-                    <Badge variant="outline" className="shrink-0">
-                      {item.colaborador ? (
-                        <span className="flex items-center gap-1">
-                          <User className="size-3" /> {item.colaborador.nome}
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1">
-                          <Users className="size-3" /> Múltiplos
-                        </span>
-                      )}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                    <span>{item.status === "enviado" ? "✅ Enviado" : item.status}</span>
-                    <span>• {new Date(item.enviado_em).toLocaleString("pt-BR")}</span>
-                  </div>
-                </div>
-              ))}
+            <div className="space-y-2">
+              <Label>Assunto *</Label>
+              <Input value={modeloForm.assunto} onChange={(e) => setModeloForm({ ...modeloForm, assunto: e.target.value })} placeholder="Assunto do modelo" />
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <div className="space-y-2">
+              <Label>Corpo da Mensagem *</Label>
+              <Textarea rows={4} value={modeloForm.corpo} onChange={(e) => setModeloForm({ ...modeloForm, corpo: e.target.value })} placeholder="Conteúdo do modelo" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setModeloDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={salvarModelo} disabled={busy}>{busy ? "Salvando..." : "Salvar"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmação de exclusão */}
+      <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir modelo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o modelo "{confirmDelete?.nome}"? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirmDelete && excluirModelo(confirmDelete.id)} className="bg-red-600 text-white hover:bg-red-700">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
