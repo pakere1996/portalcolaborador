@@ -103,7 +103,8 @@ export default function Unidades() {
   const [sindicatosPatronais, setSindicatosPatronais] = useState<Sindicato[]>([]);
   const [sindicatosLaborais, setSindicatosLaborais] = useState<Sindicato[]>([]);
   const [cargosGlobais, setCargosGlobais] = useState<Cargo[]>([]);
-  const [unidadesGlobais, setUnidadesGlobais] = useState<Unidade[]>([]);
+  // 🔥 Correção: usar apenas id e nome para checkboxes
+  const [unidadesGlobais, setUnidadesGlobais] = useState<{ id: string; nome: string }[]>([]);
 
   // Associações para a unidade em edição
   const [patronaisSelecionados, setPatronaisSelecionados] = useState<string[]>([]);
@@ -169,6 +170,7 @@ export default function Unidades() {
     if (patronais.data) setSindicatosPatronais(patronais.data);
     if (laborais.data) setSindicatosLaborais(laborais.data);
     if (cargos.data) setCargosGlobais(cargos.data);
+    // 🔥 Corrigido: agora setamos apenas id e nome
     if (unidades.data) setUnidadesGlobais(unidades.data);
   };
 
