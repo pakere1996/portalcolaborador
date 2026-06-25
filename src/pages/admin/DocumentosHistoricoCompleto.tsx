@@ -27,7 +27,6 @@ import {
   Eye,
   Download,
   Search,
-  ChevronRight,
 } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
@@ -537,7 +536,7 @@ export default function DocumentosHistoricoCompleto() {
         </CardContent>
       </Card>
 
-      {/* Conteúdo: Desktop (tabela) / Mobile (cards) */}
+      {/* Conteúdo: Desktop (tabela) / Mobile (cards clicáveis) */}
       {loading ? (
         <div className="flex items-center justify-center p-12">
           <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -623,12 +622,13 @@ export default function DocumentosHistoricoCompleto() {
             </div>
           </div>
 
-          {/* Mobile: Cards */}
+          {/* Mobile: Cards clicáveis */}
           <div className="md:hidden space-y-4">
             {filtrados.map((doc) => (
               <div
                 key={doc.id}
-                className="bg-card border border-border rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow"
+                className="bg-card border border-border rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer active:scale-[0.98]"
+                onClick={() => handlePreview(doc)}
               >
                 <div className="flex flex-col gap-3">
                   {/* Linha 1: Nome + Status + Badges */}
@@ -649,7 +649,7 @@ export default function DocumentosHistoricoCompleto() {
                         {getStatusBadge(doc.status, doc.tipo)}
                       </div>
                     </div>
-                    <ChevronRight className="size-5 text-muted-foreground shrink-0 ml-2" />
+                    {/* Ícone indicador removido – card inteiro é clicável */}
                   </div>
 
                   {/* Linha 2: Detalhes em grid */}
@@ -670,13 +670,16 @@ export default function DocumentosHistoricoCompleto() {
                     </div>
                   </div>
 
-                  {/* Linha 3: Botões sempre visíveis */}
+                  {/* Linha 3: Botões – com stopPropagation para não acionar o clique do card */}
                   <div className="flex items-center gap-2 pt-2 border-t border-border">
                     <Button
                       variant="outline"
                       size="sm"
                       className="flex-1 text-blue-600 border-blue-200 hover:bg-blue-50"
-                      onClick={() => handlePreview(doc)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePreview(doc);
+                      }}
                       disabled={!doc.storage_path}
                     >
                       <Eye className="size-4 mr-1" /> Visualizar
@@ -685,7 +688,10 @@ export default function DocumentosHistoricoCompleto() {
                       variant="outline"
                       size="sm"
                       className="flex-1"
-                      onClick={() => handleDownload(doc)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDownload(doc);
+                      }}
                       disabled={!doc.storage_path}
                     >
                       <Download className="size-4 mr-1" /> Baixar
