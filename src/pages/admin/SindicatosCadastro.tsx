@@ -118,14 +118,14 @@ export default function SindicatosCadastro() {
     return data;
   }, []);
 
-  // --- Função para obter dados da unidade do colaborador logado (usado para sindicatos laborais) ---
+  // --- Função para obter dados da unidade do colaborador logado ---
   const getUnidadeDoUsuario = useCallback(async () => {
     const unidadeId = (profile as any)?.unidade_id;
     if (!unidadeId) return null;
     return getUnidadePorId(unidadeId);
   }, [profile, getUnidadePorId]);
 
-  // --- Abrir WhatsApp com mensagem pré-definida (corrigido para patronais) ---
+  // --- Abrir WhatsApp com mensagem pré-definida (corrigido) ---
   const abrirWhatsApp = async (sindicato: Sindicato) => {
     const numero = onlyNumbers(sindicato.contato_whatsapp || "");
     if (!numero) {
@@ -138,7 +138,7 @@ export default function SindicatosCadastro() {
     let cnpjUnidade = "não informado";
 
     if (sindicato.tipo === "patronal") {
-      // 🔥 Buscar unidades vinculadas a este sindicato patronal
+      // Buscar unidades vinculadas a este sindicato patronal
       const { data: vinc, error } = await supabase
         .from("sindicato_unidades")
         .select("unidade_id")
@@ -149,7 +149,6 @@ export default function SindicatosCadastro() {
         return;
       }
 
-      // Pega a primeira unidade vinculada
       const unidadeId = vinc[0].unidade_id;
       const unidade = await getUnidadePorId(unidadeId);
       if (!unidade) {
@@ -172,7 +171,9 @@ export default function SindicatosCadastro() {
       }
     }
 
-    const mensagem = `Olá, me chamo ${nomeUsuario}, da empresa ${nomeUnidade}, CNPJ nº ${cnpjUnidade}. Posso tirar dúvidas com você?`;
+    // 🔥 CORREÇÃO: formata o CNPJ e altera a mensagem final
+    const cnpjFormatado = cnpjUnidade !== "não informado" ? formatCNPJ(cnpjUnidade) : "não informado";
+    const mensagem = `Olá, me chamo ${nomeUsuario}, da empresa ${nomeUnidade}, CNPJ nº ${cnpjFormatado}. Gostaria de tirar dúvidas com você.`;
     const link = `https://wa.me/55${numero}?text=${encodeURIComponent(mensagem)}`;
     window.open(link, "_blank");
   };
