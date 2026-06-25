@@ -57,7 +57,7 @@ export default function DocumentosSindicato() {
 
     setLoading(true);
     try {
-      // 1. Buscar perfil do colaborador – coluna correta é 'cargo', não 'cargo_id'
+      // 1. Buscar perfil do colaborador (cargo é o nome, não UUID)
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("unidade_id, cargo, nome")
@@ -81,21 +81,47 @@ export default function DocumentosSindicato() {
         return;
       }
 
-      // 2. Buscar unidade e cargo
-      const [unidadeRes, cargoRes] = await Promise.all([
-        supabase.from("unidades").select("nome").eq("id", profile.unidade_id).maybeSingle(),
-        supabase.from("cargos").select("nome").eq("id", profile.cargo).maybeSingle(),
-      ]);
+      setCargoNome(profile.cargo);
 
-      if (unidadeRes.data) setUnidadeNome(unidadeRes.data.nome);
-      if (cargoRes.data) setCargoNome(cargoRes.data.nome);
+      // 2. Buscar unidade
+      const { data: unidadeRes, error: unidadeError } = await supabase
+        .from("unidades")
+        .select("nome")
+        .eq("id", profile.unidade_id)
+        .maybeSingle();
 
-      // 3. Buscar vínculo do cargo com sindicato laboral na unidade
+      if (unidadeError) {
+        console.error("Erro ao buscar unidade:", unidadeError);
+        throw unidadeError;
+      }
+      if (unidadeRes) setUnidadeNome(unidadeRes.nome);
+
+      // 3. Buscar cargo pelo nome para obter o UUID
+      const { data: cargoData, error: cargoError } = await supabase
+        .from("cargos")
+        .select("id, nome")
+        .ilike("nome", profile.cargo) // busca pelo nome, ignorando maiúsculas/minúsculas
+        .maybeSingle();
+
+      if (cargoError) {
+        console.error("Erro ao buscar cargo:", cargoError);
+        throw cargoError;
+      }
+
+      if (!cargoData) {
+        toast.warning(`Cargo "${profile.cargo}" não encontrado na tabela de cargos.`);
+        setLoading(false);
+        return;
+      }
+
+      const cargoId = cargoData.id;
+
+      // 4. Buscar vínculo do cargo com sindicato laboral na unidade
       const { data: unidadeCargo, error: ucError } = await supabase
         .from("unidade_cargos")
         .select("sindicato_laboral_id")
         .eq("unidade_id", profile.unidade_id)
-        .eq("cargo_id", profile.cargo) // profile.cargo é o ID do cargo
+        .eq("cargo_id", cargoId)
         .maybeSingle();
 
       if (ucError) {
@@ -109,7 +135,7 @@ export default function DocumentosSindicato() {
         return;
       }
 
-      // 4. Buscar dados do sindicato laboral
+      // 5. Buscar dados do sindicato laboral
       const { data: sindLaboral, error: slError } = await supabase
         .from("sindicatos")
         .select("*")
@@ -129,7 +155,7 @@ export default function DocumentosSindicato() {
         return;
       }
 
-      // 5. Buscar sindicatos patronais da unidade
+      // 6. Buscar sindicatos patronais da unidade
       const { data: vincPatronais, error: vpError } = await supabase
         .from("sindicato_unidades")
         .select("sindicato_id")
@@ -158,7 +184,7 @@ export default function DocumentosSindicato() {
       }
       setSindicatosPatronais(sindPatronais || []);
 
-      // 6. Buscar negociação mais recente (ACT/CCT)
+      // 7. Buscar negociação mais recente (ACT/CCT)
       const { data: negociacaoData, error: negError } = await supabase
         .from("negociacoes")
         .select(`
