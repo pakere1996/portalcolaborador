@@ -33,7 +33,6 @@ import {
   X,
   Save,
   Check,
-  Eye,
   MessageCircle,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -683,7 +682,11 @@ export default function Unidades() {
                 </tr>
               )}
               {list.map((u) => (
-                <tr key={u.id} className="hover:bg-muted/20 transition-colors">
+                <tr
+                  key={u.id}
+                  className="hover:bg-muted/20 transition-colors cursor-pointer"
+                  onClick={() => openViewDialog(u)}
+                >
                   <td className="p-4">
                     <div className="font-bold">{u.nome}</div>
                     {u.endereco && <div className="text-xs text-muted-foreground">{u.endereco}</div>}
@@ -708,15 +711,22 @@ export default function Unidades() {
                         variant="ghost"
                         size="icon"
                         className="size-8"
-                        title="Visualizar"
-                        onClick={() => openViewDialog(u)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEdit(u);
+                        }}
                       >
-                        <Eye className="size-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="size-8" onClick={() => openEdit(u)}>
                         <Pencil className="size-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="size-8" onClick={() => setConfirmDelete(u)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDelete(u);
+                        }}
+                      >
                         <Trash2 className="size-4" />
                       </Button>
                     </div>
@@ -812,13 +822,22 @@ export default function Unidades() {
             <Button variant="outline" onClick={() => setViewDialogOpen(false)}>
               Fechar
             </Button>
+            {viewUnidade && (
+              <Button
+                onClick={() => {
+                  setViewDialogOpen(false);
+                  openEdit(viewUnidade);
+                }}
+              >
+                <Pencil className="size-4 mr-2" /> Editar
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* ===== MODAL DE EDIÇÃO ===== */}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
-        {/* ... conteúdo existente do modal de edição ... */}
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar unidade: {editing?.nome}</DialogTitle>
@@ -1117,7 +1136,6 @@ export default function Unidades() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {/* ... mesmo conteúdo do modal de criação de sindicato ... */}
             <div className="space-y-2">
               <Label>Nome *</Label>
               <Input
