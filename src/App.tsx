@@ -13,6 +13,7 @@ import Historico from "./pages/Historico";
 import Documentos from "./pages/Documentos";
 import DocumentosAtestados from "./pages/DocumentosAtestados";
 import DocumentosDisciplinar from "./pages/DocumentosDisciplinar";
+import DocumentosSindicato from "./pages/DocumentosSindicato"; // <-- NOVO
 
 // Admin Pages
 import HomeAdmin from "./pages/admin/HomeAdmin";
@@ -83,6 +84,7 @@ function AuthenticatedRoutes() {
           <Route path="/documentos/atestados" element={<DocumentosAtestados />} />
           <Route path="/documentos/ponto" element={<Documentos />} />
           <Route path="/documentos/disciplinar" element={<DocumentosDisciplinar />} />
+          <Route path="/documentos/sindicato" element={<DocumentosSindicato />} /> {/* <-- NOVO */}
 
           {/* Rotas de Home com redirecionamento */}
           <Route path="/home" element={isAdmin ? <Navigate to="/admin/home" replace /> : <Home />} />
