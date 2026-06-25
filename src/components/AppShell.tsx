@@ -128,13 +128,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/historico", label: "Histórico", icon: ClipboardList },
   ];
 
+  // 🔹 ADICIONADO: item "Sindicato" no menu de documentos do colaborador
   const employeeDocsNav: NavItem[] = [
     { to: "/documentos", label: "Meus Documentos", icon: FileText, end: true },
     { to: "/documentos/atestados", label: "Atestados", icon: FileWarning },
     { to: "/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
+    { to: "/documentos/sindicato", label: "Sindicato", icon: Scale }, // <-- NOVO
   ];
 
-  // ADMIN: submenu Cadastro (agora com Sindicatos, sem ACT-CCT)
+  // ADMIN: submenu Cadastro
   const adminCadastroNav: NavItem[] = [
     { to: "/admin/colaboradores", label: "Colaboradores", icon: Users },
     { to: "/admin/cargos", label: "Cargos", icon: Briefcase },
@@ -142,7 +144,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/cadastro/sindicatos", label: "Sindicatos", icon: Scale },
   ];
 
-  // ADMIN: submenu Documentos (agora com ACT-CCT)
+  // ADMIN: submenu Documentos
   const adminDocsNav: NavItem[] = [
     { to: "/admin/documentos/contracheque", label: "Contracheques", icon: FileText, end: true },
     { to: "/admin/documentos/adiantamento", label: "Adiantamentos", icon: Coins },
@@ -150,7 +152,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/documentos/atestados", label: "Atestados", icon: FileWarning },
     { to: "/admin/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
     { to: "/admin/documentos/act-cct", label: "ACT-CCT", icon: FileText },
-    { to: "/admin/documentos/historico", label: "Histórico Completo", icon: ListChecks },    
+    { to: "/admin/documentos/historico", label: "Histórico Completo", icon: ListChecks },
   ];
 
   // ADMIN: demais submenus
