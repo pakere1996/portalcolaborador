@@ -296,10 +296,10 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
 
               const diffDias = Math.ceil((hoje.getTime() - dataInicioAtraso.getTime()) / (1000 * 60 * 60 * 24));
               const diasAtraso = diffDias > 0 ? diffDias : 0;
-
-console.log("DEBUG diasAtraso:", { dataVencimento, dataInicioAtraso, diffDias, diasAtraso });
-
-if (diasAtraso > 0) {
+              
+              console.log("DEBUG diasAtraso:", { dataVencimento, dataInicioAtraso, diffDias, diasAtraso });
+              
+              if (diasAtraso > 0) {
                 pendenciasList.push({
                   id: chave,
                   tipo: "negociacao",
