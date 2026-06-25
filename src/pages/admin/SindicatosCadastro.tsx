@@ -107,13 +107,15 @@ export default function SindicatosCadastro() {
   // Confirmação de exclusão
   const [confirmDelete, setConfirmDelete] = useState<Sindicato | null>(null);
 
-  // --- Função para obter dados da unidade do colaborador logado ---
+  // --- Função para obter dados da unidade do colaborador logado (corrigida) ---
   const getUnidadeDoUsuario = useCallback(async () => {
-    if (!profile?.unidade_id) return null;
+    // 🔥 Acessa unidade_id via any para evitar erro de tipo
+    const unidadeId = (profile as any)?.unidade_id;
+    if (!unidadeId) return null;
     const { data, error } = await supabase
       .from("unidades")
       .select("nome, cnpj")
-      .eq("id", profile.unidade_id)
+      .eq("id", unidadeId)
       .single();
     if (error) return null;
     return data;
@@ -132,7 +134,7 @@ export default function SindicatosCadastro() {
     const nomeUnidade = unidade?.nome || "empresa";
     const cnpjUnidade = unidade?.cnpj || "não informado";
 
-    const mensagem = `Olá, me chamo ${nomeUsuario}, da empresa ${nomeUnidade}, CNPJ nº ${cnpjUnidade}. Gostaria de tirar dúvidas com você.`;
+    const mensagem = `Olá, me chamo ${nomeUsuario}, da empresa ${nomeUnidade}, CNPJ nº ${cnpjUnidade}. Posso tirar dúvidas com você?`;
     const link = `https://wa.me/55${numero}?text=${encodeURIComponent(mensagem)}`;
     window.open(link, "_blank");
   };
