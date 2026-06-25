@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { FileText, FileWarning, ShieldAlert, Clock, Coins, ListChecks } from "lucide-react";
+import { FileText, FileWarning, ShieldAlert, Clock, Coins, ListChecks, Scale } from "lucide-react";
 
 const modulos = [
   {
@@ -49,6 +49,15 @@ const modulos = [
     to: "/admin/documentos/disciplinar",
     cor: "text-red-600",
     bg: "bg-red-50",
+  },
+  // 🔥 NOVO CARD: ACT/CCT
+  {
+    title: "ACT/CCT",
+    description: "Acordos e Convenções Coletivas de Trabalho.",
+    icon: Scale,
+    to: "/admin/documentos/act-cct",
+    cor: "text-indigo-600",
+    bg: "bg-indigo-50",
   },
 ];
 
