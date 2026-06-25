@@ -31,11 +31,11 @@ interface EventoAniversario {
   unidade: string;
   whatsapp: string | null;
   tipo: "nascimento" | "tempo_casa";
-  data_evento: string; // YYYY-MM-DD
+  data_evento: string;
   dias_para: number;
-  descricao: string; // "Completa X anos" ou "X anos de empresa"
-  diaMes: string; // DD/MM
-  anos: number; // idade ou anos de casa
+  descricao: string;
+  diaMes: string;
+  anos: number;
 }
 
 interface ModeloMensagem {
@@ -50,6 +50,20 @@ interface AniversariantesWidgetProps {
   limit?: number;
   showSendButton?: boolean;
 }
+
+// 🔥 Função para capitalizar nomes (primeira letra maiúscula, resto minúscula)
+const capitalizarNome = (nome: string): string => {
+  if (!nome) return '';
+  return nome.charAt(0).toUpperCase() + nome.slice(1).toLowerCase();
+};
+
+// 🔥 Função para capitalizar nome completo (cada parte)
+const capitalizarNomeCompleto = (nomeCompleto: string): string => {
+  if (!nomeCompleto) return '';
+  return nomeCompleto.split(' ').map(palavra => 
+    palavra.charAt(0).toUpperCase() + palavra.slice(1).toLowerCase()
+  ).join(' ');
+};
 
 export function AniversariantesWidget({ limit = 10, showSendButton = true }: AniversariantesWidgetProps) {
   const [eventos, setEventos] = useState<EventoAniversario[]>([]);
@@ -121,16 +135,18 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
       const eventosList: EventoAniversario[] = [];
 
       profiles?.forEach(p => {
+        // 🔥 Capitalizar o nome completo para exibição
+        const nomeCapitalizado = capitalizarNomeCompleto(p.nome);
+
         const colaborador: Colaborador = {
           id: p.id,
-          nome: p.nome,
+          nome: nomeCapitalizado,
           data_nascimento: p.data_nascimento,
           data_admissao: p.data_admissao,
           whatsapp: p.whatsapp || null,
           unidade: p.unidade_id ? unidadeMap.get(p.unidade_id) || "—" : "—",
         };
 
-        // Aniversário de Nascimento
         if (colaborador.data_nascimento) {
           const nasc = calcularProximoEvento(colaborador.data_nascimento, hoje);
           if (nasc) {
@@ -150,7 +166,6 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
           }
         }
 
-        // Aniversário de Contratação (tempo de casa)
         if (colaborador.data_admissao) {
           const adm = calcularProximoEvento(colaborador.data_admissao, hoje);
           if (adm) {
@@ -186,10 +201,11 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
   }, []);
 
   const getPrimeiroNome = (nomeCompleto: string) => {
-    return nomeCompleto.split(' ')[0];
+    const primeiro = nomeCompleto.split(' ')[0];
+    // 🔥 Capitalizar o primeiro nome (primeira maiúscula, restante minúscula)
+    return capitalizarNome(primeiro);
   };
 
-  // Buscar modelo de mensagem no banco
   const buscarModelo = async (tipo: string): Promise<string | null> => {
     try {
       const { data, error } = await supabase
@@ -211,7 +227,6 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
     }
   };
 
-  // Montar mensagem final com primeiro nome + corpo do modelo
   const montarMensagem = async (evento: EventoAniversario): Promise<string> => {
     const primeiroNome = getPrimeiroNome(evento.nome);
     let corpo = "";
@@ -224,10 +239,8 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
         corpo = `🎉 Hoje é dia de celebrar você!\nDesejamos um feliz aniversário, com muita saúde, alegria e conquistas. Somos gratos por ter você na nossa equipe! 🤗`;
       }
     } else {
-      // tempo_casa
       const modelo = await buscarModelo("tempo_casa");
       if (modelo) {
-        // Substituir {anos} pela quantidade de anos
         corpo = modelo.replace(/\{anos\}/g, String(evento.anos));
       } else {
         corpo = `Feliz ${evento.anos} anos de Casa! 🏠\n\n🎉 Mais um marco da sua história com a gente!\nAgradecemos pela sua dedicação, parceria e por fazer parte da nossa trajetória. Que esse seja apenas mais um capítulo de muitos que ainda vamos construir juntos. 🤗`;
