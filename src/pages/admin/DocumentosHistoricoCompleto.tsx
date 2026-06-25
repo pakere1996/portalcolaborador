@@ -43,13 +43,14 @@ import {
   Search,
 } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
-import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
+import { FavoritarBotao } from "@/components/FavoritarBotao";
 
 interface DocumentoUnificado {
   id: string;
-  tipo: "contracheque" | "adiantamento" | "ponto" | "atestado" | "disciplinar";
-  colaborador_id: string;
+  tipo: "contracheque" | "adiantamento" | "ponto" | "atestado" | "disciplinar" | "sindical";
+  colaborador_id: string | null; // pode ser null para sindical (global)
   colaborador_nome: string;
+  colaborador_ativo: boolean | null;
   unidade_id: string | null;
   unidade_nome: string | null;
   mes: number | null;
@@ -60,11 +61,14 @@ interface DocumentoUnificado {
   storage_path: string | null;
   nome_pdf: string | null;
   created_at: string;
-  // Campos extras para tipos específicos
+  // Campos extras
   dias_afastamento?: number | null;
   observacao_admin?: string | null;
   tipo_disciplinar?: string | null;
-  // Para edição de documentos
+  // Para documentos sindicais
+  sindicato_patronal?: string;
+  sindicato_laboral?: string;
+  // Para edição
   acaoSeDuplicado?: string | null;
 }
 
@@ -72,11 +76,28 @@ interface Profile {
   id: string;
   nome: string;
   unidade_id: string | null;
+  ativo: boolean;
 }
 
 interface Unidade {
   id: string;
   nome: string;
+}
+
+interface Negociacao {
+  id: string;
+  unidade_id: string;
+  sindicato_patronal_id: string;
+  sindicato_laboral_id: string;
+  ano: number;
+  mes: number;
+  tipo_documento: "act" | "cct";
+  storage_path: string | null;
+  nome_pdf: string | null;
+  created_at: string;
+  sindicato_patronal?: { nome: string };
+  sindicato_laboral?: { nome: string };
+  unidade?: { nome: string };
 }
 
 const MESES = [
@@ -102,6 +123,7 @@ const TIPOS_DOCUMENTO = [
   { value: "ponto", label: "Folha de Ponto" },
   { value: "atestado", label: "Atestado" },
   { value: "disciplinar", label: "Registro Disciplinar" },
+  { value: "sindical", label: "ACT/CCT (Sindical)" },
 ];
 
 const STATUS_OPTS = [
@@ -129,26 +151,26 @@ export default function DocumentosHistoricoCompleto() {
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [search, setSearch] = useState("");
 
-  // Estado para pré-visualização
+  // Preview
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<DocumentoUnificado | null>(null);
 
-  // Estado para edição
+  // Edição
   const [editOpen, setEditOpen] = useState(false);
   const [editDoc, setEditDoc] = useState<DocumentoUnificado | null>(null);
   const [editForm, setEditForm] = useState<any>({});
 
-  // Estado para exclusão
+  // Exclusão
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteDoc, setDeleteDoc] = useState<DocumentoUnificado | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // Buscar perfis e unidades primeiro para mapeamento
+      // 🔥 Buscar TODOS os perfis (ativos e inativos) para manter histórico
       const [profilesRes, unidadesRes] = await Promise.all([
-        supabase.from("profiles").select("id, nome, unidade_id").eq("ativo", true).order("nome"),
+        supabase.from("profiles").select("id, nome, unidade_id, ativo").order("nome"),
         supabase.from("unidades").select("id, nome").eq("ativo", true).order("nome"),
       ]);
 
@@ -163,7 +185,7 @@ export default function DocumentosHistoricoCompleto() {
       const profileMap = new Map(profilesData.map(p => [p.id, p]));
       const unidadeMap = new Map(unidadesData.map(u => [u.id, u.nome]));
 
-      // Buscar documentos (contracheque, adiantamento, ponto)
+      // 1. Documentos padrão (contracheque, adiantamento, ponto)
       const { data: docsData, error: docsError } = await supabase
         .from("documentos")
         .select("*")
@@ -172,7 +194,7 @@ export default function DocumentosHistoricoCompleto() {
 
       if (docsError) throw docsError;
 
-      // Buscar atestados
+      // 2. Atestados
       const { data: atestadosData, error: atestadosError } = await supabase
         .from("atestados")
         .select("*")
@@ -180,13 +202,27 @@ export default function DocumentosHistoricoCompleto() {
 
       if (atestadosError) throw atestadosError;
 
-      // Buscar registros disciplinares
+      // 3. Registros disciplinares
       const { data: disciplinaresData, error: disciplinaresError } = await supabase
         .from("registros_disciplinares")
         .select("*")
         .order("created_at", { ascending: false });
 
       if (disciplinaresError) throw disciplinaresError;
+
+      // 4. 🔥 Documentos sindicais (ACT/CCT)
+      const { data: negociacoesData, error: negociacoesError } = await supabase
+        .from("negociacoes")
+        .select(`
+          *,
+          sindicato_patronal:sindicatos!negociacoes_sindicato_patronal_id_fkey(nome),
+          sindicato_laboral:sindicatos!negociacoes_sindicato_laboral_id_fkey(nome),
+          unidade:unidades(nome)
+        `)
+        .order("ano", { ascending: false })
+        .order("mes", { ascending: false });
+
+      if (negociacoesError) throw negociacoesError;
 
       // Mapear documentos
       const docsMapeados: DocumentoUnificado[] = (docsData ?? []).map((doc) => {
@@ -195,7 +231,8 @@ export default function DocumentosHistoricoCompleto() {
           id: doc.id,
           tipo: doc.tipo as "contracheque" | "adiantamento" | "ponto",
           colaborador_id: doc.colaborador_id,
-          colaborador_nome: profile?.nome ?? "Colaborador removido",
+          colaborador_nome: profile ? `${profile.nome}${!profile.ativo ? ' (Inativo)' : ''}` : "Colaborador removido",
+          colaborador_ativo: profile?.ativo ?? null,
           unidade_id: profile?.unidade_id ?? null,
           unidade_nome: profile?.unidade_id ? unidadeMap.get(profile.unidade_id) ?? null : null,
           mes: doc.mes,
@@ -212,7 +249,6 @@ export default function DocumentosHistoricoCompleto() {
         };
       });
 
-      // Mapear atestados
       const atestadosMapeados: DocumentoUnificado[] = (atestadosData ?? []).map((a) => {
         const profile = profileMap.get(a.colaborador_id);
         const dataAtestado = a.data_atestado || a.created_at.split("T")[0];
@@ -221,7 +257,8 @@ export default function DocumentosHistoricoCompleto() {
           id: a.id,
           tipo: "atestado",
           colaborador_id: a.colaborador_id,
-          colaborador_nome: profile?.nome ?? "Colaborador removido",
+          colaborador_nome: profile ? `${profile.nome}${!profile.ativo ? ' (Inativo)' : ''}` : "Colaborador removido",
+          colaborador_ativo: profile?.ativo ?? null,
           unidade_id: profile?.unidade_id ?? null,
           unidade_nome: profile?.unidade_id ? unidadeMap.get(profile.unidade_id) ?? null : null,
           mes: mes,
@@ -238,7 +275,6 @@ export default function DocumentosHistoricoCompleto() {
         };
       });
 
-      // Mapear disciplinares
       const disciplinaresMapeados: DocumentoUnificado[] = (disciplinaresData ?? []).map((d) => {
         const profile = profileMap.get(d.colaborador_id);
         const dataDoc = d.data || d.created_at.split("T")[0];
@@ -247,7 +283,8 @@ export default function DocumentosHistoricoCompleto() {
           id: d.id,
           tipo: "disciplinar",
           colaborador_id: d.colaborador_id,
-          colaborador_nome: profile?.nome ?? "Colaborador removido",
+          colaborador_nome: profile ? `${profile.nome}${!profile.ativo ? ' (Inativo)' : ''}` : "Colaborador removido",
+          colaborador_ativo: profile?.ativo ?? null,
           unidade_id: profile?.unidade_id ?? null,
           unidade_nome: profile?.unidade_id ? unidadeMap.get(profile.unidade_id) ?? null : null,
           mes: mes,
@@ -264,7 +301,36 @@ export default function DocumentosHistoricoCompleto() {
         };
       });
 
-      const todos = [...docsMapeados, ...atestadosMapeados, ...disciplinaresMapeados];
+      // 🔥 Mapear negociações como documentos sindicais
+      const negociacoesMapeadas: DocumentoUnificado[] = (negociacoesData ?? []).map((n: Negociacao) => {
+        const unidadeNome = (n.unidade as any)?.nome || "Unidade não definida";
+        const patronalNome = (n.sindicato_patronal as any)?.nome || "—";
+        const laboralNome = (n.sindicato_laboral as any)?.nome || "—";
+        return {
+          id: n.id,
+          tipo: "sindical",
+          colaborador_id: null, // sindical é global, não vinculado a um colaborador específico
+          colaborador_nome: `ACT/CCT - ${unidadeNome}`,
+          colaborador_ativo: null,
+          unidade_id: n.unidade_id,
+          unidade_nome: unidadeNome,
+          mes: n.mes,
+          ano: n.ano,
+          data: `${n.ano}-${String(n.mes).padStart(2, "0")}-01`,
+          status: "disponivel",
+          observacao: `Patronal: ${patronalNome} | Laboral: ${laboralNome}`,
+          storage_path: n.storage_path,
+          nome_pdf: n.nome_pdf,
+          created_at: n.created_at,
+          dias_afastamento: null,
+          observacao_admin: null,
+          tipo_disciplinar: null,
+          sindicato_patronal: patronalNome,
+          sindicato_laboral: laboralNome,
+        };
+      });
+
+      const todos = [...docsMapeados, ...atestadosMapeados, ...disciplinaresMapeados, ...negociacoesMapeadas];
       todos.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setDocumentos(todos);
@@ -300,7 +366,6 @@ export default function DocumentosHistoricoCompleto() {
     });
   }, [documentos, filtroTipo, filtroUnidade, filtroColab, filtroMes, filtroAno, filtroStatus, search]);
 
-  // Anos disponíveis
   const anos = useMemo(() => {
     const set = new Set<number>();
     documentos.forEach(d => { if (d.ano) set.add(d.ano); });
@@ -314,6 +379,7 @@ export default function DocumentosHistoricoCompleto() {
       ponto: "Folha de Ponto",
       atestado: "Atestado",
       disciplinar: "Registro Disciplinar",
+      sindical: "ACT/CCT",
     };
     return map[tipo] || tipo;
   };
@@ -333,6 +399,9 @@ export default function DocumentosHistoricoCompleto() {
       };
       return <Badge className="bg-blue-100 text-blue-700 border-blue-200">{map[status] || status}</Badge>;
     }
+    if (tipo === "sindical") {
+      return <Badge className="bg-purple-100 text-purple-700 border-purple-200">Disponível</Badge>;
+    }
     return <Badge className="bg-green-100 text-green-700 border-green-200">Disponível</Badge>;
   };
 
@@ -342,8 +411,9 @@ export default function DocumentosHistoricoCompleto() {
       toast.warning("Este documento não possui arquivo anexado.");
       return;
     }
+    const bucket = doc.tipo === "sindical" ? "sindicatos" : "documentos";
     const { data } = await supabase.storage
-      .from("documentos")
+      .from(bucket)
       .createSignedUrl(doc.storage_path, 60);
     if (data?.signedUrl) {
       window.open(data.signedUrl, "_blank");
@@ -358,8 +428,9 @@ export default function DocumentosHistoricoCompleto() {
       return;
     }
     setSelectedDoc(doc);
+    const bucket = doc.tipo === "sindical" ? "sindicatos" : "documentos";
     const { data } = await supabase.storage
-      .from("documentos")
+      .from(bucket)
       .createSignedUrl(doc.storage_path, 60);
     if (data?.signedUrl) {
       setPreviewUrl(data.signedUrl);
@@ -370,6 +441,10 @@ export default function DocumentosHistoricoCompleto() {
   };
 
   const openEdit = (doc: DocumentoUnificado) => {
+    if (doc.tipo === "sindical") {
+      toast.info("Documentos sindicais não podem ser editados nesta tela. Utilize a tela de ACT-CCT.");
+      return;
+    }
     setEditDoc(doc);
     setEditOpen(true);
     if (doc.tipo === "atestado") {
@@ -427,7 +502,6 @@ export default function DocumentosHistoricoCompleto() {
           .eq("id", editDoc.id);
         if (error) throw error;
       } else {
-        // Documentos (contracheque, adiantamento, ponto)
         const { error } = await supabase
           .from("documentos")
           .update({
@@ -449,6 +523,10 @@ export default function DocumentosHistoricoCompleto() {
   };
 
   const confirmDelete = (doc: DocumentoUnificado) => {
+    if (doc.tipo === "sindical") {
+      toast.info("Documentos sindicais devem ser excluídos na tela de ACT-CCT.");
+      return;
+    }
     setDeleteDoc(doc);
     setDeleteOpen(true);
   };
@@ -457,9 +535,9 @@ export default function DocumentosHistoricoCompleto() {
     if (!deleteDoc) return;
     setBusy(true);
     try {
-      // Remover arquivo do storage se existir
       if (deleteDoc.storage_path) {
-        await supabase.storage.from("documentos").remove([deleteDoc.storage_path]);
+        const bucket = deleteDoc.tipo === "sindical" ? "sindicatos" : "documentos";
+        await supabase.storage.from(bucket).remove([deleteDoc.storage_path]);
       }
 
       let table: string;
@@ -484,7 +562,6 @@ export default function DocumentosHistoricoCompleto() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* 🔥 Cabeçalho com botão favoritar */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
@@ -540,7 +617,9 @@ export default function DocumentosHistoricoCompleto() {
                 <SelectContent>
                   <SelectItem value="todos">Todos</SelectItem>
                   {profiles.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nome}{!p.ativo ? ' (Inativo)' : ''}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -609,7 +688,7 @@ export default function DocumentosHistoricoCompleto() {
         </CardContent>
       </Card>
 
-      {/* Tabela de documentos */}
+      {/* Tabela */}
       {loading ? (
         <div className="flex items-center justify-center p-12">
           <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -636,7 +715,14 @@ export default function DocumentosHistoricoCompleto() {
               <tbody className="divide-y divide-border">
                 {filtrados.map((doc) => (
                   <tr key={doc.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="p-4 font-medium">{doc.colaborador_nome}</td>
+                    <td className="p-4 font-medium">
+                      {doc.colaborador_nome}
+                      {doc.colaborador_ativo === false && (
+                        <Badge variant="outline" className="ml-2 text-[9px] bg-red-50 text-red-600 border-red-200">
+                          Inativo
+                        </Badge>
+                      )}
+                    </td>
                     <td className="p-4">
                       <Badge variant="outline">{getTipoLabel(doc.tipo)}</Badge>
                     </td>
@@ -680,6 +766,7 @@ export default function DocumentosHistoricoCompleto() {
                           className="size-8"
                           title="Editar"
                           onClick={() => openEdit(doc)}
+                          disabled={doc.tipo === "sindical"}
                         >
                           <Pencil className="size-4" />
                         </Button>
@@ -689,6 +776,7 @@ export default function DocumentosHistoricoCompleto() {
                           className="size-8 text-red-500 hover:text-red-700 hover:bg-red-50"
                           title="Excluir"
                           onClick={() => confirmDelete(doc)}
+                          disabled={doc.tipo === "sindical"}
                         >
                           <Trash2 className="size-4" />
                         </Button>
@@ -705,7 +793,7 @@ export default function DocumentosHistoricoCompleto() {
         </div>
       )}
 
-      {/* Dialog de pré-visualização */}
+      {/* Preview Dialog */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
@@ -743,7 +831,7 @@ export default function DocumentosHistoricoCompleto() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de edição */}
+      {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -872,7 +960,7 @@ export default function DocumentosHistoricoCompleto() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de exclusão */}
+      {/* Delete Dialog */}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
