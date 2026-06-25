@@ -62,18 +62,36 @@ export default function Colaboradores() {
   const [viewUnidadeNome, setViewUnidadeNome] = useState<string>("");
   const [viewCargoNome, setViewCargoNome] = useState<string>("");
 
+  // 🔥 Cria um mapa de cargos para busca rápida (evita percorrer a lista toda)
+  const cargosMap = useMemo(() => {
+    const map = new Map<string, string>();
+    cargos.forEach(c => map.set(c.id, c.nome));
+    return map;
+  }, [cargos]);
+
+  // 🔥 Função para obter o nome do cargo (usando o mapa)
+  const getCargoNome = useCallback((cargoId: string | null) => {
+    if (!cargoId) return "—";
+    const nome = cargosMap.get(cargoId);
+    return nome || cargoId; // fallback: se não encontrar, mostra o ID
+  }, [cargosMap]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      // 🔥 CARREGAR TODOS OS CARGOS (sem filtro de ativo)
       const [pRes, uRes, cRes] = await Promise.all([
         supabase.from("profiles").select("*").order("nome"),
         supabase.from("unidades").select("*").eq("ativo", true).order("nome"),
-        supabase.from("cargos").select("*").eq("ativo", true).order("nome"),
+        supabase.from("cargos").select("*").order("nome"), // REMOVIDO o filtro eq("ativo", true)
       ]);
 
       if (pRes.error) throw pRes.error;
       if (uRes.error) throw uRes.error;
       if (cRes.error) throw cRes.error;
+
+      // 🔥 LOG para verificar se os cargos foram carregados
+      console.log("✅ Cargos carregados:", cRes.data?.length || 0, "registros");
 
       const profileIds = (pRes.data ?? []).map(p => p.id);
       let rolesMap = new Map<string, string[]>();
@@ -121,8 +139,8 @@ export default function Colaboradores() {
     const unidade = unidades.find(u => u.id === p.unidade_id);
     setViewUnidadeNome(unidade?.nome || "—");
     
-    const cargo = cargos.find(c => c.id === p.cargo);
-    setViewCargoNome(cargo?.nome || p.cargo || "—");
+    // Usar a função auxiliar para obter o nome do cargo
+    setViewCargoNome(getCargoNome(p.cargo));
     
     setViewDialogOpen(true);
   };
@@ -137,9 +155,14 @@ export default function Colaboradores() {
     });
   }, [profiles, search, filtroUnidade, filtroStatus, filtroCargo]);
 
+  // Para o filtro de cargo, exibir os nomes (mas o valor do select será o ID)
   const uniqueCargos = useMemo(() => {
-    return [...new Set(profiles.map(p => p.cargo).filter(Boolean))];
-  }, [profiles]);
+    const ids = [...new Set(profiles.map(p => p.cargo).filter(Boolean))];
+    return ids.map(id => {
+      const nome = cargosMap.get(id);
+      return { id, nome: nome || id };
+    });
+  }, [profiles, cargosMap]);
 
   const toUpperCaseTrim = (str: string) => str.trim().toUpperCase();
 
@@ -174,7 +197,7 @@ export default function Colaboradores() {
         cpf: cleanCpf,
         email: newForm.email.trim().toLowerCase() || `${cleanCpf}@pakere.com.br`,
         senha: newForm.senha || cleanCpf.slice(-6),
-        cargo: toUpperCaseTrim(newForm.cargo),
+        cargo: newForm.cargo, // JÁ DEVE SER O ID DO CARGO (UUID)
         dataAdmissao: newForm.dataAdmissao || null,
         dataNascimento: newForm.dataNascimento || null,
         folgaFixaSemana: newForm.folgaFixa === "none" ? null : Number(newForm.folgaFixa),
@@ -219,7 +242,7 @@ export default function Colaboradores() {
       matricula: (p as any).matricula ?? "",
       email: p.email_contato ?? "",
       whatsapp: p.whatsapp ?? "",
-      cargo: p.cargo,
+      cargo: p.cargo, // O ID do cargo armazenado
       unidadeId: p.unidade_id ?? "none",
       folgaFixa: p.folga_fixa_semana?.toString() ?? "none",
       dataNascimento: p.data_nascimento ?? "",
@@ -257,7 +280,7 @@ export default function Colaboradores() {
         matricula: toUpperCaseTrim(editForm.matricula) || null,
         email_contato: editForm.email.trim().toLowerCase() || null,
         whatsapp: editForm.whatsapp.trim() || null,
-        cargo: toUpperCaseTrim(editForm.cargo),
+        cargo: editForm.cargo, // O ID do cargo
         unidade_id: editForm.unidadeId === "none" ? null : editForm.unidadeId,
         folga_fixa_semana: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa),
         data_nascimento: editForm.dataNascimento || null,
@@ -392,7 +415,7 @@ export default function Colaboradores() {
           <Label className="text-xs font-bold uppercase text-muted-foreground">Cargo</Label>
           <select value={filtroCargo} onChange={(e) => setFiltroCargo(e.target.value)} className="bg-input border border-border rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary w-[200px]">
             <option value="all">Todos</option>
-            {uniqueCargos.map(c => <option key={c} value={c}>{c}</option>)}
+            {uniqueCargos.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
         </div>
       </div>
@@ -431,7 +454,7 @@ export default function Colaboradores() {
                     <td className="p-4 font-medium">{p.nome}</td>
                     <td className="p-4 hidden md:table-cell font-mono text-xs">{formatCPF(p.cpf)}</td>
                     <td className="p-4 hidden lg:table-cell text-muted-foreground">
-                      {cargos.find(c => c.id === p.cargo)?.nome || p.cargo}
+                      {getCargoNome(p.cargo)}
                     </td>
                     <td className="p-4 hidden xl:table-cell text-muted-foreground">
                       {unidades.find(u => u.id === p.unidade_id)?.nome ?? "—"}
@@ -534,7 +557,7 @@ export default function Colaboradores() {
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground uppercase">Cargo</Label>
-                  <p>{viewCargoNome}</p>
+                  <p>{getCargoNome(viewProfile.cargo)}</p>
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground uppercase">Unidade</Label>
