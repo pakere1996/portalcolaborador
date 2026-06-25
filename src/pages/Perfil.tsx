@@ -10,6 +10,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { UserCircle, Save, MapPin, Mail, Phone, Cake, CalendarDays } from "lucide-react";
 import { formatCPF } from "@/lib/cpf";
+import { Profile } from "@/integrations/supabase/types";
+
+// 🔥 Estende o tipo Profile para incluir matricula (se não estiver no tipo gerado)
+interface ProfileLocal extends Profile {
+  matricula?: string | null;
+}
 
 const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
@@ -22,19 +28,22 @@ export default function PerfilPage() {
     whatsapp: "",
   });
 
+  // 🔥 Cast do profile para o tipo local
+  const profileLocal = profile as ProfileLocal | null;
+
   useEffect(() => {
-    if (profile) {
+    if (profileLocal) {
       setForm({
-        endereco: profile.endereco ?? "",
-        email_contato: profile.email_contato ?? "",
-        whatsapp: profile.whatsapp ?? "",
+        endereco: profileLocal.endereco ?? "",
+        email_contato: profileLocal.email_contato ?? "",
+        whatsapp: profileLocal.whatsapp ?? "",
       });
     }
-  }, [profile]);
+  }, [profileLocal]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile) return;
+    if (!profileLocal) return;
 
     setBusy(true);
     const { error } = await supabase
@@ -44,7 +53,7 @@ export default function PerfilPage() {
         email_contato: form.email_contato.trim() || null,
         whatsapp: form.whatsapp.trim(),
       })
-      .eq("id", profile.id);
+      .eq("id", profileLocal.id);
 
     setBusy(false);
 
@@ -57,9 +66,8 @@ export default function PerfilPage() {
     refresh();
   };
 
-  if (!profile) return null;
+  if (!profileLocal) return null;
 
-  // Utilitário para formatar data com fallback seguro
   const formatarData = (data: string | null | undefined) => {
     if (!data) return "—";
     try {
@@ -83,37 +91,39 @@ export default function PerfilPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-border">
             <div>
               <Label className="text-xs text-muted-foreground uppercase">Nome</Label>
-              <div className="font-semibold">{profile.nome}</div>
+              <div className="font-semibold">{profileLocal.nome}</div>
             </div>
             <div>
               <Label className="text-xs text-muted-foreground uppercase">CPF</Label>
-              <div className="font-mono">{formatCPF(profile.cpf)}</div>
+              <div className="font-mono">{formatCPF(profileLocal.cpf)}</div>
             </div>
             <div>
               <Label className="text-xs text-muted-foreground uppercase">Matrícula</Label>
-              <div className="font-mono">{profile.matricula ?? "—"}</div>
+              <div className="font-mono">{profileLocal.matricula ?? "—"}</div>
             </div>
             <div>
               <Label className="text-xs text-muted-foreground uppercase">Cargo</Label>
-              <div className="text-sm">{profile.cargo}</div>
+              <div className="text-sm">{profileLocal.cargo}</div>
             </div>
             <div>
               <Label className="text-xs text-muted-foreground uppercase">Data de Admissão</Label>
-              <div className="text-sm">{formatarData(profile.data_admissao)}</div>
+              <div className="text-sm">{formatarData(profileLocal.data_admissao)}</div>
             </div>
             <div>
               <Label className="text-xs text-muted-foreground uppercase flex items-center gap-1">
                 <Cake className="size-3 text-amber-500" /> Data de Nascimento
               </Label>
-              <div className="text-sm">{formatarData(profile.data_nascimento)}</div>
+              <div className="text-sm">{formatarData(profileLocal.data_nascimento)}</div>
             </div>
             <div>
               <Label className="text-xs text-muted-foreground uppercase flex items-center gap-1">
                 <CalendarDays className="size-3 text-blue-500" /> Folga Semanal
               </Label>
               <div className="text-sm font-medium text-blue-600">
-                {profile.folga_fixa_semana != null && profile.folga_fixa_semana >= 0 && profile.folga_fixa_semana < WEEKDAYS.length
-                  ? WEEKDAYS[profile.folga_fixa_semana]
+                {profileLocal.folga_fixa_semana != null &&
+                 profileLocal.folga_fixa_semana >= 0 &&
+                 profileLocal.folga_fixa_semana < WEEKDAYS.length
+                  ? WEEKDAYS[profileLocal.folga_fixa_semana]
                   : "Não definida"}
               </div>
             </div>
