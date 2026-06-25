@@ -11,9 +11,9 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Plus, Briefcase, Pencil, Trash2 } from "lucide-react";
+import { Plus, Briefcase, Pencil, Trash2, Eye } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
-import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
+import { FavoritarBotao } from "@/components/FavoritarBotao";
 
 type Cargo = Tables<'cargos'>;
 
@@ -30,6 +30,10 @@ export default function Cargos() {
   const [editing, setEditing] = useState<Cargo | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Cargo | null>(null);
 
+  // 🔥 Estados para visualização
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewCargo, setViewCargo] = useState<Cargo | null>(null);
+
   const load = async () => {
     const { data, error } = await supabase
       .from("cargos")
@@ -45,6 +49,12 @@ export default function Cargos() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // 🔥 Função para abrir visualização
+  const openViewDialog = (cargo: Cargo) => {
+    setViewCargo(cargo);
+    setViewDialogOpen(true);
+  };
 
   const create = async () => {
     if (!form.nome.trim()) return toast.error("O nome do cargo é obrigatório.");
@@ -141,6 +151,21 @@ export default function Cargos() {
     setForm({ ...form, [e.target.id]: e.target.value });
   };
 
+  // Formatar data para exibição
+  const formatDate = (dateStr: string) => {
+    try {
+      return new Date(dateStr).toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -151,7 +176,7 @@ export default function Cargos() {
           <p className="text-muted-foreground mt-1">Gerencie os cargos disponíveis na empresa.</p>
         </div>
         <div className="flex items-center gap-2">
-          <FavoritarBotao rota="/admin/cargos" label="Cargos" icone="Briefcase" /> {/* <-- botão adicionado */}
+          <FavoritarBotao rota="/admin/cargos" label="Cargos" icone="Briefcase" />
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button className="rounded-full px-6"><Plus className="size-4 mr-2" /> Novo Cargo</Button>
@@ -160,7 +185,7 @@ export default function Cargos() {
               <DialogHeader><DialogTitle>Novo Cargo</DialogTitle></DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="nome">Nome do Cargo</Label>
+                  <Label htmlFor="nome">Nome do Cargo *</Label>
                   <Input id="nome" value={form.nome} onChange={handleFormChange} placeholder="Ex: Pizzaiolo Sênior" />
                 </div>
                 <div className="space-y-2">
@@ -192,15 +217,37 @@ export default function Cargos() {
                 <tr><td colSpan={3} className="p-12 text-center text-muted-foreground">Nenhum cargo cadastrado.</td></tr>
               )}
               {list.map((cargo) => (
-                <tr key={cargo.id} className="hover:bg-muted/20 transition-colors">
+                <tr
+                  key={cargo.id}
+                  className="hover:bg-muted/20 transition-colors cursor-pointer"
+                  onClick={() => openViewDialog(cargo)}
+                >
                   <td className="p-4 font-medium">{cargo.nome}</td>
                   <td className="p-4 hidden md:table-cell text-muted-foreground">{cargo.descricao || "—"}</td>
                   <td className="p-4 text-right whitespace-nowrap">
                     <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={() => openEdit(cargo)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        title="Editar"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEdit(cargo);
+                        }}
+                      >
                         <Pencil className="size-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="size-8" title="Excluir" onClick={() => setConfirmDelete(cargo)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-destructive hover:bg-destructive/10"
+                        title="Excluir"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDelete(cargo);
+                        }}
+                      >
                         <Trash2 className="size-4" />
                       </Button>
                     </div>
@@ -212,13 +259,68 @@ export default function Cargos() {
         </div>
       </div>
 
+      {/* ===== DIALOG DE VISUALIZAÇÃO DO CARGO ===== */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Briefcase className="size-5 text-primary" />
+              {viewCargo?.nome || "Cargo"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {viewCargo && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Nome</Label>
+                  <p className="font-semibold text-lg">{viewCargo.nome}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Descrição</Label>
+                  <p className="text-sm">{viewCargo.descricao || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Status</Label>
+                  <p>{viewCargo.ativo ? "Ativo" : "Inativo"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Criado em</Label>
+                  <p className="text-sm">{formatDate(viewCargo.created_at)}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Última atualização</Label>
+                  <p className="text-sm">{formatDate(viewCargo.updated_at)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewDialogOpen(false)}>
+              Fechar
+            </Button>
+            {viewCargo && (
+              <Button
+                onClick={() => {
+                  setViewDialogOpen(false);
+                  openEdit(viewCargo);
+                }}
+              >
+                <Pencil className="size-4 mr-2" /> Editar
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Edit Dialog */}
       <Dialog open={!!editing} onOpenChange={(o) => { if (!o) { setEditing(null); setForm(blankForm); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Editar Cargo: {editing?.nome}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="nome">Nome do Cargo</Label>
+              <Label htmlFor="nome">Nome do Cargo *</Label>
               <Input id="nome" value={form.nome} onChange={handleFormChange} />
             </div>
             <div className="space-y-2">
