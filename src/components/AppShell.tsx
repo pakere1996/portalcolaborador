@@ -165,7 +165,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   ];
 
   const adminComunicacaoNav: NavItem[] = [
-    { to: "/admin/mensagens", label: "Comunicados", icon: MessageSquare },
+    { to: "/admin/mensagens", label: "Mensagens", icon: MessageSquare },
     { to: "/admin/avisos", label: "Quadro de Avisos", icon: Bell },
   ];
 
