@@ -1,22 +1,35 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Bell, Loader2, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
-
-interface Pendencia {
-  id: string;
-  colaborador_nome: string;
-  data_atestado: string;
-  dias_afastamento: number;
-  status?: string;
-  created_at?: string;
-}
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import {
+  Bell,
+  Loader2,
+  Clock,
+  AlertCircle,
+  CheckCircle2,
+  UserCheck,
+  FileText,
+  Coins,
+  Scale,
+  Calendar,
+  ArrowRight,
+  CalendarClock,
+} from "lucide-react";
+import { usePendencias } from "@/lib/pendencias-context";
+import { toast } from "sonner";
 
 interface PendenciasWidgetProps {
-  pendentes: Pendencia[];
-  totalPendentes: number;
-  loading: boolean;
   titulo?: string;
   emptyMessage?: string;
   viewAllLink?: string;
@@ -24,19 +37,48 @@ interface PendenciasWidgetProps {
   maxItems?: number;
 }
 
+const ICON_MAP = {
+  troca: { icon: UserCheck, color: "text-blue-600", bg: "bg-blue-50" },
+  contracheque: { icon: FileText, color: "text-purple-600", bg: "bg-purple-50" },
+  adiantamento: { icon: Coins, color: "text-cyan-600", bg: "bg-cyan-50" },
+  folha_ponto: { icon: Clock, color: "text-emerald-600", bg: "bg-emerald-50" },
+  negociacao: { icon: Scale, color: "text-amber-600", bg: "bg-amber-50" },
+};
+
 export function PendenciasWidget({
-  pendentes,
-  totalPendentes,
-  loading,
   titulo = "Pendências",
   emptyMessage = "Nenhuma pendência no momento.",
   viewAllLink = "/admin/documentos/atestados",
   viewAllLabel = "Ver todas",
   maxItems = 5,
 }: PendenciasWidgetProps) {
-  // Exibe no máximo maxItems itens, mas mostra o total no badge
-  const itensExibidos = pendentes.slice(0, maxItems);
-  const temMais = pendentes.length > maxItems;
+  const { pendencias, loading, adiarPendencia } = usePendencias();
+  const [adiarDialog, setAdiarDialog] = useState<{
+    open: boolean;
+    identificador: string | null;
+    dias: number;
+  }>({
+    open: false,
+    identificador: null,
+    dias: 1,
+  });
+
+  const itensExibidos = pendencias.slice(0, maxItems);
+  const temMais = pendencias.length > maxItems;
+
+  const handleAdiar = async () => {
+    if (!adiarDialog.identificador) return;
+    if (adiarDialog.dias < 1) {
+      toast.error("Informe um número de dias válido.");
+      return;
+    }
+    await adiarPendencia(adiarDialog.identificador, adiarDialog.dias);
+    setAdiarDialog({ open: false, identificador: null, dias: 1 });
+  };
+
+  const abrirAdiar = (identificador: string) => {
+    setAdiarDialog({ open: true, identificador, dias: 1 });
+  };
 
   if (loading) {
     return (
@@ -56,7 +98,7 @@ export function PendenciasWidget({
     );
   }
 
-  if (totalPendentes === 0) {
+  if (pendencias.length === 0) {
     return (
       <Card className="border-border shadow-sm">
         <CardHeader>
@@ -76,60 +118,68 @@ export function PendenciasWidget({
   }
 
   return (
-    <Card className="border-amber-200 bg-amber-50/50 shadow-sm flex flex-col">
-      <CardHeader className="pb-3 shrink-0">
-        <CardTitle className="flex items-center gap-2 text-amber-800">
-          <Bell className="size-5" />
-          {titulo}
-          <Badge className="ml-2 bg-amber-600 text-white">{totalPendentes}</Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex-1 overflow-y-auto max-h-[400px] pr-1">
-        {pendentes.length === 0 ? (
-          <div className="text-center text-muted-foreground py-6">
-            {emptyMessage}
-          </div>
-        ) : (
+    <>
+      <Card className="border-amber-200 bg-amber-50/50 shadow-sm flex flex-col">
+        <CardHeader className="pb-3 shrink-0">
+          <CardTitle className="flex items-center gap-2 text-amber-800">
+            <Bell className="size-5" />
+            {titulo}
+            <Badge className="ml-2 bg-amber-600 text-white">{pendencias.length}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex-1 overflow-y-auto max-h-[400px] pr-1">
           <div className="space-y-2">
             {itensExibidos.map((p) => {
-              const dataAtestado = new Date(p.data_atestado + "T00:00:00");
+              const IconComponent = ICON_MAP[p.tipo]?.icon || AlertCircle;
+              const colorClass = ICON_MAP[p.tipo]?.color || "text-gray-600";
+              const bgClass = ICON_MAP[p.tipo]?.bg || "bg-gray-50";
+
+              // Calcular atraso
               const hoje = new Date();
               hoje.setHours(0, 0, 0, 0);
-              const diffDias = Math.ceil((hoje.getTime() - dataAtestado.getTime()) / (1000 * 60 * 60 * 24));
+              const dataRef = new Date(p.data_referencia + "T00:00:00");
+              const diffDias = Math.ceil((hoje.getTime() - dataRef.getTime()) / (1000 * 60 * 60 * 24));
               const isAtrasado = diffDias > 0;
 
               return (
                 <div
                   key={p.id}
-                  className={`flex items-center justify-between p-3 bg-white rounded-lg border shadow-sm hover:shadow-md transition-shadow ${
+                  className={`flex items-start justify-between p-3 bg-white rounded-lg border shadow-sm hover:shadow-md transition-shadow ${
                     isAtrasado ? "border-red-200 bg-red-50/50" : "border-amber-100"
                   }`}
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium truncate">{p.colaborador_nome}</span>
-                      {isAtrasado && (
-                        <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200 text-[10px]">
-                          <AlertCircle className="size-3 mr-0.5" />
-                          Atrasado {diffDias} dia(s)
-                        </Badge>
-                      )}
+                  <div className="flex gap-3 flex-1 min-w-0">
+                    <div className={`size-8 rounded-full ${bgClass} flex items-center justify-center shrink-0 mt-0.5`}>
+                      <IconComponent className={`size-4 ${colorClass}`} />
                     </div>
-                    <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                      <span>Atestado de {dataAtestado.toLocaleDateString("pt-BR")}</span>
-                      <span>•</span>
-                      <span>{p.dias_afastamento} dia(s)</span>
-                      <span className="text-xs text-amber-600 flex items-center gap-0.5">
-                        <Clock className="size-3" />
-                        Pendente
-                      </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium">{p.titulo}</span>
+                        {isAtrasado && (
+                          <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200 text-[10px]">
+                            <AlertCircle className="size-3 mr-0.5" />
+                            Atrasado {diffDias} dia(s)
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-sm text-muted-foreground">{p.descricao}</div>
                     </div>
                   </div>
-                  <Link to={viewAllLink}>
-                    <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white shrink-0">
-                      Revisar
+                  <div className="flex gap-1 shrink-0 ml-2">
+                    <Link to={p.rota_resolver}>
+                      <Button size="sm" variant="outline" className="text-xs h-7 px-2 border-amber-300 hover:bg-amber-50">
+                        <ArrowRight className="size-3 mr-1" /> Resolver
+                      </Button>
+                    </Link>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-xs h-7 px-2 text-muted-foreground"
+                      onClick={() => abrirAdiar(p.identificador_unico)}
+                    >
+                      <CalendarClock className="size-3 mr-1" /> Adiar
                     </Button>
-                  </Link>
+                  </div>
                 </div>
               );
             })}
@@ -137,14 +187,46 @@ export function PendenciasWidget({
               <div className="text-center pt-2">
                 <Link to={viewAllLink}>
                   <Button variant="ghost" size="sm" className="text-amber-600 hover:text-amber-700">
-                    Ver mais {pendentes.length - maxItems} pendência(s)
+                    Ver mais {pendencias.length - maxItems} pendência(s)
                   </Button>
                 </Link>
               </div>
             )}
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+
+      {/* Dialog para adiar pendência */}
+      <Dialog open={adiarDialog.open} onOpenChange={(open) => !open && setAdiarDialog({ open: false, identificador: null, dias: 1 })}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Adiar pendência</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="dias">Dias para reexibição</Label>
+              <Input
+                id="dias"
+                type="number"
+                min={1}
+                max={365}
+                value={adiarDialog.dias}
+                onChange={(e) => setAdiarDialog({ ...adiarDialog, dias: parseInt(e.target.value) || 1 })}
+                className="w-24"
+              />
+              <p className="text-xs text-muted-foreground">A pendência reaparecerá após este período.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAdiarDialog({ open: false, identificador: null, dias: 1 })}>
+              Cancelar
+            </Button>
+            <Button onClick={handleAdiar} className="bg-amber-600 hover:bg-amber-700 text-white">
+              Adiar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
