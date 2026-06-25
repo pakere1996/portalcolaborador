@@ -5,11 +5,11 @@ import { toast } from "sonner";
 
 export interface Pendencia {
   id: string;
-  tipo: "solicitacao" | "contracheque" | "adiantamento" | "folha_ponto" | "negociacao";
+  tipo: "excecao" | "contracheque" | "adiantamento" | "folha_ponto" | "negociacao";
   titulo: string;
   descricao: string;
-  data_referencia: string; // data de criação ou vencimento
-  data_vencimento?: string; // data de vencimento (quando aplicável)
+  data_vencimento: string; // data a partir da qual a pendência é considerada atrasada
+  dias_atraso: number; // calculado no contexto
   rota_resolver: string;
   unidade_id?: string | null;
   colaborador_id?: string | null;
@@ -55,10 +55,12 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
       });
 
       const pendenciasList: Pendencia[] = [];
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
 
-      // 2. Buscar solicitações de exceção pendentes (solicitacoes_especiais)
+      // 2. Solicitações de exceção pendentes (tabela solicitacoes_especiais)
       try {
-        const { data: solicitacoes, error: solicitacoesError } = await supabase
+        const { data: excecoes, error: excecoesError } = await supabase
           .from("solicitacoes_especiais")
           .select(`
             id,
@@ -67,44 +69,46 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
             motivo,
             status,
             created_at,
-            profiles!solicitacoes_especiais_user_id_fkey (nome)
+            profiles!solicitacoes_especiais_user_id_fkey(nome)
           `)
-          .eq("status", "pendente")
-          .order("created_at", { ascending: true });
+          .eq("status", "pendente");
 
-        if (solicitacoesError) throw solicitacoesError;
+        if (excecoesError) throw excecoesError;
 
-        solicitacoes?.forEach(s => {
-          const chave = `solicitacao-${s.id}`;
-          if (chaveAdiados.has(chave)) return;
+        if (excecoes && excecoes.length > 0) {
+          for (const ex of excecoes) {
+            const chave = `excecao-${ex.id}`;
+            if (chaveAdiados.has(chave)) continue;
 
-          const colaboradorNome = s.profiles?.nome || "Colaborador";
-          const dataRef = s.created_at || new Date().toISOString();
-          const dataVencimento = new Date(dataRef);
-          dataVencimento.setDate(dataVencimento.getDate() + 3); // 3 dias para resposta
+            // Data de vencimento: data da solicitação (ou created_at se data for null)
+            const dataSolicitacao = ex.data || ex.created_at?.split("T")[0] || new Date().toISOString().split("T")[0];
+            const dataVencimento = new Date(dataSolicitacao + "T00:00:00");
+            const diffDias = Math.ceil((hoje.getTime() - dataVencimento.getTime()) / (1000 * 60 * 60 * 24));
+            const diasAtraso = diffDias > 0 ? diffDias : 0;
 
-          pendenciasList.push({
-            id: `solicitacao-${s.id}`,
-            tipo: "solicitacao",
-            titulo: "Solicitação de exceção pendente",
-            descricao: `${colaboradorNome} - ${new Date(s.data).toLocaleDateString("pt-BR")}: ${s.motivo || "Sem motivo"}`,
-            data_referencia: dataRef,
-            data_vencimento: dataVencimento.toISOString().split("T")[0],
-            rota_resolver: "/admin/solicitacoes",
-            identificador_unico: chave,
-          });
-        });
+            const colaboradorNome = (ex as any).profiles?.nome || "Colaborador";
+
+            pendenciasList.push({
+              id: `excecao-${ex.id}`,
+              tipo: "excecao",
+              titulo: "Solicitação de exceção pendente",
+              descricao: `${colaboradorNome} - ${ex.motivo || "Sem motivo"} (${new Date(dataSolicitacao).toLocaleDateString("pt-BR")})`,
+              data_vencimento: dataSolicitacao,
+              dias_atraso: diasAtraso,
+              rota_resolver: "/admin/solicitacoes",
+              identificador_unico: chave,
+            });
+          }
+        }
       } catch (error) {
         console.warn("Erro ao buscar solicitações de exceção:", error);
       }
 
       // 3. Documentos (contracheque, adiantamento, folha de ponto)
-      const hoje = new Date();
       const mesVigente = hoje.getMonth() + 1;
       const anoVigente = hoje.getFullYear();
       const diaHoje = hoje.getDate();
 
-      // Buscar unidades ativas
       const { data: unidades, error: unidError } = await supabase
         .from("unidades")
         .select("id, nome, possui_relogio_ponto, tem_adiantamento, dia_adiantamento")
@@ -115,114 +119,100 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
       const mesAnterior = mesVigente === 1 ? 12 : mesVigente - 1;
       const anoAnterior = mesVigente === 1 ? anoVigente - 1 : anoVigente;
 
+      // Função auxiliar para verificar se documento existe e calcular atraso
+      const verificarDocumento = async (tipo: string, unidadeId: string, mes: number, ano: number, dataVencimento: Date) => {
+        const chave = `${tipo}-${unidadeId}-${mes}-${ano}`;
+        if (chaveAdiados.has(chave)) return null;
+
+        const { count, error } = await supabase
+          .from("documentos")
+          .select("*", { count: "exact", head: true })
+          .eq("tipo", tipo)
+          .eq("unidade_id", unidadeId)
+          .eq("mes", mes)
+          .eq("ano", ano);
+
+        if (error) {
+          console.warn(`Erro ao verificar ${tipo} para unidade ${unidadeId}:`, error);
+          return null;
+        }
+
+        if (count === 0) {
+          const diffDias = Math.ceil((hoje.getTime() - dataVencimento.getTime()) / (1000 * 60 * 60 * 24));
+          const diasAtraso = diffDias > 0 ? diffDias : 0;
+          return { chave, diasAtraso };
+        }
+        return null;
+      };
+
       for (const unidade of unidades) {
         // Contracheque (a partir do dia 10, referente ao mês anterior)
-        // Vencimento: dia 10 de cada mês
         if (diaHoje >= 10) {
-          const chave = `contracheque-${unidade.id}-${mesAnterior}-${anoAnterior}`;
-          if (!chaveAdiados.has(chave)) {
-            const { count, error: countError } = await supabase
-              .from("documentos")
-              .select("*", { count: "exact", head: true })
-              .eq("tipo", "contracheque")
-              .eq("unidade_id", unidade.id)
-              .eq("mes", mesAnterior)
-              .eq("ano", anoAnterior);
-
-            if (!countError && count === 0) {
-              const dataVencimento = new Date(anoAnterior, mesAnterior - 1, 10);
-              pendenciasList.push({
-                id: chave,
-                tipo: "contracheque",
-                titulo: "Contracheque não importado",
-                descricao: `${unidade.nome} - ${String(mesAnterior).padStart(2, "0")}/${anoAnterior}`,
-                data_referencia: `${anoAnterior}-${String(mesAnterior).padStart(2, "0")}-01`,
-                data_vencimento: dataVencimento.toISOString().split("T")[0],
-                rota_resolver: "/admin/documentos/contracheque",
-                unidade_id: unidade.id,
-                identificador_unico: chave,
-              });
-            }
+          const dataVencimento = new Date(anoAnterior, mesAnterior - 1, 10);
+          const resultado = await verificarDocumento("contracheque", unidade.id, mesAnterior, anoAnterior, dataVencimento);
+          if (resultado) {
+            pendenciasList.push({
+              id: resultado.chave,
+              tipo: "contracheque",
+              titulo: "Contracheque não importado",
+              descricao: `${unidade.nome} - ${String(mesAnterior).padStart(2, "0")}/${anoAnterior}`,
+              data_vencimento: dataVencimento.toISOString().split("T")[0],
+              dias_atraso: resultado.diasAtraso,
+              rota_resolver: "/admin/documentos/contracheque",
+              unidade_id: unidade.id,
+              identificador_unico: resultado.chave,
+            });
           }
         }
 
         // Adiantamento (a partir do dia D+5, referente ao mês vigente)
-        // Vencimento: dia do adiantamento + 5 dias
         if (unidade.tem_adiantamento && unidade.dia_adiantamento) {
           const diaAdiantamento = unidade.dia_adiantamento;
           const diaLimite = diaAdiantamento + 5;
           if (diaHoje >= diaLimite) {
-            const chave = `adiantamento-${unidade.id}-${mesVigente}-${anoVigente}`;
-            if (!chaveAdiados.has(chave)) {
-              const { count, error: countError } = await supabase
-                .from("documentos")
-                .select("*", { count: "exact", head: true })
-                .eq("tipo", "adiantamento")
-                .eq("unidade_id", unidade.id)
-                .eq("mes", mesVigente)
-                .eq("ano", anoVigente);
-
-              if (!countError && count === 0) {
-                const dataVencimento = new Date(anoVigente, mesVigente - 1, diaLimite);
-                pendenciasList.push({
-                  id: chave,
-                  tipo: "adiantamento",
-                  titulo: "Adiantamento não importado",
-                  descricao: `${unidade.nome} - ${String(mesVigente).padStart(2, "0")}/${anoVigente}`,
-                  data_referencia: `${anoVigente}-${String(mesVigente).padStart(2, "0")}-01`,
-                  data_vencimento: dataVencimento.toISOString().split("T")[0],
-                  rota_resolver: "/admin/documentos/adiantamento",
-                  unidade_id: unidade.id,
-                  identificador_unico: chave,
-                });
-              }
+            const dataVencimento = new Date(anoVigente, mesVigente - 1, diaLimite);
+            const resultado = await verificarDocumento("adiantamento", unidade.id, mesVigente, anoVigente, dataVencimento);
+            if (resultado) {
+              pendenciasList.push({
+                id: resultado.chave,
+                tipo: "adiantamento",
+                titulo: "Adiantamento não importado",
+                descricao: `${unidade.nome} - ${String(mesVigente).padStart(2, "0")}/${anoVigente}`,
+                data_vencimento: dataVencimento.toISOString().split("T")[0],
+                dias_atraso: resultado.diasAtraso,
+                rota_resolver: "/admin/documentos/adiantamento",
+                unidade_id: unidade.id,
+                identificador_unico: resultado.chave,
+              });
             }
           }
         }
 
         // Folha de ponto (a partir do dia 10, referente ao mês anterior, apenas se unidade tem relógio)
-        // Vencimento: dia 10 de cada mês
         if (unidade.possui_relogio_ponto && diaHoje >= 10) {
-          const chave = `folha_ponto-${unidade.id}-${mesAnterior}-${anoAnterior}`;
-          if (!chaveAdiados.has(chave)) {
-            const { count, error: countError } = await supabase
-              .from("documentos")
-              .select("*", { count: "exact", head: true })
-              .eq("tipo", "ponto")
-              .eq("unidade_id", unidade.id)
-              .eq("mes", mesAnterior)
-              .eq("ano", anoAnterior);
-
-            if (!countError && count === 0) {
-              const dataVencimento = new Date(anoAnterior, mesAnterior - 1, 10);
-              pendenciasList.push({
-                id: chave,
-                tipo: "folha_ponto",
-                titulo: "Folha de ponto não importada",
-                descricao: `${unidade.nome} - ${String(mesAnterior).padStart(2, "0")}/${anoAnterior}`,
-                data_referencia: `${anoAnterior}-${String(mesAnterior).padStart(2, "0")}-01`,
-                data_vencimento: dataVencimento.toISOString().split("T")[0],
-                rota_resolver: "/admin/documentos/ponto",
-                unidade_id: unidade.id,
-                identificador_unico: chave,
-              });
-            }
+          const dataVencimento = new Date(anoAnterior, mesAnterior - 1, 10);
+          const resultado = await verificarDocumento("ponto", unidade.id, mesAnterior, anoAnterior, dataVencimento);
+          if (resultado) {
+            pendenciasList.push({
+              id: resultado.chave,
+              tipo: "folha_ponto",
+              titulo: "Folha de ponto não importada",
+              descricao: `${unidade.nome} - ${String(mesAnterior).padStart(2, "0")}/${anoAnterior}`,
+              data_vencimento: dataVencimento.toISOString().split("T")[0],
+              dias_atraso: resultado.diasAtraso,
+              rota_resolver: "/admin/documentos/ponto",
+              unidade_id: unidade.id,
+              identificador_unico: resultado.chave,
+            });
           }
         }
       }
 
       // 4. Negociações coletivas (por unidade)
       try {
-        // Buscar todas as unidades ativas
-        const { data: unidadesNeg, error: unidNegError } = await supabase
-          .from("unidades")
-          .select("id, nome")
-          .eq("ativo", true);
-
-        if (unidNegError) throw unidNegError;
-
-        for (const unidade of unidadesNeg) {
-          // Buscar a última negociação para esta unidade
+        // Buscar todas as unidades
+        for (const unidade of unidades) {
+          // Buscar a última negociação desta unidade
           const { data: negociacao, error: negError } = await supabase
             .from("negociacoes")
             .select("ano, mes, created_at")
@@ -231,42 +221,58 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
             .order("mes", { ascending: false })
             .limit(1);
 
-          if (negError) throw negError;
-
-          let dataBase: Date | null = null;
-          if (negociacao && negociacao.length > 0) {
-            const ultima = negociacao[0];
-            dataBase = new Date(ultima.ano, ultima.mes - 1, 1);
-          } else {
-            // Se não houver negociação, consideramos que a data base é 01/01/2020 (ou uma data padrão antiga)
-            dataBase = new Date(2020, 0, 1);
+          if (negError) {
+            console.warn(`Erro ao buscar negociação para unidade ${unidade.id}:`, negError);
+            continue;
           }
 
-          const diffDias = Math.floor((hoje.getTime() - dataBase.getTime()) / (1000 * 60 * 60 * 24));
-          // Vencimento: a cada 365 dias (anual)
-          if (diffDias >= 365) {
-            const chave = `negociacao-${unidade.id}`;
-            if (!chaveAdiados.has(chave)) {
-              const dataVencimento = new Date(dataBase);
-              dataVencimento.setFullYear(dataVencimento.getFullYear() + 1);
+          let dataVencimento: Date;
+          let diffDias: number;
+          let chave: string;
 
-              pendenciasList.push({
-                id: chave,
-                tipo: "negociacao",
-                titulo: "Negociação coletiva pendente",
-                descricao: `${unidade.nome} - Última: ${dataBase ? String(dataBase.getMonth() + 1).padStart(2, "0") + "/" + dataBase.getFullYear() : "N/A"}`,
-                data_referencia: dataBase ? dataBase.toISOString().split("T")[0] : hoje.toISOString().split("T")[0],
-                data_vencimento: dataVencimento.toISOString().split("T")[0],
-                rota_resolver: "/admin/documentos/act-cct",
-                unidade_id: unidade.id,
-                identificador_unico: chave,
-              });
-            }
+          if (negociacao && negociacao.length > 0) {
+            const ultima = negociacao[0];
+            // Data base: primeiro dia do mês da última negociação
+            const dataBase = new Date(ultima.ano, ultima.mes - 1, 1);
+            // Vencimento: último dia do mês da data base + 1 ano (ex: 31/05/2026)
+            dataVencimento = new Date(ultima.ano + 1, ultima.mes - 1, 0);
+            // A partir do dia seguinte ao vencimento, começa o atraso
+            const dataInicioAtraso = new Date(dataVencimento);
+            dataInicioAtraso.setDate(dataInicioAtraso.getDate() + 1);
+            diffDias = Math.ceil((hoje.getTime() - dataInicioAtraso.getTime()) / (1000 * 60 * 60 * 24));
+            chave = `negociacao-${unidade.id}-${ultima.ano}-${ultima.mes}`;
+          } else {
+            // Nenhuma negociação cadastrada para esta unidade
+            // Considerar vencimento a partir da data de criação da unidade ou data atual? Vamos usar data atual.
+            dataVencimento = new Date(hoje);
+            diffDias = 0; // pendência nova, sem atraso
+            chave = `negociacao-${unidade.id}-sem`;
+          }
+
+          // Se diffDias > 0, está atrasada
+          if (diffDias > 0 && !chaveAdiados.has(chave)) {
+            const descricao = negociacao && negociacao.length > 0
+              ? `${unidade.nome} - Última: ${String(negociacao[0].mes).padStart(2, "0")}/${negociacao[0].ano}`
+              : `${unidade.nome} - Nenhuma negociação cadastrada`;
+            pendenciasList.push({
+              id: chave,
+              tipo: "negociacao",
+              titulo: "Negociação coletiva pendente",
+              descricao: descricao,
+              data_vencimento: dataVencimento.toISOString().split("T")[0],
+              dias_atraso: diffDias,
+              rota_resolver: "/admin/documentos/act-cct",
+              unidade_id: unidade.id,
+              identificador_unico: chave,
+            });
           }
         }
       } catch (error) {
-        console.warn("Erro ao buscar negociações:", error);
+        console.warn("Erro ao buscar negociações por unidade:", error);
       }
+
+      // Ordenar por dias de atraso (maior primeiro)
+      pendenciasList.sort((a, b) => b.dias_atraso - a.dias_atraso);
 
       setPendencias(pendenciasList);
     } catch (error) {
