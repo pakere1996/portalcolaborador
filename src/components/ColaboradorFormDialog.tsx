@@ -18,19 +18,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCPF } from "@/lib/cpf";
+import { Tables } from "@/integrations/supabase/types";
 
-interface Unidade {
-  id: string;
-  nome: string;
-  possui_relogio_ponto?: boolean;
-  tem_adiantamento?: boolean;
-  dia_adiantamento?: number | null;
-}
-
-interface Cargo {
-  id: string;
-  nome: string;
-}
+// 🔥 Usar tipos do Supabase para consistência
+type Unidade = Tables<"unidades">;
+type Cargo = Tables<"cargos">;
 
 interface ColaboradorFormDialogProps {
   open: boolean;
@@ -85,18 +77,12 @@ export function ColaboradorFormDialog({
   isEdit,
   onSave,
 }: ColaboradorFormDialogProps) {
-  // 🔥 Quando a unidade mudar, podemos pré-definir a flag de adiantamento
-  // baseado na configuração da unidade (opcional)
+  // 🔥 Quando a unidade mudar, pré-definir optante_adiantamento se a unidade tiver adiantamento
   useEffect(() => {
     if (form.unidadeId && form.unidadeId !== "none") {
       const unidade = unidades.find((u) => u.id === form.unidadeId);
-      if (unidade) {
-        // Se a unidade tem adiantamento e o campo ainda não foi definido,
-        // podemos pré-marcar como true (opcional)
-        // Mas deixamos o usuário decidir individualmente
-        if (unidade.tem_adiantamento && form.optante_adiantamento === undefined) {
-          setForm({ ...form, optante_adiantamento: true });
-        }
+      if (unidade?.tem_adiantamento && form.optante_adiantamento === undefined) {
+        setForm({ ...form, optante_adiantamento: true });
       }
     }
   }, [form.unidadeId, unidades, setForm, form]);
@@ -299,7 +285,7 @@ export function ColaboradorFormDialog({
             </div>
           )}
 
-          {/* 🔥 NOVO: Optante por Adiantamento */}
+          {/* 🔥 Optante por Adiantamento */}
           <div className="col-span-2 flex items-center space-x-2 rounded-xl border border-border p-3">
             <Switch
               id="optante_adiantamento"
