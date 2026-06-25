@@ -59,6 +59,16 @@ export default function PerfilPage() {
 
   if (!profile) return null;
 
+  // Utilitário para formatar data com fallback seguro
+  const formatarData = (data: string | null | undefined) => {
+    if (!data) return "—";
+    try {
+      return new Date(data + "T00:00:00").toLocaleDateString("pt-BR");
+    } catch {
+      return "—";
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       <div>
@@ -81,7 +91,7 @@ export default function PerfilPage() {
             </div>
             <div>
               <Label className="text-xs text-muted-foreground uppercase">Matrícula</Label>
-              <div className="font-mono">{profile.matricula || "—"}</div>
+              <div className="font-mono">{profile.matricula ?? "—"}</div>
             </div>
             <div>
               <Label className="text-xs text-muted-foreground uppercase">Cargo</Label>
@@ -89,24 +99,22 @@ export default function PerfilPage() {
             </div>
             <div>
               <Label className="text-xs text-muted-foreground uppercase">Data de Admissão</Label>
-              <div className="text-sm">
-                {profile.data_admissao ? new Date(profile.data_admissao + "T00:00:00").toLocaleDateString("pt-BR") : "—"}
-              </div>
+              <div className="text-sm">{formatarData(profile.data_admissao)}</div>
             </div>
             <div>
               <Label className="text-xs text-muted-foreground uppercase flex items-center gap-1">
                 <Cake className="size-3 text-amber-500" /> Data de Nascimento
               </Label>
-              <div className="text-sm">
-                {profile.data_nascimento ? new Date(profile.data_nascimento + "T00:00:00").toLocaleDateString("pt-BR") : "—"}
-              </div>
+              <div className="text-sm">{formatarData(profile.data_nascimento)}</div>
             </div>
             <div>
               <Label className="text-xs text-muted-foreground uppercase flex items-center gap-1">
                 <CalendarDays className="size-3 text-blue-500" /> Folga Semanal
               </Label>
               <div className="text-sm font-medium text-blue-600">
-                {profile.folga_fixa_semana != null ? WEEKDAYS[profile.folga_fixa_semana] : "Não definida"}
+                {profile.folga_fixa_semana != null && profile.folga_fixa_semana >= 0 && profile.folga_fixa_semana < WEEKDAYS.length
+                  ? WEEKDAYS[profile.folga_fixa_semana]
+                  : "Não definida"}
               </div>
             </div>
           </div>
