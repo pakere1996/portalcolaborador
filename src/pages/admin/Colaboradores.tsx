@@ -16,12 +16,23 @@ import { Switch } from "@/components/ui/switch";
 import { formatCPF, onlyDigits, isValidCPFLength } from "@/lib/cpf";
 import { Badge } from "@/components/ui/badge";
 import { ColaboradorFormDialog } from "@/components/ColaboradorFormDialog";
-import { Tables, Unidade, Cargo } from "@/integrations/supabase/types";
+import { Tables } from "@/integrations/supabase/types";
 import { adminApi } from "@/lib/admin-api";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
 
+// 🔥 Definição de tipos locais para compatibilidade com o banco
 type Profile = Tables<"profiles"> & { role?: string | null };
-// Unidade e Cargo já estão importados dos tipos
+// 🔥 Estende Profile para incluir campos que podem não estar no tipo gerado
+interface ProfileLocal extends Profile {
+  matricula?: string | null;
+  data_demissao?: string | null;
+  tipo_vinculo?: string | null;
+  possui_folha_ponto?: boolean | null;
+}
+
+// 🔥 Tipos para Unidade e Cargo vindos do banco
+type Unidade = Tables<"unidades">;
+type Cargo = Tables<"cargos">;
 
 const blankEditForm = {
   nome: "", cpf: "", matricula: "", email: "", whatsapp: "",
@@ -36,7 +47,7 @@ const blankEditForm = {
 };
 
 export default function Colaboradores() {
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profiles, setProfiles] = useState<ProfileLocal[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [cargos, setCargos] = useState<Cargo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,10 +59,10 @@ export default function Colaboradores() {
 
   const [openNewDialog, setOpenNewDialog] = useState(false);
   const [newForm, setNewForm] = useState(blankEditForm);
-  const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
+  const [editingProfile, setEditingProfile] = useState<ProfileLocal | null>(null);
   const [editForm, setEditForm] = useState(blankEditForm);
-  const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
-  const [resetPasswordDialog, setResetPasswordDialog] = useState<{ profile: Profile; senha: string; confirmar: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<ProfileLocal | null>(null);
+  const [resetPasswordDialog, setResetPasswordDialog] = useState<{ profile: ProfileLocal; senha: string; confirmar: string } | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -79,6 +90,10 @@ export default function Colaboradores() {
       const profilesWithRoles = (pRes.data ?? []).map(p => ({
         ...p,
         role: rolesMap.get(p.id)?.[0] ?? null,
+        matricula: (p as any).matricula ?? null,
+        data_demissao: (p as any).data_demissao ?? null,
+        tipo_vinculo: (p as any).tipo_vinculo ?? "CLT",
+        possui_folha_ponto: (p as any).possui_folha_ponto ?? false,
       }));
 
       const sortedProfiles = profilesWithRoles.sort((a, b) => {
@@ -90,8 +105,8 @@ export default function Colaboradores() {
       });
 
       setProfiles(sortedProfiles);
-      setUnidades(uRes.data as Unidade[] ?? []);
-      setCargos(cRes.data as Cargo[] ?? []);
+      setUnidades((uRes.data ?? []) as Unidade[]);
+      setCargos((cRes.data ?? []) as Cargo[]);
     } catch (e) {
       console.error("Erro ao carregar dados:", e);
       toast.error("Erro ao carregar dados", { description: (e as Error).message });
@@ -187,7 +202,7 @@ export default function Colaboradores() {
     }
   };
 
-  const openEdit = (p: Profile) => {
+  const openEdit = (p: ProfileLocal) => {
     setEditingProfile(p);
     setEditForm({
       nome: p.nome,
@@ -283,7 +298,7 @@ export default function Colaboradores() {
     }
   };
 
-  const openResetPassword = (p: Profile) => {
+  const openResetPassword = (p: ProfileLocal) => {
     setResetPasswordDialog({ profile: p, senha: "", confirmar: "" });
   };
 
