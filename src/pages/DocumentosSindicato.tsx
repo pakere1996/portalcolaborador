@@ -61,6 +61,7 @@ export default function DocumentosSindicato() {
   const [cargoNome, setCargoNome] = useState<string>("");
   const [cpfColaborador, setCpfColaborador] = useState<string>("");
   const [cnpjUnidade, setCnpjUnidade] = useState<string>("");
+  const [nomeColaborador, setNomeColaborador] = useState<string>("");
 
   useEffect(() => {
     if (!user) {
@@ -104,6 +105,7 @@ export default function DocumentosSindicato() {
       }
 
       setCpfColaborador(profile.cpf || "");
+      setNomeColaborador(profile.nome || "");
 
       // 2. Buscar unidade e cargo
       const [unidadeRes, cargoRes] = await Promise.all([
@@ -219,7 +221,7 @@ export default function DocumentosSindicato() {
     }
   };
 
-  // 🔥 Função para abrir WhatsApp com mensagem personalizada
+  // 🔥 Função para abrir WhatsApp com mensagem personalizada (corrigida)
   const abrirWhatsApp = (sindicato: Sindicato) => {
     const numero = onlyNumbers(sindicato.contato_whatsapp || "");
     if (!numero) {
@@ -227,11 +229,13 @@ export default function DocumentosSindicato() {
       return;
     }
 
-    const nomeUsuario = user?.email?.split('@')[0] || "Colaborador"; // fallback
-    // 🔥 Pegar CPF do colaborador (já armazenado no estado)
-    const cpf = cpfColaborador ? formatCPF(cpfColaborador) : "não informado";
+    // 🔥 Usa o nome real do colaborador
+    const nomeUsuario = nomeColaborador || "Colaborador";
+    // 🔥 CPF formatado
+    const cpfFormatado = cpfColaborador ? formatCPF(cpfColaborador) : "não informado";
+    // 🔥 CNPJ formatado
+    const cnpjFormatado = cnpjUnidade ? formatCNPJ(cnpjUnidade) : "não informado";
     const empresa = unidadeNome || "empresa";
-    const cnpj = cnpjUnidade ? formatCNPJ(cnpjUnidade) : "não informado";
 
     const mensagem = `Olá, me chamo ${nomeUsuario}, CPF nº ${cpfFormatado}, trabalho na empresa ${empresa}, CNPJ nº ${cnpjFormatado}. Gostaria de tirar dúvidas com você.`;
     const link = `https://wa.me/55${numero}?text=${encodeURIComponent(mensagem)}`;
