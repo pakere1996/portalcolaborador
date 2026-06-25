@@ -288,6 +288,7 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
             if (negociacao && negociacao.length > 0) {
               const ultima = negociacao[0];
               const dataBase = new Date(ultima.ano, ultima.mes - 1, 1);
+              
               // Vencimento: último dia do mês da data base + 1 ano
               const dataVencimento = new Date(dataBase.getFullYear() + 1, dataBase.getMonth(), 0);
               const dataInicioAtraso = new Date(dataVencimento);
