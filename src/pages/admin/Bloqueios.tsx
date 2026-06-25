@@ -21,26 +21,16 @@ import { Tables } from "@/integrations/supabase/types";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
 import { cn } from "@/lib/utils";
 
-// 🔥 EXTENSÕES DE TIPO para as novas colunas (enquanto os tipos do Supabase não são regenerados)
-interface BloqueioRegraExtended extends Tables<'bloqueio_regras'> {
-  aplicacao?: string;
-  ano_referencia?: number | null;
-  meses?: number[] | null;
-  dias?: number[] | null;
-}
-
-interface DataBloqueadaExtended extends Tables<'datas_bloqueadas'> {
-  unidade_id?: string | null;
-  unidade?: { id: string; nome: string };
-}
-
+// 🔥 Usando os tipos gerados pelo Supabase
+type BloqueioRegra = Tables<"bloqueio_regras">;
+type DataBloqueada = Tables<"datas_bloqueadas">;
 type Unidade = { id: string; nome: string };
 
-interface RegraComUnidades extends BloqueioRegraExtended {
+interface RegraComUnidades extends BloqueioRegra {
   unidades?: Unidade[];
 }
 
-interface DataBloqueadaComUnidade extends DataBloqueadaExtended {
+interface DataBloqueadaComUnidade extends DataBloqueada {
   unidade?: Unidade;
 }
 
@@ -133,11 +123,10 @@ export default function BloqueiosPage() {
     }
   };
 
-  // --- Inicialização: carregar e depois reprocessar se necessário ---
+  // --- Inicialização: carregar e reprocessar se necessário ---
   useEffect(() => {
     const inicializar = async () => {
       await load();
-      // Verificar se há datas futuras. Se não houver, gerar automaticamente.
       const hoje = new Date();
       hoje.setHours(0, 0, 0, 0);
       const temFuturas = datasBloqueadas.some(d => parseYMD(d.data) >= hoje);
@@ -149,7 +138,7 @@ export default function BloqueiosPage() {
     inicializar();
   }, []);
 
-  // --- Filtro de datas ---
+  // --- Filtros ---
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -169,7 +158,7 @@ export default function BloqueiosPage() {
   });
 
   // --- Estado do formulário de regras ---
-  const [regraForm, setRegraForm] = useState<Partial<BloqueioRegraExtended>>({
+  const [regraForm, setRegraForm] = useState<Partial<BloqueioRegra>>({
     descricao: "",
     tipo: "fixa_anual",
     aplicacao: "anual",
@@ -189,7 +178,7 @@ export default function BloqueiosPage() {
   const [manualUnidadeId, setManualUnidadeId] = useState<string>("");
   const [editDataId, setEditDataId] = useState<string | null>(null);
 
-  // Helpers
+  // Helpers para arrays
   const toggleArrayItem = (array: number[], item: number) =>
     array.includes(item) ? array.filter(i => i !== item) : [...array, item];
 
@@ -287,7 +276,7 @@ export default function BloqueiosPage() {
         dias: regraForm.tipo === "fixa_anual" ? regraForm.dias : null,
         ordinal: regraForm.tipo === "dinamica" ? regraForm.ordinal : null,
         dia_semana: regraForm.tipo === "dinamica" ? regraForm.dia_semana : null,
-        mes: regraForm.meses.length === 1 ? regraForm.meses[0] : null,
+        mes: regraForm.meses?.length === 1 ? regraForm.meses[0] : null,
         dia: regraForm.tipo === "fixa_anual" && regraForm.dias && regraForm.dias.length === 1 ? regraForm.dias[0] : null,
         ativo: regraForm.ativo,
         updated_at: new Date().toISOString(),
@@ -433,12 +422,12 @@ export default function BloqueiosPage() {
     return new Date(2000, month - 1, 1).toLocaleString('pt-BR', { month: 'long' });
   };
 
-  const formatMeses = (meses: number[] | null) => {
+  const formatMeses = (meses: number[] | null | undefined) => {
     if (!meses || meses.length === 0) return "Todos";
     return meses.map(m => getMonthName(m)).join(", ");
   };
 
-  const formatDias = (dias: number[] | null) => {
+  const formatDias = (dias: number[] | null | undefined) => {
     if (!dias || dias.length === 0) return "Todos";
     return dias.join(", ");
   };
