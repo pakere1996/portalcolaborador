@@ -7,8 +7,8 @@ import { formatCPF, onlyDigits } from "@/lib/cpf";
 import { formatPhone } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 
-type Unidade = Tables<'unidades'> & { possui_relogio_ponto?: boolean };
-type Cargo = Tables<'cargos'>;
+type Unidade = Tables<"unidades">;
+type Cargo = Tables<"cargos">;
 
 interface ColaboradorFormProps {
   form: any;
@@ -29,14 +29,6 @@ const dayOfWeekMap: Record<number, string> = {
   6: "Sábado",
 };
 
-const getCargoOptions = (cargos: Cargo[]): string[] => {
-  const nomes = cargos.map(c => c.nome.trim().toUpperCase());
-  if (!nomes.includes("SÓCIO")) {
-    nomes.push("SÓCIO");
-  }
-  return nomes.sort();
-};
-
 export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit = false }: ColaboradorFormProps) {
 
   const handleFormChange = (id: string, value: string | boolean) => {
@@ -55,12 +47,22 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
     });
   };
 
-  const cargoOptions = getCargoOptions(cargos);
+  // 🔥 Lista de cargos: usar nomes dos cargos existentes
+  const cargoOptions = cargos.map(c => c.nome.trim().toUpperCase()).sort();
 
-  // Verifica se a unidade selecionada tem relógio
   const unidadeSelecionada = unidades.find(u => u.id === form.unidadeId);
   const unidadeTemRelogio = unidadeSelecionada?.possui_relogio_ponto || false;
   const isSwitchDisabled = busy || !unidadeTemRelogio || !form.unidadeId || form.unidadeId === 'none';
+
+  // 🔥 Atualizar optante_adiantamento quando a unidade mudar
+  React.useEffect(() => {
+    if (form.unidadeId && form.unidadeId !== "none") {
+      const unidade = unidades.find((u) => u.id === form.unidadeId);
+      if (unidade?.tem_adiantamento && form.optante_adiantamento === undefined) {
+        setForm((prev: any) => ({ ...prev, optante_adiantamento: true }));
+      }
+    }
+  }, [form.unidadeId, unidades, setForm]);
 
   return (
     <div className="space-y-4">
@@ -271,23 +273,41 @@ export function ColaboradorForm({ form, setForm, unidades, cargos, busy, isEdit 
         </div>
       </div>
 
-      <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
-        <Switch 
-          id="possui_folha_ponto" 
-          checked={form.possui_folha_ponto || false} 
-          onCheckedChange={(checked) => handleFormChange('possui_folha_ponto', checked)} 
-          disabled={isSwitchDisabled}
-        />
-        <Label htmlFor="possui_folha_ponto" className={isSwitchDisabled ? "text-muted-foreground" : ""}>
-          Possui acesso a Folha de Ponto
-          {isSwitchDisabled && !busy && (
-            <span className="ml-1 text-xs text-muted-foreground">
-              {!form.unidadeId || form.unidadeId === 'none' 
-                ? "(selecione uma unidade)" 
-                : "(unidade sem relógio)"}
+      <div className="flex flex-col space-y-2">
+        <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
+          <Switch 
+            id="possui_folha_ponto" 
+            checked={form.possui_folha_ponto || false} 
+            onCheckedChange={(checked) => handleFormChange('possui_folha_ponto', checked)} 
+            disabled={isSwitchDisabled}
+          />
+          <Label htmlFor="possui_folha_ponto" className={isSwitchDisabled ? "text-muted-foreground" : ""}>
+            Possui acesso a Folha de Ponto
+            {isSwitchDisabled && !busy && (
+              <span className="ml-1 text-xs text-muted-foreground">
+                {!form.unidadeId || form.unidadeId === 'none' 
+                  ? "(selecione uma unidade)" 
+                  : "(unidade sem relógio)"}
+              </span>
+            )}
+          </Label>
+        </div>
+
+        {/* 🔥 Adicionar Optante por Adiantamento */}
+        <div className="flex items-center space-x-2 rounded-xl border border-border p-3">
+          <Switch 
+            id="optante_adiantamento" 
+            checked={form.optante_adiantamento || false} 
+            onCheckedChange={(checked) => handleFormChange('optante_adiantamento', checked)} 
+            disabled={busy}
+          />
+          <Label htmlFor="optante_adiantamento">Opta por Adiantamento Salarial</Label>
+          {unidadeSelecionada?.tem_adiantamento && unidadeSelecionada?.dia_adiantamento && (
+            <span className="text-xs text-muted-foreground ml-auto">
+              Dia do adiantamento: {unidadeSelecionada.dia_adiantamento}
             </span>
           )}
-        </Label>
+        </div>
       </div>
 
       {isEdit && (
