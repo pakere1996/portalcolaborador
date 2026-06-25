@@ -31,28 +31,6 @@ interface Negociacao {
   sindicato_laboral?: Sindicato;
 }
 
-// --- Funções de formatação ---
-const apenasNumeros = (valor: string) => valor.replace(/\D/g, "");
-
-const formatarCNPJ = (valor: string | null): string => {
-  if (!valor) return "";
-  const numeros = apenasNumeros(valor);
-  if (numeros.length <= 2) return numeros;
-  if (numeros.length <= 5) return numeros.replace(/^(\d{2})(\d{0,3})/, "$1.$2");
-  if (numeros.length <= 8) return numeros.replace(/^(\d{2})(\d{3})(\d{0,3})/, "$1.$2.$3");
-  if (numeros.length <= 12) return numeros.replace(/^(\d{2})(\d{3})(\d{3})(\d{0,4})/, "$1.$2.$3/$4");
-  return numeros.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, "$1.$2.$3/$4-$5");
-};
-
-const formatarWhatsApp = (valor: string | null): string => {
-  if (!valor) return "";
-  const numeros = apenasNumeros(valor);
-  if (numeros.length <= 2) return numeros;
-  if (numeros.length <= 6) return numeros.replace(/^(\d{2})(\d{0,4})/, "($1) $2");
-  if (numeros.length <= 10) return numeros.replace(/^(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3");
-  return numeros.replace(/^(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3");
-};
-
 export default function DocumentosSindicato() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -69,9 +47,33 @@ export default function DocumentosSindicato() {
     carregarDados();
   }, [user]);
 
-  // Gerar link do WhatsApp
+  // Utilitários de formatação
+  const formatarCNPJ = (cnpj: string | null): string => {
+    if (!cnpj) return "";
+    const numeros = cnpj.replace(/\D/g, "");
+    if (numeros.length !== 14) return cnpj;
+    return numeros.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+  };
+
+  const formatarWhatsAppExibicao = (whatsapp: string | null): string => {
+    if (!whatsapp) return "";
+    const numeros = whatsapp.replace(/\D/g, "");
+    if (numeros.length === 11) {
+      return numeros.replace(/^(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
+    }
+    if (numeros.length === 10) {
+      return numeros.replace(/^(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
+    }
+    return whatsapp;
+  };
+
+  const extrairNumerosWhatsApp = (whatsapp: string | null): string => {
+    if (!whatsapp) return "";
+    return whatsapp.replace(/\D/g, "");
+  };
+
   const linkWhatsApp = (whatsapp: string | null): string => {
-    const numeros = apenasNumeros(whatsapp || "");
+    const numeros = extrairNumerosWhatsApp(whatsapp);
     if (!numeros) return "#";
     return `https://wa.me/55${numeros}`;
   };
@@ -85,7 +87,6 @@ export default function DocumentosSindicato() {
 
     setLoading(true);
     try {
-      // 1. Buscar perfil do colaborador
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("unidade_id, cargo, nome")
@@ -109,7 +110,6 @@ export default function DocumentosSindicato() {
         return;
       }
 
-      // 2. Buscar unidade
       const { data: unidadeRes } = await supabase
         .from("unidades")
         .select("nome")
@@ -118,7 +118,7 @@ export default function DocumentosSindicato() {
 
       if (unidadeRes) setUnidadeNome(unidadeRes.nome);
 
-      // 3. Descobrir o ID do cargo (pode ser nome ou UUID)
+      // Buscar cargo ID
       let cargoId: string | null = null;
       let cargoNomeEncontrado = "";
 
@@ -154,7 +154,6 @@ export default function DocumentosSindicato() {
       }
       setCargoNome(cargoNomeEncontrado || profile.cargo);
 
-      // 4. Buscar vínculo do cargo com sindicato laboral na unidade
       const { data: unidadeCargo, error: ucError } = await supabase
         .from("unidade_cargos")
         .select("sindicato_laboral_id")
@@ -173,7 +172,6 @@ export default function DocumentosSindicato() {
         return;
       }
 
-      // 5. Buscar dados do sindicato laboral
       const { data: sindLaboral, error: slError } = await supabase
         .from("sindicatos")
         .select("*")
@@ -192,7 +190,7 @@ export default function DocumentosSindicato() {
       }
       setSindicatoLaboral(sindLaboral);
 
-      // 6. Buscar negociação mais recente
+      // Buscar negociação mais recente
       const { data: negociacaoData, error: negError } = await supabase
         .from("negociacoes")
         .select(`
@@ -215,7 +213,7 @@ export default function DocumentosSindicato() {
       if (negociacaoData) {
         setNegociacao(negociacaoData);
       } else {
-        // Fallback: negociação sem vínculo de unidade
+        // Fallback sem unidade
         const { data: negFallback, error: fallbackError } = await supabase
           .from("negociacoes")
           .select(`
@@ -358,7 +356,7 @@ export default function DocumentosSindicato() {
                     onClick={() => window.open(linkWhatsApp(sindicatoLaboral.contato_whatsapp), "_blank")}
                   >
                     <MessageCircle className="size-4 mr-2" />
-                    {formatarWhatsApp(sindicatoLaboral.contato_whatsapp)}
+                    {formatarWhatsAppExibicao(sindicatoLaboral.contato_whatsapp)}
                   </Button>
                 </div>
               </div>
@@ -370,7 +368,7 @@ export default function DocumentosSindicato() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-xl flex items-center gap-2">
-            <FileText className="size-5 text-primary" /> Documento Coletivo
+            <FileText className="size-5 text-primary" /> Documento Coletivo Vigente
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -403,10 +401,8 @@ export default function DocumentosSindicato() {
                 </div>
               </div>
 
-              {negociacao.storage_path && negociacao.nome_pdf && (
+              {negociacao.storage_path && (
                 <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-border">
-                  <File className="size-4 text-muted-foreground" />
-                  <span className="text-sm flex-1 font-medium">{negociacao.nome_pdf}</span>
                   <Button
                     variant="outline"
                     size="sm"
@@ -418,7 +414,7 @@ export default function DocumentosSindicato() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => downloadArquivo(negociacao.storage_path!, negociacao.nome_pdf!)}
+                    onClick={() => downloadArquivo(negociacao.storage_path!, negociacao.nome_pdf || "documento.pdf")}
                     className="rounded-full"
                   >
                     <Download className="size-4 mr-1" /> Baixar
