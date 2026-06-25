@@ -8,9 +8,9 @@ export interface Pendencia {
   tipo: "solicitacao" | "contracheque" | "adiantamento" | "folha_ponto" | "negociacao";
   titulo: string;
   descricao: string;
-  data_referencia: string; // data de criação ou vencimento
-  data_vencimento?: string; // data de vencimento (quando aplicável)
-  dias_atraso: number; // calculado no contexto
+  data_referencia: string;
+  data_vencimento?: string;
+  dias_atraso: number;
   rota_resolver: string;
   unidade_id?: string | null;
   colaborador_id?: string | null;
@@ -84,9 +84,8 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
           const colaboradorNome = (s as any).profiles?.nome || "Colaborador";
           const dataRef = s.created_at || new Date().toISOString();
           const dataVencimento = new Date(dataRef);
-          dataVencimento.setDate(dataVencimento.getDate() + 3); // 3 dias para resposta
+          dataVencimento.setDate(dataVencimento.getDate() + 3);
 
-          // Calcular dias de atraso a partir da data de vencimento
           const diffDias = Math.ceil((hoje.getTime() - dataVencimento.getTime()) / (1000 * 60 * 60 * 24));
           const diasAtraso = diffDias > 0 ? diffDias : 0;
 
@@ -122,7 +121,7 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
       const anoAnterior = mesVigente === 1 ? anoVigente - 1 : anoVigente;
 
       for (const unidade of unidades) {
-        // Contracheque (a partir do dia 10, referente ao mês anterior)
+        // Contracheque
         if (diaHoje >= 10) {
           const chave = `contracheque-${unidade.id}-${mesAnterior}-${anoAnterior}`;
           if (!chaveAdiados.has(chave)) {
@@ -155,7 +154,7 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
           }
         }
 
-        // Adiantamento (a partir do dia D+5, referente ao mês vigente)
+        // Adiantamento
         if (unidade.tem_adiantamento && unidade.dia_adiantamento) {
           const diaAdiantamento = unidade.dia_adiantamento;
           const diaLimite = diaAdiantamento + 5;
@@ -192,7 +191,7 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
           }
         }
 
-        // Folha de ponto (a partir do dia 10, referente ao mês anterior, apenas se unidade tem relógio)
+        // Folha de ponto
         if (unidade.possui_relogio_ponto && diaHoje >= 10) {
           const chave = `folha_ponto-${unidade.id}-${mesAnterior}-${anoAnterior}`;
           if (!chaveAdiados.has(chave)) {
@@ -226,7 +225,7 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
         }
       }
 
-      // 4. Negociações coletivas (por unidade) - CORRIGIDO
+      // 4. Negociações coletivas (por unidade + sindicato laboral) - CORRIGIDO
       try {
         const { data: unidadesNeg, error: unidNegError } = await supabase
           .from("unidades")
@@ -236,41 +235,73 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
         if (unidNegError) throw unidNegError;
 
         for (const unidade of unidadesNeg) {
-          // Buscar a última negociação para esta unidade
-          const { data: negociacao, error: negError } = await supabase
-            .from("negociacoes")
-            .select("ano, mes, created_at")
+          // Buscar sindicatos laborais vinculados a esta unidade
+          const { data: sindicatosVinculados, error: vincError } = await supabase
+            .from("unidade_cargos")
+            .select("sindicato_laboral_id")
             .eq("unidade_id", unidade.id)
-            .order("ano", { ascending: false })
-            .order("mes", { ascending: false })
-            .limit(1);
+            .not("sindicato_laboral_id", "is", null);
 
-          if (negError) throw negError;
-
-          let dataBase: Date | null = null;
-          if (negociacao && negociacao.length > 0) {
-            const ultima = negociacao[0];
-            dataBase = new Date(ultima.ano, ultima.mes - 1, 1);
+          if (vincError) {
+            console.warn(`Erro ao buscar sindicatos para unidade ${unidade.id}:`, vincError);
+            continue;
           }
 
-          if (dataBase) {
-            // Data de vencimento: último dia do mês da data base + 1 ano
-            const dataVencimento = new Date(dataBase.getFullYear() + 1, dataBase.getMonth(), 0);
-            // Início do atraso: dia seguinte ao vencimento
-            const dataInicioAtraso = new Date(dataVencimento);
-            dataInicioAtraso.setDate(dataInicioAtraso.getDate() + 1);
+          const sindicatoIds = [...new Set(sindicatosVinculados?.map(v => v.sindicato_laboral_id).filter(Boolean))];
 
-            const diffDias = Math.ceil((hoje.getTime() - dataInicioAtraso.getTime()) / (1000 * 60 * 60 * 24));
-            const diasAtraso = diffDias > 0 ? diffDias : 0;
+          if (sindicatoIds.length === 0) continue;
 
-            if (diasAtraso > 0) {
-              const chave = `negociacao-${unidade.id}`;
-              if (!chaveAdiados.has(chave)) {
+          // Buscar nomes dos sindicatos
+          const { data: sindicatos, error: sindError } = await supabase
+            .from("sindicatos")
+            .select("id, nome")
+            .in("id", sindicatoIds);
+
+          if (sindError) {
+            console.warn("Erro ao buscar nomes dos sindicatos:", sindError);
+            continue;
+          }
+
+          const sindicatoMap = new Map(sindicatos?.map(s => [s.id, s.nome]));
+
+          for (const sindicatoId of sindicatoIds) {
+            const chave = `negociacao-${unidade.id}-${sindicatoId}`;
+            if (chaveAdiados.has(chave)) continue;
+
+            // Buscar a última negociação para esta unidade e sindicato
+            const { data: negociacao, error: negError } = await supabase
+              .from("negociacoes")
+              .select("ano, mes, created_at")
+              .eq("unidade_id", unidade.id)
+              .eq("sindicato_laboral_id", sindicatoId)
+              .order("ano", { ascending: false })
+              .order("mes", { ascending: false })
+              .limit(1);
+
+            if (negError) {
+              console.warn(`Erro ao buscar negociação para unidade ${unidade.id} e sindicato ${sindicatoId}:`, negError);
+              continue;
+            }
+
+            const nomeSindicato = sindicatoMap.get(sindicatoId) || "Sindicato";
+
+            if (negociacao && negociacao.length > 0) {
+              const ultima = negociacao[0];
+              const dataBase = new Date(ultima.ano, ultima.mes - 1, 1);
+              // Vencimento: último dia do mês da data base + 1 ano
+              const dataVencimento = new Date(dataBase.getFullYear() + 1, dataBase.getMonth(), 0);
+              const dataInicioAtraso = new Date(dataVencimento);
+              dataInicioAtraso.setDate(dataInicioAtraso.getDate() + 1);
+
+              const diffDias = Math.ceil((hoje.getTime() - dataInicioAtraso.getTime()) / (1000 * 60 * 60 * 24));
+              const diasAtraso = diffDias > 0 ? diffDias : 0;
+
+              if (diasAtraso > 0) {
                 pendenciasList.push({
                   id: chave,
                   tipo: "negociacao",
-                  titulo: "Negociação coletiva pendente",
-                  descricao: `${unidade.nome} - Última: ${String(dataBase.getMonth() + 1).padStart(2, "0")}/${dataBase.getFullYear()}`,
+                  titulo: `Negociação coletiva pendente - ${nomeSindicato}`,
+                  descricao: `${unidade.nome} - Última: ${String(ultima.mes).padStart(2, "0")}/${ultima.ano}`,
                   data_referencia: dataBase.toISOString().split("T")[0],
                   data_vencimento: dataVencimento.toISOString().split("T")[0],
                   dias_atraso: diasAtraso,
@@ -279,15 +310,12 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
                   identificador_unico: chave,
                 });
               }
-            }
-          } else {
-            // Se não houver negociação, criar pendência com atraso a partir da data atual
-            const chave = `negociacao-${unidade.id}-sem`;
-            if (!chaveAdiados.has(chave)) {
+            } else {
+              // Nenhuma negociação cadastrada
               pendenciasList.push({
                 id: chave,
                 tipo: "negociacao",
-                titulo: "Negociação coletiva pendente",
+                titulo: `Negociação coletiva pendente - ${nomeSindicato}`,
                 descricao: `${unidade.nome} - Nenhuma negociação cadastrada`,
                 data_referencia: hoje.toISOString().split("T")[0],
                 data_vencimento: hoje.toISOString().split("T")[0],
