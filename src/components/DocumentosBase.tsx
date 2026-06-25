@@ -471,38 +471,42 @@ export function DocumentosBase({
                         </Button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 pt-2 border-t border-border">
+                      <div className="flex items-center gap-1 pt-2 border-t border-border justify-start flex-wrap">
                         <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 text-blue-600 border-blue-200 hover:bg-blue-50"
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                          title="Visualizar"
                           onClick={(e) => { e.stopPropagation(); handlePreview(doc); }}
                         >
-                          <Eye className="size-4 mr-1" /> Visualizar
+                          <Eye className="size-4" />
                         </Button>
                         <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1"
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          title="Baixar"
                           onClick={(e) => { e.stopPropagation(); handleDownload(doc); }}
                         >
-                          <Download className="size-4 mr-1" /> Baixar
+                          <Download className="size-4" />
                         </Button>
                         <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1"
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          title="Editar competência"
                           onClick={(e) => { e.stopPropagation(); startEditing(doc); }}
                         >
-                          <Pencil className="size-4 mr-1" /> Editar
+                          <Pencil className="size-4" />
                         </Button>
                         <Button
-                          variant="destructive"
-                          size="sm"
-                          className="flex-1"
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          title="Excluir"
                           onClick={(e) => { e.stopPropagation(); handleExcluir(doc); }}
                         >
-                          <Trash2 className="size-4 mr-1" />
+                          <Trash2 className="size-4" />
                         </Button>
                       </div>
                     )}
