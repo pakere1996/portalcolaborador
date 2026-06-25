@@ -48,7 +48,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const path = location.pathname;
   const [open, setOpen] = useState(false);
 
-  // Estados de expansão dos menus (admin)
   const [folgasOpen, setFolgasOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
   const [cadastroOpen, setCadastroOpen] = useState(false);
@@ -62,9 +61,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         cadastro: setCadastroOpen,
         comunicacao: setComunicacaoOpen,
       };
-      // Fecha todos
       Object.values(setters).forEach((setter) => setter(false));
-      // Abre o selecionado se estava fechado
       const currentState = {
         folgas: folgasOpen,
         docs: docsOpen,
@@ -85,12 +82,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isAdmin = getIsAdmin();
   const homePath = isAdmin ? "/admin/home" : "/home";
 
-  // Fechar menu mobile ao navegar
   useEffect(() => {
     setOpen(false);
   }, [path]);
 
-  // Abrir submenus automaticamente com base na rota atual
   useEffect(() => {
     const shouldOpen = {
       cadastro:
@@ -121,22 +116,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setComunicacaoOpen(shouldOpen.comunicacao);
   }, [path]);
 
-  // Navegação do colaborador
   const employeeFolgaNav: NavItem[] = [
     { to: "/calendario", label: "Calendário", icon: Calendar },
     { to: "/trocas", label: "Trocas", icon: ArrowLeftRight },
     { to: "/historico", label: "Histórico", icon: ClipboardList },
   ];
 
-  // 🔹 ADICIONADO: item "Sindicato" no menu de documentos do colaborador
   const employeeDocsNav: NavItem[] = [
     { to: "/documentos", label: "Meus Documentos", icon: FileText, end: true },
     { to: "/documentos/atestados", label: "Atestados", icon: FileWarning },
     { to: "/documentos/disciplinar", label: "Registros Disciplinares", icon: ShieldAlert },
-    { to: "/documentos/sindicato", label: "Sindicato", icon: Scale }, // <-- NOVO
+    { to: "/documentos/sindicato", label: "Sindicato", icon: Scale },
   ];
 
-  // ADMIN: submenu Cadastro
   const adminCadastroNav: NavItem[] = [
     { to: "/admin/colaboradores", label: "Colaboradores", icon: Users },
     { to: "/admin/cargos", label: "Cargos", icon: Briefcase },
@@ -144,7 +136,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/cadastro/sindicatos", label: "Sindicatos", icon: Scale },
   ];
 
-  // ADMIN: submenu Documentos
   const adminDocsNav: NavItem[] = [
     { to: "/admin/documentos/contracheque", label: "Contracheques", icon: FileText, end: true },
     { to: "/admin/documentos/adiantamento", label: "Adiantamentos", icon: Coins },
@@ -155,7 +146,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/documentos/historico", label: "Histórico Completo", icon: ListChecks },
   ];
 
-  // ADMIN: demais submenus
   const adminFolgaNav: NavItem[] = [
     { to: "/admin/calendario", label: "Calendário Geral", icon: Calendar },
     { to: "/admin/solicitacoes", label: "Solicitações", icon: ClipboardList },
@@ -247,12 +237,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
+      {/* 🔥 CORREÇÃO MOBILE: aside posicionado abaixo do header */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-64 bg-card/40 backdrop-blur border-r border-border transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0",
-          open ? "translate-x-0" : "-translate-x-full"
+          "fixed left-0 z-40 w-64 bg-card/40 backdrop-blur border-r border-border transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0",
+          // Mobile: top = altura do header (56px = py-3 + altura do conteúdo)
+          open ? "translate-x-0" : "-translate-x-full",
+          // Desktop: top = 0 (padrão)
+          "md:top-0 top-[56px]",
+          // Altura: restante da tela
+          "h-[calc(100vh-56px)] md:h-screen"
         )}
       >
+        {/* Logo apenas desktop */}
         <div className="hidden md:flex items-center gap-3 px-6 py-5 border-b border-border">
           <img src={logo} alt="Pakerê" className="size-10 rounded-lg object-cover" />
           <div>
@@ -261,7 +258,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-180px)]">
+        <nav className="p-3 space-y-1 overflow-y-auto h-full">
           {/* INÍCIO */}
           <NavLink
             to={homePath}
