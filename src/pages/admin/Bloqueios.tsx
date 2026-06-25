@@ -21,15 +21,26 @@ import { Tables } from "@/integrations/supabase/types";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
 import { cn } from "@/lib/utils";
 
-type BloqueioRegra = Tables<'bloqueio_regras'>;
-type DataBloqueada = Tables<'datas_bloqueadas'>;
+// 🔥 EXTENSÕES DE TIPO para as novas colunas (enquanto os tipos do Supabase não são regenerados)
+interface BloqueioRegraExtended extends Tables<'bloqueio_regras'> {
+  aplicacao?: string;
+  ano_referencia?: number | null;
+  meses?: number[] | null;
+  dias?: number[] | null;
+}
+
+interface DataBloqueadaExtended extends Tables<'datas_bloqueadas'> {
+  unidade_id?: string | null;
+  unidade?: { id: string; nome: string };
+}
+
 type Unidade = { id: string; nome: string };
 
-interface RegraComUnidades extends BloqueioRegra {
+interface RegraComUnidades extends BloqueioRegraExtended {
   unidades?: Unidade[];
 }
 
-interface DataBloqueadaComUnidade extends DataBloqueada {
+interface DataBloqueadaComUnidade extends DataBloqueadaExtended {
   unidade?: Unidade;
 }
 
@@ -63,9 +74,11 @@ export default function BloqueiosPage() {
       if (error) throw error;
       console.log(`${data} datas bloqueadas geradas`);
       toast.success(`${data} datas bloqueadas geradas com sucesso`);
+      return data;
     } catch (e) {
       console.error("Erro ao reprocessar bloqueios:", e);
       toast.error("Erro ao gerar bloqueios automáticos", { description: (e as Error).message });
+      return 0;
     } finally {
       setReprocessando(false);
     }
@@ -156,7 +169,7 @@ export default function BloqueiosPage() {
   });
 
   // --- Estado do formulário de regras ---
-  const [regraForm, setRegraForm] = useState<Partial<BloqueioRegra>>({
+  const [regraForm, setRegraForm] = useState<Partial<BloqueioRegraExtended>>({
     descricao: "",
     tipo: "fixa_anual",
     aplicacao: "anual",
