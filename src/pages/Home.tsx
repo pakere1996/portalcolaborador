@@ -10,6 +10,7 @@ import {
   FileText,
   FileWarning,
   Users,
+  Scale,
 } from "lucide-react";
 
 const employeeModules = [
@@ -60,6 +61,21 @@ const employeeModules = [
     description: "Envie e acompanhe seus atestados médicos.",
     icon: FileWarning,
     to: "/documentos/atestados",
+    category: "Documentos",
+  },
+  {
+    title: "Registros Disciplinares",
+    description: "Consulte seus registros disciplinares.",
+    icon: FileWarning,
+    to: "/documentos/disciplinar",
+    category: "Documentos",
+  },
+  // 🔥 NOVO CARD: Sindicato
+  {
+    title: "Sindicato",
+    description: "Informações sindicais e documentos coletivos.",
+    icon: Scale,
+    to: "/documentos/sindicato",
     category: "Documentos",
   },
 ];
