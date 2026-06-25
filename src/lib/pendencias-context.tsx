@@ -227,81 +227,85 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
       }
 
       // 4. Negociações coletivas (por unidade) - CORRIGIDO
-      try {
-        const { data: unidadesNeg, error: unidNegError } = await supabase
-          .from("unidades")
-          .select("id, nome")
-          .eq("ativo", true);
+try {
+  const { data: unidadesNeg, error: unidNegError } = await supabase
+    .from("unidades")
+    .select("id, nome")
+    .eq("ativo", true);
 
-        if (unidNegError) throw unidNegError;
+  if (unidNegError) throw unidNegError;
 
-        for (const unidade of unidadesNeg) {
-          // Buscar a última negociação para esta unidade
-          const { data: negociacao, error: negError } = await supabase
-            .from("negociacoes")
-            .select("ano, mes, created_at")
-            .eq("unidade_id", unidade.id)
-            .order("ano", { ascending: false })
-            .order("mes", { ascending: false })
-            .limit(1);
+  for (const unidade of unidadesNeg) {
+    // Buscar a última negociação para esta unidade
+    const { data: negociacao, error: negError } = await supabase
+      .from("negociacoes")
+      .select("ano, mes, created_at")
+      .eq("unidade_id", unidade.id)
+      .order("ano", { ascending: false })
+      .order("mes", { ascending: false })
+      .limit(1);
 
-          if (negError) throw negError;
+    if (negError) {
+      console.warn(`Erro ao buscar negociação para unidade ${unidade.id}:`, negError);
+      continue;
+    }
 
-          let dataBase: Date | null = null;
-          if (negociacao && negociacao.length > 0) {
-            const ultima = negociacao[0];
-            dataBase = new Date(ultima.ano, ultima.mes - 1, 1);
-          }
+    let dataBase: Date | null = null;
+    if (negociacao && negociacao.length > 0) {
+      const ultima = negociacao[0];
+      dataBase = new Date(ultima.ano, ultima.mes - 1, 1);
+    }
 
-          if (dataBase) {
-            // Data de vencimento: último dia do mês da data base + 1 ano
-            const dataVencimento = new Date(dataBase.getFullYear() + 1, dataBase.getMonth(), 0);
-            // Início do atraso: dia seguinte ao vencimento
-            const dataInicioAtraso = new Date(dataVencimento);
-            dataInicioAtraso.setDate(dataInicioAtraso.getDate() + 1);
+    if (dataBase) {
+      // 🔥 Data de vencimento: último dia do mês da data base + 1 ano (ex: 31/05/2026)
+      const dataVencimento = new Date(dataBase.getFullYear() + 1, dataBase.getMonth(), 0);
+      // 🔥 Início do atraso: dia seguinte ao vencimento (ex: 01/06/2026)
+      const dataInicioAtraso = new Date(dataVencimento);
+      dataInicioAtraso.setDate(dataInicioAtraso.getDate() + 1);
 
-            const diffDias = Math.ceil((hoje.getTime() - dataInicioAtraso.getTime()) / (1000 * 60 * 60 * 24));
-            const diasAtraso = diffDias > 0 ? diffDias : 0;
+      // 🔥 Calcular dias de atraso a partir do início do atraso
+      const diffDias = Math.ceil((hoje.getTime() - dataInicioAtraso.getTime()) / (1000 * 60 * 60 * 24));
+      const diasAtraso = diffDias > 0 ? diffDias : 0;
 
-            if (diasAtraso > 0) {
-              const chave = `negociacao-${unidade.id}`;
-              if (!chaveAdiados.has(chave)) {
-                pendenciasList.push({
-                  id: chave,
-                  tipo: "negociacao",
-                  titulo: "Negociação coletiva pendente",
-                  descricao: `${unidade.nome} - Última: ${String(dataBase.getMonth() + 1).padStart(2, "0")}/${dataBase.getFullYear()}`,
-                  data_referencia: dataBase.toISOString().split("T")[0],
-                  data_vencimento: dataVencimento.toISOString().split("T")[0],
-                  dias_atraso: diasAtraso,
-                  rota_resolver: "/admin/documentos/act-cct",
-                  unidade_id: unidade.id,
-                  identificador_unico: chave,
-                });
-              }
-            }
-          } else {
-            // Se não houver negociação, criar pendência com atraso a partir da data atual
-            const chave = `negociacao-${unidade.id}-sem`;
-            if (!chaveAdiados.has(chave)) {
-              pendenciasList.push({
-                id: chave,
-                tipo: "negociacao",
-                titulo: "Negociação coletiva pendente",
-                descricao: `${unidade.nome} - Nenhuma negociação cadastrada`,
-                data_referencia: hoje.toISOString().split("T")[0],
-                data_vencimento: hoje.toISOString().split("T")[0],
-                dias_atraso: 0,
-                rota_resolver: "/admin/documentos/act-cct",
-                unidade_id: unidade.id,
-                identificador_unico: chave,
-              });
-            }
-          }
+      if (diasAtraso > 0) {
+        const chave = `negociacao-${unidade.id}`;
+        if (!chaveAdiados.has(chave)) {
+          pendenciasList.push({
+            id: chave,
+            tipo: "negociacao",
+            titulo: "Negociação coletiva pendente",
+            descricao: `${unidade.nome} - Última: ${String(dataBase.getMonth() + 1).padStart(2, "0")}/${dataBase.getFullYear()}`,
+            data_referencia: dataBase.toISOString().split("T")[0],
+            data_vencimento: dataVencimento.toISOString().split("T")[0],
+            dias_atraso: diasAtraso,
+            rota_resolver: "/admin/documentos/act-cct",
+            unidade_id: unidade.id,
+            identificador_unico: chave,
+          });
         }
-      } catch (error) {
-        console.warn("Erro ao buscar negociações:", error);
       }
+    } else {
+      // Se não houver negociação, criar pendência com atraso a partir da data atual
+      const chave = `negociacao-${unidade.id}-sem`;
+      if (!chaveAdiados.has(chave)) {
+        pendenciasList.push({
+          id: chave,
+          tipo: "negociacao",
+          titulo: "Negociação coletiva pendente",
+          descricao: `${unidade.nome} - Nenhuma negociação cadastrada`,
+          data_referencia: hoje.toISOString().split("T")[0],
+          data_vencimento: hoje.toISOString().split("T")[0],
+          dias_atraso: 0,
+          rota_resolver: "/admin/documentos/act-cct",
+          unidade_id: unidade.id,
+          identificador_unico: chave,
+        });
+      }
+    }
+  }
+} catch (error) {
+  console.warn("Erro ao buscar negociações:", error);
+}
 
       // Ordenar por dias de atraso (maior primeiro)
       pendenciasList.sort((a, b) => b.dias_atraso - a.dias_atraso);
