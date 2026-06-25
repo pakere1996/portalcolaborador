@@ -20,17 +20,8 @@ import { Tables } from "@/integrations/supabase/types";
 import { adminApi } from "@/lib/admin-api";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
 
-// 🔥 Definição de tipos locais para compatibilidade com o banco
 type Profile = Tables<"profiles"> & { role?: string | null };
-// 🔥 Estende Profile para incluir campos que podem não estar no tipo gerado
-interface ProfileLocal extends Profile {
-  matricula?: string | null;
-  data_demissao?: string | null;
-  tipo_vinculo?: string | null;
-  possui_folha_ponto?: boolean | null;
-}
 
-// 🔥 Tipos para Unidade e Cargo vindos do banco
 type Unidade = Tables<"unidades">;
 type Cargo = Tables<"cargos">;
 
@@ -44,10 +35,11 @@ const blankEditForm = {
   dataDemissao: "",
   tipo_vinculo: "CLT",
   possui_folha_ponto: false,
+  optante_adiantamento: false,
 };
 
 export default function Colaboradores() {
-  const [profiles, setProfiles] = useState<ProfileLocal[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [cargos, setCargos] = useState<Cargo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,10 +51,10 @@ export default function Colaboradores() {
 
   const [openNewDialog, setOpenNewDialog] = useState(false);
   const [newForm, setNewForm] = useState(blankEditForm);
-  const [editingProfile, setEditingProfile] = useState<ProfileLocal | null>(null);
+  const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [editForm, setEditForm] = useState(blankEditForm);
-  const [confirmDelete, setConfirmDelete] = useState<ProfileLocal | null>(null);
-  const [resetPasswordDialog, setResetPasswordDialog] = useState<{ profile: ProfileLocal; senha: string; confirmar: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
+  const [resetPasswordDialog, setResetPasswordDialog] = useState<{ profile: Profile; senha: string; confirmar: string } | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -90,10 +82,6 @@ export default function Colaboradores() {
       const profilesWithRoles = (pRes.data ?? []).map(p => ({
         ...p,
         role: rolesMap.get(p.id)?.[0] ?? null,
-        matricula: (p as any).matricula ?? null,
-        data_demissao: (p as any).data_demissao ?? null,
-        tipo_vinculo: (p as any).tipo_vinculo ?? "CLT",
-        possui_folha_ponto: (p as any).possui_folha_ponto ?? false,
       }));
 
       const sortedProfiles = profilesWithRoles.sort((a, b) => {
@@ -187,6 +175,7 @@ export default function Colaboradores() {
         data_demissao: newForm.dataDemissao || null,
         tipo_vinculo: newForm.tipo_vinculo || "CLT",
         possui_folha_ponto: newForm.possui_folha_ponto !== undefined ? newForm.possui_folha_ponto : possuiFolhaPontoDefault,
+        optante_adiantamento: newForm.optante_adiantamento || false,
       }).eq("id", authUser.userId);
 
       if (profErr) throw profErr;
@@ -202,12 +191,12 @@ export default function Colaboradores() {
     }
   };
 
-  const openEdit = (p: ProfileLocal) => {
+  const openEdit = (p: Profile) => {
     setEditingProfile(p);
     setEditForm({
       nome: p.nome,
       cpf: formatCPF(p.cpf),
-      matricula: p.matricula ?? "",
+      matricula: (p as any).matricula ?? "",
       email: p.email_contato ?? "",
       whatsapp: p.whatsapp ?? "",
       cargo: p.cargo,
@@ -219,9 +208,10 @@ export default function Colaboradores() {
       ativo: p.ativo,
       senha: "",
       regime_trabalho: p.regime_trabalho ?? "none",
-      dataDemissao: p.data_demissao ?? "",
-      tipo_vinculo: p.tipo_vinculo ?? "CLT",
-      possui_folha_ponto: p.possui_folha_ponto ?? false,
+      dataDemissao: (p as any).data_demissao ?? "",
+      tipo_vinculo: (p as any).tipo_vinculo ?? "CLT",
+      possui_folha_ponto: (p as any).possui_folha_ponto ?? false,
+      optante_adiantamento: (p as any).optante_adiantamento ?? false,
     });
   };
 
@@ -258,6 +248,7 @@ export default function Colaboradores() {
         data_demissao: editForm.dataDemissao || null,
         tipo_vinculo: editForm.tipo_vinculo || "CLT",
         possui_folha_ponto: editForm.possui_folha_ponto ?? false,
+        optante_adiantamento: editForm.optante_adiantamento ?? false,
       }).eq("id", editingProfile.id);
 
       if (profErr) throw profErr;
@@ -298,7 +289,7 @@ export default function Colaboradores() {
     }
   };
 
-  const openResetPassword = (p: ProfileLocal) => {
+  const openResetPassword = (p: Profile) => {
     setResetPasswordDialog({ profile: p, senha: "", confirmar: "" });
   };
 
@@ -348,7 +339,6 @@ export default function Colaboradores() {
         </div>
       </div>
 
-      {/* Filtros */}
       <div className="bg-card border border-border rounded-2xl p-4 flex flex-wrap gap-4 items-end">
         <div className="space-y-2 flex-1 min-w-[200px]">
           <Label className="text-xs font-bold uppercase text-muted-foreground">Buscar</Label>
@@ -386,7 +376,6 @@ export default function Colaboradores() {
         </div>
       </div>
 
-      {/* Tabela */}
       <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
         {loading ? (
           <div className="p-12 text-center text-muted-foreground">
@@ -421,8 +410,8 @@ export default function Colaboradores() {
                       {unidades.find(u => u.id === p.unidade_id)?.nome ?? "—"}
                     </td>
                     <td className="p-4 text-center">
-                      <Badge className={p.tipo_vinculo === "Socio" ? "bg-purple-100 text-purple-700 border-purple-200" : "bg-blue-100 text-blue-700 border-blue-200"}>
-                        {p.tipo_vinculo === "Socio" ? "Sócio" : p.tipo_vinculo || "CLT"}
+                      <Badge className={(p as any).tipo_vinculo === "Socio" ? "bg-purple-100 text-purple-700 border-purple-200" : "bg-blue-100 text-blue-700 border-blue-200"}>
+                        {(p as any).tipo_vinculo === "Socio" ? "Sócio" : (p as any).tipo_vinculo || "CLT"}
                       </Badge>
                     </td>
                     <td className="p-4 text-center">
@@ -437,7 +426,7 @@ export default function Colaboradores() {
                       </Badge>
                     </td>
                     <td className="p-4 text-center">
-                      {p.possui_folha_ponto ? (
+                      {(p as any).possui_folha_ponto ? (
                         <Badge className="bg-green-100 text-green-700 border-green-200">Sim</Badge>
                       ) : (
                         <Badge variant="outline" className="text-muted-foreground">Não</Badge>
@@ -464,7 +453,6 @@ export default function Colaboradores() {
         )}
       </div>
 
-      {/* Dialog de Edição */}
       <ColaboradorFormDialog
         open={!!editingProfile}
         onOpenChange={(open) => { if (!open) setEditingProfile(null); }}
@@ -477,7 +465,6 @@ export default function Colaboradores() {
         onSave={handleUpdate}
       />
 
-      {/* Dialog de Exclusão */}
       <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -495,7 +482,6 @@ export default function Colaboradores() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Dialog de Redefinição de Senha */}
       <AlertDialog open={!!resetPasswordDialog} onOpenChange={(o) => !o && setResetPasswordDialog(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
