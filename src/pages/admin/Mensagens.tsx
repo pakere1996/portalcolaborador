@@ -54,6 +54,7 @@ type Destinatario = {
 
 const TIPOS_MODELO = [
   { value: "aniversario", label: "Aniversário" },
+  { value: "tempo_casa", label: "Tempo de Casa" },
   { value: "aviso_geral", label: "Aviso Geral" },
   { value: "convocacao", label: "Convocação" },
   { value: "feriado", label: "Feriado" },
