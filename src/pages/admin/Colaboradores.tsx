@@ -11,7 +11,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Plus, Users, Pencil, Trash2, Search, Key, Loader2 } from "lucide-react";
+import { Plus, Users, Pencil, Trash2, Search, Key, Loader2, Eye, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { formatCPF, onlyDigits, isValidCPFLength } from "@/lib/cpf";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +55,12 @@ export default function Colaboradores() {
   const [editForm, setEditForm] = useState(blankEditForm);
   const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
   const [resetPasswordDialog, setResetPasswordDialog] = useState<{ profile: Profile; senha: string; confirmar: string } | null>(null);
+
+  // 🔥 Estados para visualização
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewProfile, setViewProfile] = useState<Profile | null>(null);
+  const [viewUnidadeNome, setViewUnidadeNome] = useState<string>("");
+  const [viewCargoNome, setViewCargoNome] = useState<string>("");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -106,6 +112,20 @@ export default function Colaboradores() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // 🔥 Função para abrir visualização do colaborador
+  const openViewDialog = async (p: Profile) => {
+    setViewProfile(p);
+    
+    // Buscar nomes da unidade e cargo
+    const unidade = unidades.find(u => u.id === p.unidade_id);
+    setViewUnidadeNome(unidade?.nome || "—");
+    
+    const cargo = cargos.find(c => c.id === p.cargo);
+    setViewCargoNome(cargo?.nome || p.cargo || "—");
+    
+    setViewDialogOpen(true);
+  };
 
   const filteredProfiles = useMemo(() => {
     return profiles.filter(p => {
@@ -309,6 +329,7 @@ export default function Colaboradores() {
     }
   };
 
+  // ---------- Renderização ----------
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -402,7 +423,11 @@ export default function Colaboradores() {
               </thead>
               <tbody className="divide-y divide-border">
                 {filteredProfiles.map((p) => (
-                  <tr key={p.id} className={p.ativo ? "" : "opacity-50"}>
+                  <tr
+                    key={p.id}
+                    className={`${p.ativo ? "" : "opacity-50"} hover:bg-muted/20 transition-colors cursor-pointer`}
+                    onClick={() => openViewDialog(p)}
+                  >
                     <td className="p-4 font-medium">{p.nome}</td>
                     <td className="p-4 hidden md:table-cell font-mono text-xs">{formatCPF(p.cpf)}</td>
                     <td className="p-4 hidden lg:table-cell text-muted-foreground">{p.cargo}</td>
@@ -418,7 +443,7 @@ export default function Colaboradores() {
                       <Switch checked={p.ativo} onCheckedChange={async (checked) => {
                         await supabase.from("profiles").update({ ativo: checked, updated_at: new Date().toISOString() }).eq("id", p.id);
                         loadData();
-                      }} disabled={busy} />
+                      }} disabled={busy} onClick={(e) => e.stopPropagation()} />
                     </td>
                     <td className="p-4 text-center">
                       <Badge className={p.role === "admin" ? "bg-primary/10 text-primary border-primary/20" : "bg-muted text-muted-foreground border-border"}>
@@ -434,13 +459,40 @@ export default function Colaboradores() {
                     </td>
                     <td className="p-4 text-right whitespace-nowrap">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={() => openEdit(p)}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          title="Editar"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEdit(p);
+                          }}
+                        >
                           <Pencil className="size-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="size-8" title="Redefinir Senha" onClick={() => openResetPassword(p)}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          title="Redefinir Senha"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openResetPassword(p);
+                          }}
+                        >
                           <Key className="size-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="size-8 text-destructive hover:bg-destructive/10" title="Excluir" onClick={() => setConfirmDelete(p)}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-destructive hover:bg-destructive/10"
+                          title="Excluir"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmDelete(p);
+                          }}
+                        >
                           <Trash2 className="size-4" />
                         </Button>
                       </div>
@@ -452,6 +504,115 @@ export default function Colaboradores() {
           </div>
         )}
       </div>
+
+      {/* ===== DIALOG DE VISUALIZAÇÃO DO COLABORADOR ===== */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="size-5 text-primary" />
+              {viewProfile?.nome || "Colaborador"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {viewProfile && (
+            <div className="space-y-6 py-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Nome</Label>
+                  <p className="font-semibold">{viewProfile.nome}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">CPF</Label>
+                  <p className="font-mono">{formatCPF(viewProfile.cpf)}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Matrícula</Label>
+                  <p className="font-mono">{(viewProfile as any).matricula || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Cargo</Label>
+                  <p>{viewCargoNome}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Unidade</Label>
+                  <p>{viewUnidadeNome}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">E-mail</Label>
+                  <p>{viewProfile.email_contato || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">WhatsApp</Label>
+                  <p>{viewProfile.whatsapp || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Data de Admissão</Label>
+                  <p>{viewProfile.data_admissao ? new Date(viewProfile.data_admissao + "T00:00:00").toLocaleDateString("pt-BR") : "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Data de Nascimento</Label>
+                  <p>{viewProfile.data_nascimento ? new Date(viewProfile.data_nascimento + "T00:00:00").toLocaleDateString("pt-BR") : "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Folga Fixa Semanal</Label>
+                  <p>
+                    {viewProfile.folga_fixa_semana != null && viewProfile.folga_fixa_semana >= 0 && viewProfile.folga_fixa_semana < 7
+                      ? ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"][viewProfile.folga_fixa_semana]
+                      : "Não definida"}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Regime de Trabalho</Label>
+                  <p>{viewProfile.regime_trabalho || "Não informado"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Tipo de Vínculo</Label>
+                  <p>{(viewProfile as any).tipo_vinculo || "CLT"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Status</Label>
+                  <p>{viewProfile.ativo ? "Ativo" : "Inativo"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Perfil de Acesso</Label>
+                  <p>{viewProfile.role === "admin" ? "Administrador" : "Colaborador"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Folha de Ponto</Label>
+                  <p>{(viewProfile as any).possui_folha_ponto ? "Sim" : "Não"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Optante por Adiantamento</Label>
+                  <p>{(viewProfile as any).optante_adiantamento ? "Sim" : "Não"}</p>
+                </div>
+                {!viewProfile.ativo && (viewProfile as any).data_demissao && (
+                  <div className="md:col-span-2">
+                    <Label className="text-xs text-muted-foreground uppercase">Data de Demissão</Label>
+                    <p>{new Date((viewProfile as any).data_demissao + "T00:00:00").toLocaleDateString("pt-BR")}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewDialogOpen(false)}>
+              Fechar
+            </Button>
+            {viewProfile && (
+              <Button
+                onClick={() => {
+                  setViewDialogOpen(false);
+                  openEdit(viewProfile);
+                }}
+              >
+                <Pencil className="size-4 mr-2" /> Editar
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ColaboradorFormDialog
         open={!!editingProfile}
