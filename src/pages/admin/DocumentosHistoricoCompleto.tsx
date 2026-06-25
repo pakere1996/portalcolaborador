@@ -27,6 +27,7 @@ import {
   Eye,
   Download,
   Search,
+  ChevronRight,
 } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
@@ -536,7 +537,7 @@ export default function DocumentosHistoricoCompleto() {
         </CardContent>
       </Card>
 
-      {/* Tabela */}
+      {/* Conteúdo: Desktop (tabela) / Mobile (cards) */}
       {loading ? (
         <div className="flex items-center justify-center p-12">
           <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -546,79 +547,158 @@ export default function DocumentosHistoricoCompleto() {
           Nenhum documento encontrado com os filtros selecionados.
         </div>
       ) : (
-        <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-muted-foreground border-b border-border">
-                <tr>
-                  <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Colaborador</th>
-                  <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Tipo</th>
-                  <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">Competência</th>
-                  <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">Unidade</th>
-                  <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
-                  <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden xl:table-cell">Data</th>
-                  <th className="text-right p-4 font-bold uppercase tracking-wider text-[10px]">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filtrados.map((doc) => (
-                  <tr key={doc.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="p-4 font-medium">
-                      {doc.colaborador_nome}
-                      {doc.colaborador_ativo === false && (
-                        <Badge variant="outline" className="ml-2 text-[9px] bg-red-50 text-red-600 border-red-200">
-                          Inativo
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="p-4">
-                      <Badge variant="outline">{getTipoLabel(doc.tipo)}</Badge>
-                    </td>
-                    <td className="p-4 hidden md:table-cell font-mono">
-                      {doc.mes && doc.ano ? `${String(doc.mes).padStart(2, "0")}/${doc.ano}` : "—"}
-                    </td>
-                    <td className="p-4 hidden lg:table-cell text-muted-foreground">
-                      {doc.unidade_nome || "—"}
-                    </td>
-                    <td className="p-4 text-center">
-                      {getStatusBadge(doc.status, doc.tipo)}
-                    </td>
-                    <td className="p-4 hidden xl:table-cell text-xs text-muted-foreground">
-                      {formatBR(new Date(doc.created_at))}
-                    </td>
-                    <td className="p-4 text-right whitespace-nowrap">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50"
-                          title="Visualizar"
-                          onClick={() => handlePreview(doc)}
-                          disabled={!doc.storage_path}
-                        >
-                          <Eye className="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8"
-                          title="Baixar"
-                          onClick={() => handleDownload(doc)}
-                          disabled={!doc.storage_path}
-                        >
-                          <Download className="size-4" />
-                        </Button>
-                      </div>
-                    </td>
+        <>
+          {/* Desktop: Tabela */}
+          <div className="hidden md:block bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-muted-foreground border-b border-border">
+                  <tr>
+                    <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Colaborador</th>
+                    <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px]">Tipo</th>
+                    <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">Competência</th>
+                    <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">Unidade</th>
+                    <th className="text-center p-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
+                    <th className="text-left p-4 font-bold uppercase tracking-wider text-[10px] hidden xl:table-cell">Data</th>
+                    <th className="text-right p-4 font-bold uppercase tracking-wider text-[10px]">Ações</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filtrados.map((doc) => (
+                    <tr key={doc.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="p-4 font-medium">
+                        {doc.colaborador_nome}
+                        {doc.colaborador_ativo === false && (
+                          <Badge variant="outline" className="ml-2 text-[9px] bg-red-50 text-red-600 border-red-200">
+                            Inativo
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        <Badge variant="outline">{getTipoLabel(doc.tipo)}</Badge>
+                      </td>
+                      <td className="p-4 hidden md:table-cell font-mono">
+                        {doc.mes && doc.ano ? `${String(doc.mes).padStart(2, "0")}/${doc.ano}` : "—"}
+                      </td>
+                      <td className="p-4 hidden lg:table-cell text-muted-foreground">
+                        {doc.unidade_nome || "—"}
+                      </td>
+                      <td className="p-4 text-center">
+                        {getStatusBadge(doc.status, doc.tipo)}
+                      </td>
+                      <td className="p-4 hidden xl:table-cell text-xs text-muted-foreground">
+                        {formatBR(new Date(doc.created_at))}
+                      </td>
+                      <td className="p-4 text-right whitespace-nowrap">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                            title="Visualizar"
+                            onClick={() => handlePreview(doc)}
+                            disabled={!doc.storage_path}
+                          >
+                            <Eye className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            title="Baixar"
+                            onClick={() => handleDownload(doc)}
+                            disabled={!doc.storage_path}
+                          >
+                            <Download className="size-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="p-3 border-t border-border text-xs text-muted-foreground text-right">
+              {filtrados.length} documento(s) encontrado(s)
+            </div>
           </div>
-          <div className="p-3 border-t border-border text-xs text-muted-foreground text-right">
-            {filtrados.length} documento(s) encontrado(s)
+
+          {/* Mobile: Cards */}
+          <div className="md:hidden space-y-4">
+            {filtrados.map((doc) => (
+              <div
+                key={doc.id}
+                className="bg-card border border-border rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow"
+              >
+                <div className="flex flex-col gap-3">
+                  {/* Linha 1: Nome + Status + Badges */}
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-base truncate">
+                        {doc.colaborador_nome}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <Badge variant="outline" className="text-xs">
+                          {getTipoLabel(doc.tipo)}
+                        </Badge>
+                        {doc.colaborador_ativo === false && (
+                          <Badge variant="outline" className="text-[9px] bg-red-50 text-red-600 border-red-200">
+                            Inativo
+                          </Badge>
+                        )}
+                        {getStatusBadge(doc.status, doc.tipo)}
+                      </div>
+                    </div>
+                    <ChevronRight className="size-5 text-muted-foreground shrink-0 ml-2" />
+                  </div>
+
+                  {/* Linha 2: Detalhes em grid */}
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                    <div>
+                      <span className="font-medium text-foreground">Competência:</span>
+                      <span className="ml-1">
+                        {doc.mes && doc.ano ? `${String(doc.mes).padStart(2, "0")}/${doc.ano}` : "—"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-foreground">Unidade:</span>
+                      <span className="ml-1">{doc.unidade_nome || "—"}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="font-medium text-foreground">Data:</span>
+                      <span className="ml-1">{formatBR(new Date(doc.created_at))}</span>
+                    </div>
+                  </div>
+
+                  {/* Linha 3: Botões sempre visíveis */}
+                  <div className="flex items-center gap-2 pt-2 border-t border-border">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 text-blue-600 border-blue-200 hover:bg-blue-50"
+                      onClick={() => handlePreview(doc)}
+                      disabled={!doc.storage_path}
+                    >
+                      <Eye className="size-4 mr-1" /> Visualizar
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => handleDownload(doc)}
+                      disabled={!doc.storage_path}
+                    >
+                      <Download className="size-4 mr-1" /> Baixar
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div className="text-xs text-muted-foreground text-center py-2">
+              {filtrados.length} documento(s) encontrado(s)
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Preview Dialog */}
