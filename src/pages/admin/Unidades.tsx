@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,6 +33,8 @@ import {
   X,
   Save,
   Check,
+  Eye,
+  MessageCircle,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -91,6 +94,7 @@ const blank = {
 };
 
 export default function Unidades() {
+  const { profile } = useAuth();
   const [list, setList] = useState<UnidadeWithCounts[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(blank);
@@ -99,11 +103,15 @@ export default function Unidades() {
   const [editForm, setEditForm] = useState(blank);
   const [confirmDelete, setConfirmDelete] = useState<Unidade | null>(null);
 
+  // 🔥 Estado para visualização da unidade
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewUnidade, setViewUnidade] = useState<Unidade | null>(null);
+  const [sindicatoPatronalView, setSindicatoPatronalView] = useState<Sindicato | null>(null);
+
   // Dados auxiliares
   const [sindicatosPatronais, setSindicatosPatronais] = useState<Sindicato[]>([]);
   const [sindicatosLaborais, setSindicatosLaborais] = useState<Sindicato[]>([]);
   const [cargosGlobais, setCargosGlobais] = useState<Cargo[]>([]);
-  // 🔥 Correção: usar apenas id e nome para checkboxes
   const [unidadesGlobais, setUnidadesGlobais] = useState<{ id: string; nome: string }[]>([]);
 
   // Associações para a unidade em edição
@@ -170,7 +178,6 @@ export default function Unidades() {
     if (patronais.data) setSindicatosPatronais(patronais.data);
     if (laborais.data) setSindicatosLaborais(laborais.data);
     if (cargos.data) setCargosGlobais(cargos.data);
-    // 🔥 Corrigido: agora setamos apenas id e nome
     if (unidades.data) setUnidadesGlobais(unidades.data);
   };
 
@@ -214,6 +221,50 @@ export default function Unidades() {
     setCargosAssociados(assoc);
     setNovoCargoId("");
     setNovoCargoSindicatoId("none");
+  };
+
+  // 🔥 Abrir diálogo de visualização da unidade
+  const openViewDialog = async (u: Unidade) => {
+    setViewUnidade(u);
+    // Buscar o sindicato patronal vinculado a esta unidade
+    const { data: vinc, error } = await supabase
+      .from("sindicato_unidades")
+      .select("sindicato_id")
+      .eq("unidade_id", u.id)
+      .limit(1);
+    if (!error && vinc && vinc.length > 0) {
+      const { data: sindicato } = await supabase
+        .from("sindicatos")
+        .select("*")
+        .eq("id", vinc[0].sindicato_id)
+        .single();
+      setSindicatoPatronalView(sindicato);
+    } else {
+      setSindicatoPatronalView(null);
+    }
+    setViewDialogOpen(true);
+  };
+
+  // 🔥 Abrir WhatsApp para o sindicato patronal da unidade
+  const abrirWhatsAppPatronal = async () => {
+    if (!viewUnidade || !sindicatoPatronalView) {
+      toast.warning("Nenhum sindicato patronal vinculado a esta unidade.");
+      return;
+    }
+
+    const numero = onlyNumbers(sindicatoPatronalView.contato_whatsapp || "");
+    if (!numero) {
+      toast.warning("Este sindicato não possui número de WhatsApp cadastrado.");
+      return;
+    }
+
+    const nomeUsuario = profile?.nome || "Administrador";
+    const nomeUnidade = viewUnidade.nome || "empresa";
+    const cnpjUnidade = viewUnidade.cnpj ? formatCNPJ(viewUnidade.cnpj) : "não informado";
+
+    const mensagem = `Olá, me chamo ${nomeUsuario}, da empresa ${nomeUnidade}, CNPJ nº ${cnpjUnidade}. Gostaria de tirar dúvidas com você.`;
+    const link = `https://wa.me/55${numero}?text=${encodeURIComponent(mensagem)}`;
+    window.open(link, "_blank");
   };
 
   // Adicionar cargo à lista local
@@ -653,6 +704,15 @@ export default function Unidades() {
                   </td>
                   <td className="p-4 text-right whitespace-nowrap">
                     <div className="flex justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        title="Visualizar"
+                        onClick={() => openViewDialog(u)}
+                      >
+                        <Eye className="size-4" />
+                      </Button>
                       <Button variant="ghost" size="icon" className="size-8" onClick={() => openEdit(u)}>
                         <Pencil className="size-4" />
                       </Button>
@@ -668,8 +728,97 @@ export default function Unidades() {
         </div>
       </div>
 
+      {/* ===== DIALOG DE VISUALIZAÇÃO DA UNIDADE ===== */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="size-5 text-primary" />
+              {viewUnidade?.nome || "Unidade"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {viewUnidade && (
+            <div className="space-y-6 py-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Nome</Label>
+                  <p className="font-semibold">{viewUnidade.nome}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">CNPJ</Label>
+                  <p className="font-mono">{viewUnidade.cnpj ? formatCNPJ(viewUnidade.cnpj) : "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Endereço</Label>
+                  <p>{viewUnidade.endereco || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Cidade</Label>
+                  <p>{viewUnidade.cidade || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Telefone</Label>
+                  <p>{viewUnidade.telefone || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Status</Label>
+                  <p>{viewUnidade.ativo ? "Ativo" : "Inativo"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Relógio de Ponto</Label>
+                  <p>{viewUnidade.possui_relogio_ponto ? "Sim" : "Não"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Adiantamento Salarial</Label>
+                  <p>
+                    {viewUnidade.tem_adiantamento
+                      ? `Sim (Dia ${viewUnidade.dia_adiantamento || "—"})`
+                      : "Não"}
+                  </p>
+                </div>
+              </div>
+
+              <hr className="border-border" />
+
+              <div>
+                <Label className="text-xs text-muted-foreground uppercase">Sindicato Patronal</Label>
+                {sindicatoPatronalView ? (
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="font-semibold">{sindicatoPatronalView.nome}</span>
+                    {sindicatoPatronalView.contato_whatsapp && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                        onClick={abrirWhatsAppPatronal}
+                      >
+                        <MessageCircle className="size-4 mr-2" />
+                        WhatsApp
+                      </Button>
+                    )}
+                    {!sindicatoPatronalView.contato_whatsapp && (
+                      <span className="text-xs text-muted-foreground">(sem WhatsApp cadastrado)</span>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">Nenhum sindicato patronal vinculado</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewDialogOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ===== MODAL DE EDIÇÃO ===== */}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        {/* ... conteúdo existente do modal de edição ... */}
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar unidade: {editing?.nome}</DialogTitle>
@@ -968,6 +1117,7 @@ export default function Unidades() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {/* ... mesmo conteúdo do modal de criação de sindicato ... */}
             <div className="space-y-2">
               <Label>Nome *</Label>
               <Input
