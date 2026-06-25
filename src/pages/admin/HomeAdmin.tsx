@@ -3,6 +3,7 @@ import { useAtestadosPendentes } from "@/lib/atestados-pendentes-context";
 import { useFavoritos } from "@/lib/useFavoritos";
 import { AniversariantesWidget } from "@/components/AniversariantesWidget";
 import { FavoritosGrid } from "@/components/FavoritosGrid";
+import { PendenciasWidget } from "@/components/PendenciasWidget";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Bell, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -50,69 +51,16 @@ export default function AdminHomeAdminPage() {
       {/* 🔥 Grid: Pendências (esquerda) + Aniversariantes (direita) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Pendências */}
-        {loadingAtestados ? (
-          <Card className="border-border shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Bell className="size-5 text-muted-foreground" />
-                Pendências
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="size-6 animate-spin text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-        ) : totalPendentes > 0 ? (
-          <Card className="border-amber-200 bg-amber-50/50 shadow-sm flex flex-col">
-            <CardHeader className="pb-3 shrink-0">
-              <CardTitle className="flex items-center gap-2 text-amber-800">
-                <Bell className="size-5" />
-                Pendências
-                <Badge className="ml-2 bg-amber-600 text-white">{totalPendentes}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-y-auto max-h-[400px]">
-              <div className="space-y-2 pr-1">
-                {pendentes.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center justify-between p-3 bg-white rounded-lg border border-amber-100 shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <div>
-                      <div className="font-medium">{p.colaborador_nome}</div>
-                      <div className="text-sm text-muted-foreground">
-                        Atestado de {new Date(p.data_atestado + "T00:00:00").toLocaleDateString("pt-BR")}
-                        {" • "}
-                        {p.dias_afastamento} dia(s)
-                      </div>
-                    </div>
-                    <Link to="/admin/documentos/atestados">
-                      <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white shrink-0">
-                        Revisar
-                      </Button>
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="border-border shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Bell className="size-5 text-muted-foreground" />
-                Pendências
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center text-muted-foreground py-6">
-                Nenhuma pendência no momento.
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <PendenciasWidget
+          pendentes={pendentes}
+          totalPendentes={totalPendentes}
+          loading={loadingAtestados}
+          titulo="Pendências"
+          emptyMessage="Nenhuma pendência no momento."
+          viewAllLink="/admin/documentos/atestados"
+          viewAllLabel="Ver todas"
+          maxItems={5}
+        />
 
         {/* Aniversariantes */}
         <AniversariantesWidget />
