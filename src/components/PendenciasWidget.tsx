@@ -134,11 +134,8 @@ export function PendenciasWidget({
               const colorClass = ICON_MAP[p.tipo]?.color || "text-gray-600";
               const bgClass = ICON_MAP[p.tipo]?.bg || "bg-gray-50";
 
-              // Calcular atraso
-              const hoje = new Date();
-              hoje.setHours(0, 0, 0, 0);
-              const dataRef = new Date(p.data_referencia + "T00:00:00");
-              const diffDias = Math.ceil((hoje.getTime() - dataRef.getTime()) / (1000 * 60 * 60 * 24));
+              // Usa o cálculo já feito corretamente no context (baseado na data de vencimento)
+              const diffDias = p.dias_atraso;
               const isAtrasado = diffDias > 0;
 
               return (
