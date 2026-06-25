@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +38,7 @@ import {
   Trash2,
   Building2,
   Check,
+  MessageCircle,
 } from "lucide-react";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
 import { cn } from "@/lib/utils";
@@ -83,6 +85,7 @@ interface Cargo {
 type TipoSindicato = "patronal" | "laboral";
 
 export default function SindicatosCadastro() {
+  const { profile } = useAuth();
   const [sindicatos, setSindicatos] = useState<Sindicato[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [cargos, setCargos] = useState<Cargo[]>([]);
@@ -103,6 +106,36 @@ export default function SindicatosCadastro() {
 
   // Confirmação de exclusão
   const [confirmDelete, setConfirmDelete] = useState<Sindicato | null>(null);
+
+  // --- Função para obter dados da unidade do colaborador logado ---
+  const getUnidadeDoUsuario = useCallback(async () => {
+    if (!profile?.unidade_id) return null;
+    const { data, error } = await supabase
+      .from("unidades")
+      .select("nome, cnpj")
+      .eq("id", profile.unidade_id)
+      .single();
+    if (error) return null;
+    return data;
+  }, [profile]);
+
+  // --- Abrir WhatsApp com mensagem pré-definida ---
+  const abrirWhatsApp = async (sindicato: Sindicato) => {
+    const numero = onlyNumbers(sindicato.contato_whatsapp || "");
+    if (!numero) {
+      toast.warning("Este sindicato não possui número de WhatsApp cadastrado.");
+      return;
+    }
+
+    const unidade = await getUnidadeDoUsuario();
+    const nomeUsuario = profile?.nome || "Colaborador";
+    const nomeUnidade = unidade?.nome || "empresa";
+    const cnpjUnidade = unidade?.cnpj || "não informado";
+
+    const mensagem = `Olá, me chamo ${nomeUsuario}, da empresa ${nomeUnidade}, CNPJ nº ${cnpjUnidade}. Posso tirar dúvidas com você?`;
+    const link = `https://wa.me/55${numero}?text=${encodeURIComponent(mensagem)}`;
+    window.open(link, "_blank");
+  };
 
   // --- Loaders ---
   const loadData = useCallback(async () => {
@@ -354,9 +387,13 @@ export default function SindicatosCadastro() {
                         <Badge variant="secondary">Patronal</Badge>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-1 text-sm">
+                    <CardContent className="space-y-2 text-sm">
                       {s.cnpj && <div><span className="font-medium">CNPJ:</span> {formatCNPJ(s.cnpj)}</div>}
-                      {s.contato_whatsapp && <div><span className="font-medium">WhatsApp:</span> {formatWhatsApp(s.contato_whatsapp)}</div>}
+                      {s.contato_whatsapp && (
+                        <div>
+                          <span className="font-medium">WhatsApp:</span> {formatWhatsApp(s.contato_whatsapp)}
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-2 mt-2">
                         <Button variant="ghost" size="sm" onClick={() => abrirEdicao(s)}>
                           <Pencil className="size-4 mr-1" /> Editar
@@ -364,6 +401,16 @@ export default function SindicatosCadastro() {
                         <Button variant="ghost" size="sm" className="text-red-500" onClick={() => setConfirmDelete(s)}>
                           <Trash2 className="size-4 mr-1" /> Excluir
                         </Button>
+                        {s.contato_whatsapp && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                            onClick={() => abrirWhatsApp(s)}
+                          >
+                            <MessageCircle className="size-4 mr-1" /> WhatsApp
+                          </Button>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -394,9 +441,13 @@ export default function SindicatosCadastro() {
                         <Badge variant="default">Laboral</Badge>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-1 text-sm">
+                    <CardContent className="space-y-2 text-sm">
                       {s.cnpj && <div><span className="font-medium">CNPJ:</span> {formatCNPJ(s.cnpj)}</div>}
-                      {s.contato_whatsapp && <div><span className="font-medium">WhatsApp:</span> {formatWhatsApp(s.contato_whatsapp)}</div>}
+                      {s.contato_whatsapp && (
+                        <div>
+                          <span className="font-medium">WhatsApp:</span> {formatWhatsApp(s.contato_whatsapp)}
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-2 mt-2">
                         <Button variant="ghost" size="sm" onClick={() => abrirEdicao(s)}>
                           <Pencil className="size-4 mr-1" /> Editar
@@ -404,6 +455,16 @@ export default function SindicatosCadastro() {
                         <Button variant="ghost" size="sm" className="text-red-500" onClick={() => setConfirmDelete(s)}>
                           <Trash2 className="size-4 mr-1" /> Excluir
                         </Button>
+                        {s.contato_whatsapp && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                            onClick={() => abrirWhatsApp(s)}
+                          >
+                            <MessageCircle className="size-4 mr-1" /> WhatsApp
+                          </Button>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
