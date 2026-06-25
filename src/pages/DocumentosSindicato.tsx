@@ -233,7 +233,7 @@ export default function DocumentosSindicato() {
     const empresa = unidadeNome || "empresa";
     const cnpj = cnpjUnidade ? formatCNPJ(cnpjUnidade) : "não informado";
 
-    const mensagem = `Olá, me chamo ${nomeUsuario}, CPF nº ${cpf}, trabalho na empresa ${empresa}, CNPJ nº ${cnpj}. Gostaria de tirar dúvidas com você.`;
+    const mensagem = `Olá, me chamo ${nomeUsuario}, CPF nº ${cpfFormatado}, trabalho na empresa ${empresa}, CNPJ nº ${cnpjFormatado}. Gostaria de tirar dúvidas com você.`;
     const link = `https://wa.me/55${numero}?text=${encodeURIComponent(mensagem)}`;
     window.open(link, "_blank");
   };
