@@ -224,7 +224,7 @@ export default function SindicatosNegociacoes() {
 
   // Salvar
   const salvarNegociacao = async () => {
-    // 🔥 VALIDAÇÃO: Converter campos vazios para null
+    // 🔥 VALIDAÇÃO: Converter campos vazios para null e validar
     const unidadeId = form.unidade_id.trim() || null;
     const patronalId = form.sindicato_patronal_id.trim() || null;
     const laboralId = form.sindicato_laboral_id.trim() || null;
@@ -253,13 +253,19 @@ export default function SindicatosNegociacoes() {
     setBusy(true);
     try {
       // Verificar duplicidade (mesmo par de sindicatos + mesmo ano)
-      const { data: existing, error: checkError } = await supabase
+      let query = supabase
         .from("negociacoes")
         .select("id")
         .eq("sindicato_patronal_id", patronalId)
         .eq("sindicato_laboral_id", laboralId)
-        .eq("ano", form.ano)
-        .neq("id", editando?.id || "");
+        .eq("ano", form.ano);
+      
+      // Se estiver editando, excluir o próprio registro da verificação
+      if (editando) {
+        query = query.neq("id", editando.id);
+      }
+      
+      const { data: existing, error: checkError } = await query;
       if (checkError) throw checkError;
       if (existing && existing.length > 0) {
         toast.error("Já existe uma negociação para este par de sindicatos e ano base.");
@@ -289,6 +295,7 @@ export default function SindicatosNegociacoes() {
         nomePdf = arquivo.name;
       }
 
+      // 🔥 Dados para inserir com valores válidos
       const dados = {
         unidade_id: unidadeId,
         sindicato_patronal_id: patronalId,
