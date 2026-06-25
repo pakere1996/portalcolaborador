@@ -55,7 +55,6 @@ const TIPO_LABEL = {
   negociacao: "Negociação",
 };
 
-// Hook para detectar mobile
 const useMediaQuery = (query: string) => {
   const [matches, setMatches] = useState(false);
   useEffect(() => {
@@ -121,6 +120,37 @@ export function PendenciasWidget({
     setDetailDialog({ open: true, pendencia });
   };
 
+  const calcularDiasRestantes = (dataVencimento: string): number => {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const vencimento = new Date(dataVencimento + "T00:00:00");
+    return Math.ceil((vencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
+  // 🔥 Status: com prazos diferentes para negociação e outros
+  const getStatusInfo = (pendencia: any) => {
+    const diasRestantes = calcularDiasRestantes(pendencia.data_vencimento);
+    const diasAtraso = pendencia.dias_atraso ?? 0;
+
+    if (diasAtraso > 0) {
+      return { status: 'atrasado', label: `Atrasado ${diasAtraso}d`, color: 'red', icon: AlertCircle };
+    }
+    if (diasRestantes === 0) {
+      return { status: 'hoje', label: 'Vence hoje', color: 'green', icon: CheckCircle2 };
+    }
+
+    // Define o limite de dias para aviso prévio:
+    // - Negociação: 60 dias
+    // - Outros: 5 dias
+    const limiteAviso = pendencia.tipo === 'negociacao' ? 60 : 5;
+
+    if (diasRestantes > 0 && diasRestantes <= limiteAviso) {
+      return { status: 'proximo', label: `Vence em ${diasRestantes}d`, color: 'amber', icon: Clock };
+    }
+
+    return { status: 'normal', label: '', color: 'gray', icon: null };
+  };
+
   if (loading) {
     return (
       <Card className="border-border shadow-sm">
@@ -177,19 +207,20 @@ export function PendenciasWidget({
               const bgClass = iconConfig?.bg || "bg-gray-50";
               const tipoLabel = TIPO_LABEL[p.tipo as keyof typeof TIPO_LABEL] || p.tipo;
 
-              const diasAtraso = p.dias_atraso ?? 0;
-              const isAtrasado = diasAtraso > 0;
+              const statusInfo = getStatusInfo(p);
+              const cardBorderColor =
+                statusInfo.status === 'atrasado' ? 'border-red-200 bg-red-50/50' :
+                statusInfo.status === 'proximo' ? 'border-amber-400 bg-amber-50/30' :
+                statusInfo.status === 'hoje' ? 'border-green-300 bg-green-50/30' :
+                'border-amber-100';
 
               return (
                 <div
                   key={p.id}
-                  className={`p-3 bg-white rounded-lg border shadow-sm hover:shadow-md transition-shadow ${
-                    isAtrasado ? "border-red-200 bg-red-50/50" : "border-amber-100"
-                  } ${isMobile ? "cursor-pointer active:scale-[0.98]" : ""}`}
+                  className={`p-3 bg-white rounded-lg border shadow-sm hover:shadow-md transition-shadow ${cardBorderColor} ${isMobile ? "cursor-pointer active:scale-[0.98]" : ""}`}
                   onClick={() => isMobile && abrirDetalhes(p)}
                 >
                   <div className="flex flex-col gap-2">
-                    {/* Linha superior: ícone + título + badge */}
                     <div className="flex items-start gap-3">
                       <div className={`size-8 rounded-full ${bgClass} flex items-center justify-center shrink-0 mt-0.5`}>
                         <IconComponent className={`size-4 ${colorClass}`} />
@@ -197,21 +228,22 @@ export function PendenciasWidget({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-sm">{p.titulo}</span>
-                          {isAtrasado ? (
-                            <Badge
-                              variant="outline"
-                              className="bg-red-100 text-red-700 border-red-200 text-[10px]"
-                            >
+                          {statusInfo.status === 'atrasado' && (
+                            <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200 text-[10px]">
                               <AlertCircle className="size-3 mr-0.5" />
-                              {diasAtraso}d
+                              {statusInfo.label}
                             </Badge>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              className="bg-green-100 text-green-700 border-green-200 text-[10px]"
-                            >
+                          )}
+                          {statusInfo.status === 'proximo' && (
+                            <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-200 text-[10px]">
+                              <Clock className="size-3 mr-0.5" />
+                              {statusInfo.label}
+                            </Badge>
+                          )}
+                          {statusInfo.status === 'hoje' && (
+                            <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200 text-[10px]">
                               <CheckCircle2 className="size-3 mr-0.5" />
-                              Hoje
+                              {statusInfo.label}
                             </Badge>
                           )}
                         </div>
@@ -229,7 +261,6 @@ export function PendenciasWidget({
                       )}
                     </div>
 
-                    {/* Botões: mobile empilhados, desktop lado a lado */}
                     <div className={`flex ${isMobile ? "flex-col gap-1.5" : "flex-row gap-1"} justify-end`}>
                       <Link to={p.rota_resolver} className={isMobile ? "w-full" : ""} onClick={(e) => e.stopPropagation()}>
                         <Button
@@ -266,7 +297,6 @@ export function PendenciasWidget({
         </CardContent>
       </Card>
 
-      {/* Dialog de detalhes (mobile) */}
       <Dialog open={detailDialog.open} onOpenChange={(open) => !open && setDetailDialog({ open: false, pendencia: null })}>
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
@@ -290,9 +320,15 @@ export function PendenciasWidget({
                     <div className="font-medium">
                       {detailDialog.pendencia.dias_atraso > 0 ? (
                         <span className="text-red-600">Atrasado {detailDialog.pendencia.dias_atraso} dia(s)</span>
-                      ) : (
-                        <span className="text-green-600">Em dia</span>
-                      )}
+                      ) : (() => {
+                        const diasRestantes = calcularDiasRestantes(detailDialog.pendencia.data_vencimento);
+                        if (diasRestantes === 0) return <span className="text-green-600">Vence hoje</span>;
+                        const limiteAviso = detailDialog.pendencia.tipo === 'negociacao' ? 60 : 5;
+                        if (diasRestantes > 0 && diasRestantes <= limiteAviso) {
+                          return <span className="text-amber-600">Vence em {diasRestantes} dia(s)</span>;
+                        }
+                        return <span className="text-muted-foreground">Em dia</span>;
+                      })()}
                     </div>
                   </div>
                   <div className="col-span-2">
@@ -337,7 +373,6 @@ export function PendenciasWidget({
         </DialogContent>
       </Dialog>
 
-      {/* Dialog para adiar */}
       <Dialog open={adiarDialog.open} onOpenChange={(open) => !open && setAdiarDialog({ open: false, identificador: null, dias: 1 })}>
         <DialogContent className="max-w-sm rounded-2xl">
           <DialogHeader>
