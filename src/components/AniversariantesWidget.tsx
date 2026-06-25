@@ -3,7 +3,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Cake, Loader2, Building2, MessageCircle, Briefcase } from "lucide-react";
-import { formatBR } from "@/lib/folga-rules";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -32,9 +31,9 @@ interface EventoAniversario {
   unidade: string;
   whatsapp: string | null;
   tipo: "nascimento" | "tempo_casa";
-  data_evento: string; // data do evento no formato YYYY-MM-DD
+  data_evento: string;
   dias_para: number;
-  descricao: string; // "Completa X anos" ou "X anos de empresa"
+  descricao: string;
   diaMes: string; // DD/MM
 }
 
@@ -57,7 +56,6 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
   });
   const [sending, setSending] = useState(false);
 
-  // Função para calcular próximo evento (nascimento ou admissão) nos próximos 30 dias
   const calcularProximoEvento = (dataBase: string, hoje: Date): { data: Date; diffDias: number; idade: number } | null => {
     const data = new Date(dataBase + "T00:00:00");
     const anoAtual = hoje.getFullYear();
@@ -71,7 +69,6 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
     const diffDias = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     if (diffDias >= 0 && diffDias <= 30) {
-      // Calcular idade/anos de empresa
       const anos = proximo.getFullYear() - data.getFullYear();
       return { data: proximo, diffDias, idade: anos };
     }
@@ -83,7 +80,6 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
     try {
       const hoje = new Date();
       hoje.setHours(0, 0, 0, 0);
-      const anoAtual = hoje.getFullYear();
 
       const { data: profiles, error } = await supabase
         .from("profiles")
@@ -100,7 +96,6 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
 
       if (error) throw error;
 
-      // Mapear unidades
       const unidadeMap = new Map();
       profiles?.forEach(p => {
         let unidadeNome = null;
@@ -126,7 +121,6 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
           unidade: p.unidade_id ? unidadeMap.get(p.unidade_id) || "—" : "—",
         };
 
-        // 🔥 Aniversário de Nascimento
         if (colaborador.data_nascimento) {
           const nasc = calcularProximoEvento(colaborador.data_nascimento, hoje);
           if (nasc) {
@@ -145,7 +139,6 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
           }
         }
 
-        // 🔥 Aniversário de Tempo de Casa (admissão)
         if (colaborador.data_admissao) {
           const adm = calcularProximoEvento(colaborador.data_admissao, hoje);
           if (adm) {
@@ -165,7 +158,6 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
         }
       });
 
-      // Ordenar por dias para o evento
       eventosList.sort((a, b) => a.dias_para - b.dias_para);
       setEventos(eventosList.slice(0, limit));
     } catch (error) {
@@ -186,10 +178,10 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
     const mensagemPadrao = `${emoji}, ${evento.nome.split(' ')[0]}! 🎂
 
 A equipe Pakerê deseja a você um dia especial, cheio de alegria e realizações. ${
-  isNascimento
-    ? "Que este novo ano de vida seja repleto de sucesso e felicidade!"
-    : "Agradecemos por fazer parte da nossa história e por todos os anos de dedicação!"
-}
+      isNascimento
+        ? "Que este novo ano de vida seja repleto de sucesso e felicidade!"
+        : "Agradecemos por fazer parte da nossa história e por todos os anos de dedicação!"
+    }
 
 Atenciosamente,
 Equipe Pakerê`;
@@ -278,7 +270,7 @@ Equipe Pakerê`;
             </Badge>
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Aniversários de nascimento e tempo de casa
+            Quadro de aniversários de Nascimento e Tempo de Casa
           </p>
         </CardHeader>
         <CardContent className="flex-1 overflow-y-auto max-h-[400px] pr-1">
@@ -297,7 +289,8 @@ Equipe Pakerê`;
                   className="flex items-center justify-between p-3 bg-white rounded-lg border border-border shadow-sm hover:shadow-md transition-shadow gap-2"
                 >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className={`size-10 rounded-full flex items-center justify-center font-bold shrink-0 ${isNascimento ? "bg-pink-200 text-pink-700" : "bg-blue-200 text-blue-700"}`}>
+                    {/* BOLINHA MAIOR (w-12 h-12) */}
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${isNascimento ? "bg-pink-200 text-pink-700" : "bg-blue-200 text-blue-700"}`}>
                       {evento.diaMes}
                     </div>
                     <div className="min-w-0 flex-1">
