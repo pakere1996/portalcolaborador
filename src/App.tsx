@@ -3,6 +3,7 @@ import { Toaster } from "sonner";
 import { AppShell } from "./components/AppShell";
 import { useAuth } from "./lib/auth-context";
 import { AtestadosPendentesProvider } from "./lib/atestados-pendentes-context";
+import { PendenciasProvider } from "./lib/pendencias-context"; // 🔥 NOVO
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Perfil from "./pages/Perfil";
@@ -13,7 +14,7 @@ import Historico from "./pages/Historico";
 import Documentos from "./pages/Documentos";
 import DocumentosAtestados from "./pages/DocumentosAtestados";
 import DocumentosDisciplinar from "./pages/DocumentosDisciplinar";
-import DocumentosSindicato from "./pages/DocumentosSindicato"; // <-- NOVO
+import DocumentosSindicato from "./pages/DocumentosSindicato";
 
 // Admin Pages
 import HomeAdmin from "./pages/admin/HomeAdmin";
@@ -72,90 +73,92 @@ function AuthenticatedRoutes() {
 
   return (
     <AtestadosPendentesProvider>
-      <AppShell>
-        <Routes>
-          {/* Shared Routes */}
-          <Route path="/perfil" element={<Perfil />} />
-          <Route path="/calendario" element={<Calendario />} />
-          <Route path="/admin/calendario" element={<CalendarioAdmin />} />
-          <Route path="/trocas" element={<Trocas />} />
-          <Route path="/historico" element={<Historico />} />
-          <Route path="/documentos" element={<Documentos />} />
-          <Route path="/documentos/atestados" element={<DocumentosAtestados />} />
-          <Route path="/documentos/ponto" element={<Documentos />} />
-          <Route path="/documentos/disciplinar" element={<DocumentosDisciplinar />} />
-          <Route path="/documentos/sindicato" element={<DocumentosSindicato />} /> {/* <-- NOVO */}
+      <PendenciasProvider> {/* 🔥 Provider de pendências adicionado */}
+        <AppShell>
+          <Routes>
+            {/* Shared Routes */}
+            <Route path="/perfil" element={<Perfil />} />
+            <Route path="/calendario" element={<Calendario />} />
+            <Route path="/admin/calendario" element={<CalendarioAdmin />} />
+            <Route path="/trocas" element={<Trocas />} />
+            <Route path="/historico" element={<Historico />} />
+            <Route path="/documentos" element={<Documentos />} />
+            <Route path="/documentos/atestados" element={<DocumentosAtestados />} />
+            <Route path="/documentos/ponto" element={<Documentos />} />
+            <Route path="/documentos/disciplinar" element={<DocumentosDisciplinar />} />
+            <Route path="/documentos/sindicato" element={<DocumentosSindicato />} />
 
-          {/* Rotas de Home com redirecionamento */}
-          <Route path="/home" element={isAdmin ? <Navigate to="/admin/home" replace /> : <Home />} />
-          <Route path="/" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
+            {/* Rotas de Home com redirecionamento */}
+            <Route path="/home" element={isAdmin ? <Navigate to="/admin/home" replace /> : <Home />} />
+            <Route path="/" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
 
-          {/* Admin Routes */}
-          {isAdmin ? (
-            <>
-              <Route path="/admin" element={<Navigate to="/admin/home" replace />} />
-              <Route path="/admin/home" element={<HomeAdmin />} />
-              
-              {/* HUBS */}
-              <Route path="/admin/cadastro" element={<CadastroHub />} />
-              <Route path="/admin/comunicacao" element={<ComunicacaoHub />} />
+            {/* Admin Routes */}
+            {isAdmin ? (
+              <>
+                <Route path="/admin" element={<Navigate to="/admin/home" replace />} />
+                <Route path="/admin/home" element={<HomeAdmin />} />
+                
+                {/* HUBS */}
+                <Route path="/admin/cadastro" element={<CadastroHub />} />
+                <Route path="/admin/comunicacao" element={<ComunicacaoHub />} />
 
-              {/* Cadastro Group */}
-              <Route path="/admin/colaboradores" element={<Colaboradores />} />
-              <Route path="/admin/cargos" element={<Cargos />} />
-              <Route path="/admin/unidades" element={<Unidades />} />
-              
-              {/* Sindicatos – Cadastro agora em /admin/cadastro/sindicatos */}
-              <Route path="/admin/cadastro/sindicatos" element={<SindicatosCadastro />} />
-              {/* Redirecionamento da rota antiga */}
-              <Route path="/admin/sindicatos/cadastro" element={<Navigate to="/admin/cadastro/sindicatos" replace />} />
-              
-              {/* Sindicatos Hub (se ainda existir) – pode redirecionar para CadastroHub ou manter */}
-              <Route path="/admin/sindicatos" element={<Navigate to="/admin/cadastro" replace />} />
+                {/* Cadastro Group */}
+                <Route path="/admin/colaboradores" element={<Colaboradores />} />
+                <Route path="/admin/cargos" element={<Cargos />} />
+                <Route path="/admin/unidades" element={<Unidades />} />
+                
+                {/* Sindicatos – Cadastro agora em /admin/cadastro/sindicatos */}
+                <Route path="/admin/cadastro/sindicatos" element={<SindicatosCadastro />} />
+                {/* Redirecionamento da rota antiga */}
+                <Route path="/admin/sindicatos/cadastro" element={<Navigate to="/admin/cadastro/sindicatos" replace />} />
+                
+                {/* Sindicatos Hub */}
+                <Route path="/admin/sindicatos" element={<Navigate to="/admin/cadastro" replace />} />
 
-              {/* ACT-CCT agora em /admin/documentos/act-cct */}
-              <Route path="/admin/documentos/act-cct" element={<SindicatosNegociacoes />} />
-              {/* Redirecionamentos de rotas antigas */}
-              <Route path="/admin/sindicatos/negociacoes" element={<Navigate to="/admin/documentos/act-cct" replace />} />
-              <Route path="/admin/cadastro/act-cct" element={<Navigate to="/admin/documentos/act-cct" replace />} />
+                {/* ACT-CCT agora em /admin/documentos/act-cct */}
+                <Route path="/admin/documentos/act-cct" element={<SindicatosNegociacoes />} />
+                {/* Redirecionamentos de rotas antigas */}
+                <Route path="/admin/sindicatos/negociacoes" element={<Navigate to="/admin/documentos/act-cct" replace />} />
+                <Route path="/admin/cadastro/act-cct" element={<Navigate to="/admin/documentos/act-cct" replace />} />
 
-              {/* Folgas Group */}
-              <Route path="/admin/folgas" element={<FolgasDashboard />} />
-              <Route path="/admin/solicitacoes" element={<Solicitacoes />} />
-              <Route path="/admin/aprovacoes" element={<Aprovacoes />} />
-              <Route path="/admin/trocas" element={<TrocasAdmin />} />
-              <Route path="/admin/bloqueios" element={<Bloqueios />} />
+                {/* Folgas Group */}
+                <Route path="/admin/folgas" element={<FolgasDashboard />} />
+                <Route path="/admin/solicitacoes" element={<Solicitacoes />} />
+                <Route path="/admin/aprovacoes" element={<Aprovacoes />} />
+                <Route path="/admin/trocas" element={<TrocasAdmin />} />
+                <Route path="/admin/bloqueios" element={<Bloqueios />} />
 
-              {/* Documentos Group */}
-              <Route path="/admin/documentos" element={<DocumentosHub />} />
-              <Route path="/admin/documentos/contracheque" element={<DocumentosContracheque />} />
-              <Route path="/admin/documentos/ponto" element={<DocumentosPontoAdmin />} />
-              <Route path="/admin/documentos/adiantamento" element={<DocumentosAdiantamento />} />
-              <Route path="/admin/documentos/historico" element={<DocumentosHistoricoCompleto />} />
-              <Route path="/admin/documentos/atestados" element={<AtestadosAdmin />} />
-              <Route path="/admin/documentos/disciplinar" element={<RegistrosDisciplinaresAdmin />} />
-              {/* ACT-CCT já está definido acima */}
+                {/* Documentos Group */}
+                <Route path="/admin/documentos" element={<DocumentosHub />} />
+                <Route path="/admin/documentos/contracheque" element={<DocumentosContracheque />} />
+                <Route path="/admin/documentos/ponto" element={<DocumentosPontoAdmin />} />
+                <Route path="/admin/documentos/adiantamento" element={<DocumentosAdiantamento />} />
+                <Route path="/admin/documentos/historico" element={<DocumentosHistoricoCompleto />} />
+                <Route path="/admin/documentos/atestados" element={<AtestadosAdmin />} />
+                <Route path="/admin/documentos/disciplinar" element={<RegistrosDisciplinaresAdmin />} />
+                {/* ACT-CCT já está definido acima */}
 
-              {/* Comunicação Group */}
-              <Route path="/admin/mensagens" element={<MensagensAdmin />} />
-              <Route path="/admin/avisos" element={<QuadroAvisosAdmin />} />
-              
-              {/* Setup */}
-              <Route path="/admin/setup" element={<SetupAdmin />} />
+                {/* Comunicação Group */}
+                <Route path="/admin/mensagens" element={<MensagensAdmin />} />
+                <Route path="/admin/avisos" element={<QuadroAvisosAdmin />} />
+                
+                {/* Setup */}
+                <Route path="/admin/setup" element={<SetupAdmin />} />
 
-              {/* Catch-all admin */}
-              <Route path="/admin/*" element={<Navigate to="/admin/home" replace />} />
-            </>
-          ) : (
-            <>
-              <Route path="/admin/*" element={<Navigate to="/home" replace />} />
-              <Route path="/admin" element={<Navigate to="/home" replace />} />
-            </>
-          )}
+                {/* Catch-all admin */}
+                <Route path="/admin/*" element={<Navigate to="/admin/home" replace />} />
+              </>
+            ) : (
+              <>
+                <Route path="/admin/*" element={<Navigate to="/home" replace />} />
+                <Route path="/admin" element={<Navigate to="/home" replace />} />
+              </>
+            )}
 
-          <Route path="*" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
-        </Routes>
-      </AppShell>
+            <Route path="*" element={<Navigate to={isAdmin ? "/admin/home" : "/home"} replace />} />
+          </Routes>
+        </AppShell>
+      </PendenciasProvider>
     </AtestadosPendentesProvider>
   );
 }
