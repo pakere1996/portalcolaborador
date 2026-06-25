@@ -132,7 +132,7 @@ export default function SindicatosCadastro() {
     const nomeUnidade = unidade?.nome || "empresa";
     const cnpjUnidade = unidade?.cnpj || "não informado";
 
-    const mensagem = `Olá, me chamo ${nomeUsuario}, da empresa ${nomeUnidade}, CNPJ nº ${cnpjUnidade}. Posso tirar dúvidas com você?`;
+    const mensagem = `Olá, me chamo ${nomeUsuario}, da empresa ${nomeUnidade}, CNPJ nº ${cnpjUnidade}. Gostaria de tirar dúvidas com você.`;
     const link = `https://wa.me/55${numero}?text=${encodeURIComponent(mensagem)}`;
     window.open(link, "_blank");
   };
