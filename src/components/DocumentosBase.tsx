@@ -25,9 +25,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2, ChevronRight, Eye } from "lucide-react";
+import { Upload, History, Download, Pencil, Loader2, Check, X, Trash2, Eye } from "lucide-react";
 import { toast } from "sonner";
-import { FavoritarBotao } from "@/components/FavoritarBotao"; // <-- importação adicionada
+import { FavoritarBotao } from "@/components/FavoritarBotao";
 
 interface Documento {
   id: string;
@@ -62,7 +62,7 @@ interface DocumentosBaseProps {
   icone: React.ReactNode;
   descricao: string;
   importTitle: string;
-  favorito?: { rota: string; label: string; icone: string }; // <-- nova prop opcional
+  favorito?: { rota: string; label: string; icone: string };
 }
 
 const useMediaQuery = (query: string) => {
@@ -83,7 +83,7 @@ export function DocumentosBase({
   icone, 
   descricao, 
   importTitle,
-  favorito // <-- nova prop
+  favorito
 }: DocumentosBaseProps) {
   const [aba, setAba] = useState<"importar" | "historico">("importar");
   const [documentos, setDocumentos] = useState<Documento[]>([]);
@@ -105,7 +105,6 @@ export function DocumentosBase({
   const [selectedDoc, setSelectedDoc] = useState<Documento | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
-  // 🔥 Estado para pré-visualização
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
@@ -196,7 +195,6 @@ export function DocumentosBase({
     }
   }, []);
 
-  // 🔥 Função de pré-visualização (igual à do colaborador)
   const handlePreview = useCallback(async (doc: Documento) => {
     setSelectedDoc(doc);
     const { data } = await supabase.storage
@@ -289,7 +287,6 @@ export function DocumentosBase({
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      {/* 🔥 Cabeçalho com botão favoritar */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
@@ -423,65 +420,32 @@ export function DocumentosBase({
                 return (
                   <div
                     key={doc.id}
-                    className="bg-card border border-border rounded-2xl p-4 space-y-2 shadow-sm hover:shadow-md transition-shadow"
+                    className="bg-card border border-border rounded-2xl p-4 space-y-2 shadow-sm hover:shadow-md transition-shadow cursor-pointer active:scale-[0.98]"
+                    onClick={() => openDetail(doc)}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0" onClick={() => openDetail(doc)}>
+                      <div className="flex-1 min-w-0">
                         <div className="font-semibold text-sm truncate">{profile?.nome ?? "—"}</div>
                         <div className="text-xs text-muted-foreground">
                           {unidade?.nome && <span>{unidade.nome} • </span>}
                           {String(doc.mes).padStart(2, "0")}/{doc.ano}
                         </div>
-                        <Badge
-                          className={
-                            doc.status === "disponivel" || doc.status === "vinculado"
-                              ? "bg-green-100 text-green-700 border-green-200 mt-1"
-                              : "bg-muted text-muted-foreground mt-1"
-                          }
-                        >
-                          {doc.status}
-                        </Badge>
-                        {!profile?.ativo && (
-                          <Badge variant="outline" className="ml-1 text-[10px] bg-red-50 text-red-600 border-red-200 mt-1">
-                            Inativo
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          <Badge
+                            className={
+                              doc.status === "disponivel" || doc.status === "vinculado"
+                                ? "bg-green-100 text-green-700 border-green-200"
+                                : "bg-muted text-muted-foreground"
+                            }
+                          >
+                            {doc.status}
                           </Badge>
-                        )}
-                      </div>
-                      <div className="flex gap-1 shrink-0">
-                        {/* 🔥 Botão Visualizar */}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50"
-                          title="Visualizar"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handlePreview(doc);
-                          }}
-                        >
-                          <Eye className="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8"
-                          title="Baixar"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDownload(doc);
-                          }}
-                        >
-                          <Download className="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8"
-                          title="Detalhes"
-                          onClick={() => openDetail(doc)}
-                        >
-                          <ChevronRight className="size-4" />
-                        </Button>
+                          {!profile?.ativo && (
+                            <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200">
+                              Inativo
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
                     {isEditing ? (
@@ -499,14 +463,49 @@ export function DocumentosBase({
                           onChange={(e) => setEditAno(e.target.value)}
                           maxLength={4}
                         />
-                        <Button size="icon" className="size-8" onClick={() => handleEditSave(doc.id)} disabled={busy}>
+                        <Button size="icon" className="size-8" onClick={(e) => { e.stopPropagation(); handleEditSave(doc.id); }} disabled={busy}>
                           {busy ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
                         </Button>
-                        <Button size="icon" variant="ghost" className="size-8" onClick={cancelEditing}>
+                        <Button size="icon" variant="ghost" className="size-8" onClick={(e) => { e.stopPropagation(); cancelEditing(); }}>
                           <X className="size-3" />
                         </Button>
                       </div>
-                    ) : null}
+                    ) : (
+                      <div className="flex items-center gap-2 pt-2 border-t border-border">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 text-blue-600 border-blue-200 hover:bg-blue-50"
+                          onClick={(e) => { e.stopPropagation(); handlePreview(doc); }}
+                        >
+                          <Eye className="size-4 mr-1" /> Visualizar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={(e) => { e.stopPropagation(); handleDownload(doc); }}
+                        >
+                          <Download className="size-4 mr-1" /> Baixar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={(e) => { e.stopPropagation(); startEditing(doc); }}
+                        >
+                          <Pencil className="size-4 mr-1" /> Editar
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="flex-1"
+                          onClick={(e) => { e.stopPropagation(); handleExcluir(doc); }}
+                        >
+                          <Trash2 className="size-4 mr-1" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -589,7 +588,6 @@ export function DocumentosBase({
                         </td>
                         <td className="p-4 text-right whitespace-nowrap">
                           <div className="flex justify-end gap-1">
-                            {/* 🔥 Botão Visualizar */}
                             <Button
                               variant="ghost"
                               size="icon"
@@ -638,7 +636,6 @@ export function DocumentosBase({
         </div>
       )}
 
-      {/* 🔥 Dialog de visualização (igual ao do colaborador) */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
