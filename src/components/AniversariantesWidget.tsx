@@ -31,10 +31,19 @@ interface EventoAniversario {
   unidade: string;
   whatsapp: string | null;
   tipo: "nascimento" | "tempo_casa";
-  data_evento: string;
+  data_evento: string; // YYYY-MM-DD
   dias_para: number;
-  descricao: string;
+  descricao: string; // "Completa X anos" ou "X anos de empresa"
   diaMes: string; // DD/MM
+  anos: number; // idade ou anos de casa
+}
+
+interface ModeloMensagem {
+  id: string;
+  nome: string;
+  assunto: string;
+  corpo: string;
+  tipo: string;
 }
 
 interface AniversariantesWidgetProps {
@@ -121,6 +130,7 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
           unidade: p.unidade_id ? unidadeMap.get(p.unidade_id) || "—" : "—",
         };
 
+        // Aniversário de Nascimento
         if (colaborador.data_nascimento) {
           const nasc = calcularProximoEvento(colaborador.data_nascimento, hoje);
           if (nasc) {
@@ -135,10 +145,12 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
               dias_para: nasc.diffDias,
               descricao: `Completa ${nasc.idade} anos`,
               diaMes: diaMes,
+              anos: nasc.idade,
             });
           }
         }
 
+        // Aniversário de Contratação (tempo de casa)
         if (colaborador.data_admissao) {
           const adm = calcularProximoEvento(colaborador.data_admissao, hoje);
           if (adm) {
@@ -151,8 +163,9 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
               tipo: "tempo_casa",
               data_evento: adm.data.toISOString().split("T")[0],
               dias_para: adm.diffDias,
-              descricao: `${adm.idade} anos de empresa`,
+              descricao: `${adm.idade} anos de casa`,
               diaMes: diaMes,
+              anos: adm.idade,
             });
           }
         }
@@ -172,24 +185,64 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
     loadAniversariantes();
   }, []);
 
-  const openMsgDialog = (evento: EventoAniversario) => {
-    const isNascimento = evento.tipo === "nascimento";
-    const emoji = isNascimento ? "🎉 Feliz Aniversário" : "🎊 Parabéns pelo Tempo de Casa";
-    const mensagemPadrao = `${emoji}, ${evento.nome.split(' ')[0]}! 🎂
+  const getPrimeiroNome = (nomeCompleto: string) => {
+    return nomeCompleto.split(' ')[0];
+  };
 
-A equipe Pakerê deseja a você um dia especial, cheio de alegria e realizações. ${
-      isNascimento
-        ? "Que este novo ano de vida seja repleto de sucesso e felicidade!"
-        : "Agradecemos por fazer parte da nossa história e por todos os anos de dedicação!"
+  // Buscar modelo de mensagem no banco
+  const buscarModelo = async (tipo: string): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase
+        .from("modelos_mensagem")
+        .select("corpo")
+        .eq("tipo", tipo)
+        .eq("ativo", true)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+      if (data && data.length > 0) {
+        return data[0].corpo;
+      }
+      return null;
+    } catch (error) {
+      console.error("Erro ao buscar modelo:", error);
+      return null;
+    }
+  };
+
+  // Montar mensagem final com primeiro nome + corpo do modelo
+  const montarMensagem = async (evento: EventoAniversario): Promise<string> => {
+    const primeiroNome = getPrimeiroNome(evento.nome);
+    let corpo = "";
+
+    if (evento.tipo === "nascimento") {
+      const modelo = await buscarModelo("aniversario");
+      if (modelo) {
+        corpo = modelo;
+      } else {
+        corpo = `🎉 Hoje é dia de celebrar você!\nDesejamos um feliz aniversário, com muita saúde, alegria e conquistas. Somos gratos por ter você na nossa equipe! 🤗`;
+      }
+    } else {
+      // tempo_casa
+      const modelo = await buscarModelo("tempo_casa");
+      if (modelo) {
+        // Substituir {anos} pela quantidade de anos
+        corpo = modelo.replace(/\{anos\}/g, String(evento.anos));
+      } else {
+        corpo = `Feliz ${evento.anos} anos de Casa! 🏠\n\n🎉 Mais um marco da sua história com a gente!\nAgradecemos pela sua dedicação, parceria e por fazer parte da nossa trajetória. Que esse seja apenas mais um capítulo de muitos que ainda vamos construir juntos. 🤗`;
+      }
     }
 
-Atenciosamente,
-Equipe Pakerê`;
+    return `${primeiroNome},\n\n${corpo}`;
+  };
 
+  const openMsgDialog = async (evento: EventoAniversario) => {
+    const mensagem = await montarMensagem(evento);
     setMsgDialog({
       open: true,
       colaborador: evento,
-      mensagem: mensagemPadrao,
+      mensagem: mensagem,
     });
   };
 
@@ -251,7 +304,7 @@ Equipe Pakerê`;
         </CardHeader>
         <CardContent>
           <div className="text-center text-muted-foreground py-6">
-            Nenhum aniversário de nascimento ou tempo de casa nos próximos 30 dias. 🎉
+            Nenhum aniversário de nascimento ou contratação nos próximos 30 dias. 🎉
           </div>
         </CardContent>
       </Card>
@@ -270,7 +323,7 @@ Equipe Pakerê`;
             </Badge>
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Quadro de aniversários de Nascimento e Tempo de Casa
+            Quadro de aniversários de Nascimento e Contratação
           </p>
         </CardHeader>
         <CardContent className="flex-1 overflow-y-auto max-h-[400px] pr-1">
@@ -282,6 +335,7 @@ Equipe Pakerê`;
                 : "bg-blue-100 text-blue-700 border-blue-200";
               const icon = isNascimento ? <Cake className="size-3" /> : <Briefcase className="size-3" />;
               const isHoje = evento.dias_para === 0;
+              const labelTipo = isNascimento ? "Nascimento" : "Contratação";
 
               return (
                 <div
@@ -289,8 +343,7 @@ Equipe Pakerê`;
                   className="flex items-center justify-between p-3 bg-white rounded-lg border border-border shadow-sm hover:shadow-md transition-shadow gap-2"
                 >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    {/* BOLINHA MAIOR (w-12 h-12) */}
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${isNascimento ? "bg-pink-200 text-pink-700" : "bg-blue-200 text-blue-700"}`}>
+                    <div className={`size-12 rounded-full flex items-center justify-center font-bold shrink-0 text-sm ${isNascimento ? "bg-pink-200 text-pink-700" : "bg-blue-200 text-blue-700"}`}>
                       {evento.diaMes}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -298,7 +351,7 @@ Equipe Pakerê`;
                       <div className="flex flex-wrap items-center gap-2 mt-1">
                         <Badge variant="outline" className={`text-xs ${badgeColor}`}>
                           {icon}
-                          {isNascimento ? " Nascimento" : " Tempo de Casa"}
+                          {labelTipo}
                           {isHoje && <span className="ml-1 font-bold">🎉 Hoje!</span>}
                         </Badge>
                         <span className="text-xs text-muted-foreground">{evento.descricao}</span>
