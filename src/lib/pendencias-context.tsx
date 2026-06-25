@@ -39,7 +39,7 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
 
     setLoading(true);
     try {
-      // 1. Buscar pendencias_adiadas do usuário para filtrar
+      // 1. Buscar pendências adiadas do usuário
       const { data: adiados, error: adiadosError } = await supabase
         .from("pendencias_adiadas")
         .select("tipo_pendencia, identificador, data_reexibicao")
@@ -55,42 +55,54 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
 
       const pendenciasList: Pendencia[] = [];
 
-      // 2. Buscar solicitações de troca pendentes
-      const { data: trocas, error: trocasError } = await supabase
-        .from("trocas_folga")
-        .select(`
-          id,
-          data_destinatario,
-          solicitante_id,
-          destinatario_id,
-          status,
-          solicitante:profiles!solicitante_id(nome),
-          destinatario:profiles!destinatario_id(nome)
-        `)
-        .eq("status", "pendente");
+      // 2. Buscar solicitações de troca pendentes (SEM JOINS para evitar erro de relação)
+      try {
+        const { data: trocas, error: trocasError } = await supabase
+          .from("trocas_folga")
+          .select("*")
+          .eq("status", "pendente");
 
-      if (trocasError) {
-        console.warn("Erro ao buscar trocas:", trocasError);
-        // Não interrompe o fluxo, apenas loga o erro
-      } else {
-        trocas?.forEach(t => {
-          const chave = `troca-${t.id}`;
-          if (chaveAdiados.has(chave)) return;
+        if (trocasError) throw trocasError;
 
-          const dataRef = t.data_destinatario;
-          const solicitanteNome = (t.solicitante as any)?.nome || "Solicitante";
-          const destinatarioNome = (t.destinatario as any)?.nome || "Destinatário";
-
-          pendenciasList.push({
-            id: `troca-${t.id}`,
-            tipo: "troca",
-            titulo: "Troca de folga pendente",
-            descricao: `${solicitanteNome} → ${destinatarioNome} (${new Date(dataRef).toLocaleDateString("pt-BR")})`,
-            data_referencia: dataRef,
-            rota_resolver: "/admin/solicitacoes",
-            identificador_unico: chave,
+        if (trocas && trocas.length > 0) {
+          // Buscar nomes dos colaboradores separadamente
+          const userIds = new Set<string>();
+          trocas.forEach(t => {
+            if (t.solicitante_id) userIds.add(t.solicitante_id);
+            if (t.destinatario_id) userIds.add(t.destinatario_id);
           });
-        });
+
+          const { data: profiles, error: profilesError } = await supabase
+            .from("profiles")
+            .select("id, nome")
+            .in("id", Array.from(userIds));
+
+          if (profilesError) throw profilesError;
+
+          const profileMap = new Map(profiles?.map(p => [p.id, p.nome]) || []);
+
+          trocas.forEach(t => {
+            const chave = `troca-${t.id}`;
+            if (chaveAdiados.has(chave)) return;
+
+            const solicitanteNome = profileMap.get(t.solicitante_id) || "Solicitante";
+            const destinatarioNome = profileMap.get(t.destinatario_id) || "Destinatário";
+            const dataRef = t.data_destinatario || new Date().toISOString().split("T")[0];
+
+            pendenciasList.push({
+              id: `troca-${t.id}`,
+              tipo: "troca",
+              titulo: "Troca de folga pendente",
+              descricao: `${solicitanteNome} → ${destinatarioNome} (${new Date(dataRef).toLocaleDateString("pt-BR")})`,
+              data_referencia: dataRef,
+              rota_resolver: "/admin/solicitacoes",
+              identificador_unico: chave,
+            });
+          });
+        }
+      } catch (error) {
+        // Se der erro na consulta de trocas, apenas loga e continua
+        console.warn("Erro ao buscar trocas (pode ser normal se a tabela ainda não estiver configurada):", error);
       }
 
       // 3. Documentos (contracheque, adiantamento, folha de ponto)
@@ -107,11 +119,9 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
 
       if (unidError) throw unidError;
 
-      // Mês anterior
       const mesAnterior = mesVigente === 1 ? 12 : mesVigente - 1;
       const anoAnterior = mesVigente === 1 ? anoVigente - 1 : anoVigente;
 
-      // Para cada unidade, verificar se há documentos importados
       for (const unidade of unidades) {
         // Contracheque (a partir do dia 10, referente ao mês anterior)
         if (diaHoje >= 10) {
@@ -200,33 +210,37 @@ export function PendenciasProvider({ children }: { children: React.ReactNode }) 
       }
 
       // 4. Negociações coletivas (data base > 365 dias)
-      const { data: negociacoes, error: negError } = await supabase
-        .from("negociacoes")
-        .select("ano, mes, created_at")
-        .order("ano", { ascending: false })
-        .order("mes", { ascending: false })
-        .limit(1);
+      try {
+        const { data: negociacoes, error: negError } = await supabase
+          .from("negociacoes")
+          .select("ano, mes, created_at")
+          .order("ano", { ascending: false })
+          .order("mes", { ascending: false })
+          .limit(1);
 
-      if (negError) throw negError;
+        if (negError) throw negError;
 
-      if (negociacoes && negociacoes.length > 0) {
-        const ultima = negociacoes[0];
-        const dataBase = new Date(ultima.ano, ultima.mes - 1, 1);
-        const diffDias = Math.floor((hoje.getTime() - dataBase.getTime()) / (1000 * 60 * 60 * 24));
-        if (diffDias >= 365) {
-          const chave = `negociacao-${ultima.ano}-${ultima.mes}`;
-          if (!chaveAdiados.has(chave)) {
-            pendenciasList.push({
-              id: chave,
-              tipo: "negociacao",
-              titulo: "Negociação coletiva pendente",
-              descricao: `Última negociação: ${String(ultima.mes).padStart(2, "0")}/${ultima.ano} (${diffDias} dias atrás)`,
-              data_referencia: `${ultima.ano}-${String(ultima.mes).padStart(2, "0")}-01`,
-              rota_resolver: "/admin/documentos/act-cct",
-              identificador_unico: chave,
-            });
+        if (negociacoes && negociacoes.length > 0) {
+          const ultima = negociacoes[0];
+          const dataBase = new Date(ultima.ano, ultima.mes - 1, 1);
+          const diffDias = Math.floor((hoje.getTime() - dataBase.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDias >= 365) {
+            const chave = `negociacao-${ultima.ano}-${ultima.mes}`;
+            if (!chaveAdiados.has(chave)) {
+              pendenciasList.push({
+                id: chave,
+                tipo: "negociacao",
+                titulo: "Negociação coletiva pendente",
+                descricao: `Última negociação: ${String(ultima.mes).padStart(2, "0")}/${ultima.ano} (${diffDias} dias atrás)`,
+                data_referencia: `${ultima.ano}-${String(ultima.mes).padStart(2, "0")}-01`,
+                rota_resolver: "/admin/documentos/act-cct",
+                identificador_unico: chave,
+              });
+            }
           }
         }
+      } catch (error) {
+        console.warn("Erro ao buscar negociações:", error);
       }
 
       setPendencias(pendenciasList);
