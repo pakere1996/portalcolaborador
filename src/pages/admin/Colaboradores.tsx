@@ -430,7 +430,9 @@ export default function Colaboradores() {
                   >
                     <td className="p-4 font-medium">{p.nome}</td>
                     <td className="p-4 hidden md:table-cell font-mono text-xs">{formatCPF(p.cpf)}</td>
-                    <td className="p-4 hidden lg:table-cell text-muted-foreground">{p.cargo}</td>
+                    <td className="p-4 hidden lg:table-cell text-muted-foreground">
+                      {cargos.find(c => c.id === p.cargo)?.nome || p.cargo}
+                    </td>
                     <td className="p-4 hidden xl:table-cell text-muted-foreground">
                       {unidades.find(u => u.id === p.unidade_id)?.nome ?? "—"}
                     </td>
