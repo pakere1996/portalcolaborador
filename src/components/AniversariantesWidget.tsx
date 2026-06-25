@@ -35,6 +35,7 @@ interface EventoAniversario {
   data_evento: string; // data do evento no formato YYYY-MM-DD
   dias_para: number;
   descricao: string; // "Completa X anos" ou "X anos de empresa"
+  diaMes: string; // DD/MM
 }
 
 interface AniversariantesWidgetProps {
@@ -129,6 +130,7 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
         if (colaborador.data_nascimento) {
           const nasc = calcularProximoEvento(colaborador.data_nascimento, hoje);
           if (nasc) {
+            const diaMes = nasc.data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
             eventosList.push({
               colaboradorId: colaborador.id,
               nome: colaborador.nome,
@@ -138,6 +140,7 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
               data_evento: nasc.data.toISOString().split("T")[0],
               dias_para: nasc.diffDias,
               descricao: `Completa ${nasc.idade} anos`,
+              diaMes: diaMes,
             });
           }
         }
@@ -146,6 +149,7 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
         if (colaborador.data_admissao) {
           const adm = calcularProximoEvento(colaborador.data_admissao, hoje);
           if (adm) {
+            const diaMes = adm.data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
             eventosList.push({
               colaboradorId: colaborador.id,
               nome: colaborador.nome,
@@ -155,6 +159,7 @@ export function AniversariantesWidget({ limit = 10, showSendButton = true }: Ani
               data_evento: adm.data.toISOString().split("T")[0],
               dias_para: adm.diffDias,
               descricao: `${adm.idade} anos de empresa`,
+              diaMes: diaMes,
             });
           }
         }
@@ -284,8 +289,6 @@ Equipe Pakerê`;
                 ? "bg-pink-100 text-pink-700 border-pink-200"
                 : "bg-blue-100 text-blue-700 border-blue-200";
               const icon = isNascimento ? <Cake className="size-3" /> : <Briefcase className="size-3" />;
-              const hoje = new Date();
-              hoje.setHours(0, 0, 0, 0);
               const isHoje = evento.dias_para === 0;
 
               return (
@@ -295,7 +298,7 @@ Equipe Pakerê`;
                 >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div className={`size-10 rounded-full flex items-center justify-center font-bold shrink-0 ${isNascimento ? "bg-pink-200 text-pink-700" : "bg-blue-200 text-blue-700"}`}>
-                      {evento.dias_para === 0 ? "🎉" : evento.dias_para}
+                      {evento.diaMes}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="font-medium truncate">{evento.nome}</div>
@@ -306,6 +309,11 @@ Equipe Pakerê`;
                           {isHoje && <span className="ml-1 font-bold">🎉 Hoje!</span>}
                         </Badge>
                         <span className="text-xs text-muted-foreground">{evento.descricao}</span>
+                        {!isHoje && (
+                          <span className="text-xs font-medium text-amber-600">
+                            Faltam {evento.dias_para} dia{evento.dias_para > 1 ? 's' : ''}!
+                          </span>
+                        )}
                         <span className="text-xs text-muted-foreground flex items-center gap-0.5">
                           <Building2 className="size-3" />
                           {evento.unidade}
