@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Building2, FileText, Download, Eye, Users, Scale, File } from "lucide-react";
+import { Building2, FileText, Download, Eye, Users, Scale, File, MessageCircle } from "lucide-react";
 
 interface Sindicato {
   id: string;
@@ -31,11 +31,40 @@ interface Negociacao {
   sindicato_laboral?: Sindicato;
 }
 
+// --- Funções de formatação ---
+const onlyNumbers = (value: string) => value.replace(/\D/g, "");
+
+const formatCNPJ = (value: string | null): string => {
+  if (!value) return "";
+  const clean = onlyNumbers(value);
+  if (clean.length <= 2) return clean;
+  if (clean.length <= 5) return clean.replace(/^(\d{2})(\d{0,3})/, "$1.$2");
+  if (clean.length <= 8) return clean.replace(/^(\d{2})(\d{3})(\d{0,3})/, "$1.$2.$3");
+  if (clean.length <= 12) return clean.replace(/^(\d{2})(\d{3})(\d{3})(\d{0,4})/, "$1.$2.$3/$4");
+  return clean.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, "$1.$2.$3/$4-$5");
+};
+
+const formatWhatsApp = (value: string | null): string => {
+  if (!value) return "";
+  const clean = onlyNumbers(value);
+  if (clean.length <= 2) return clean;
+  if (clean.length <= 6) return clean.replace(/^(\d{2})(\d{0,4})/, "($1) $2");
+  if (clean.length <= 10) return clean.replace(/^(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3");
+  return clean.replace(/^(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3");
+};
+
+// Para gerar o link do WhatsApp, usamos apenas números
+const linkWhatsApp = (whatsapp: string | null): string => {
+  if (!whatsapp) return "#";
+  const numeros = onlyNumbers(whatsapp);
+  if (!numeros) return "#";
+  return `https://wa.me/55${numeros}`;
+};
+
 export default function DocumentosSindicato() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [sindicatoLaboral, setSindicatoLaboral] = useState<Sindicato | null>(null);
-  const [sindicatosPatronais, setSindicatosPatronais] = useState<Sindicato[]>([]);
   const [negociacao, setNegociacao] = useState<Negociacao | null>(null);
   const [unidadeNome, setUnidadeNome] = useState<string>("");
   const [cargoNome, setCargoNome] = useState<string>("");
@@ -57,7 +86,7 @@ export default function DocumentosSindicato() {
 
     setLoading(true);
     try {
-      // 1. Buscar perfil do colaborador (cargo é o nome, não UUID)
+      // 1. Buscar perfil do colaborador
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("unidade_id, cargo, nome")
@@ -81,42 +110,52 @@ export default function DocumentosSindicato() {
         return;
       }
 
-      setCargoNome(profile.cargo);
-
       // 2. Buscar unidade
-      const { data: unidadeRes, error: unidadeError } = await supabase
+      const { data: unidadeRes } = await supabase
         .from("unidades")
         .select("nome")
         .eq("id", profile.unidade_id)
         .maybeSingle();
 
-      if (unidadeError) {
-        console.error("Erro ao buscar unidade:", unidadeError);
-        throw unidadeError;
-      }
       if (unidadeRes) setUnidadeNome(unidadeRes.nome);
 
-      // 3. Buscar cargo pelo nome para obter o UUID
-      const { data: cargoData, error: cargoError } = await supabase
-        .from("cargos")
-        .select("id, nome")
-        .ilike("nome", profile.cargo) // busca pelo nome, ignorando maiúsculas/minúsculas
-        .maybeSingle();
+      // 3. Descobrir o ID do cargo (pode ser nome ou UUID)
+      let cargoId: string | null = null;
+      let cargoNomeEncontrado = "";
 
-      if (cargoError) {
-        console.error("Erro ao buscar cargo:", cargoError);
-        throw cargoError;
+      const isUUID = (str: string) => {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        return uuidRegex.test(str);
+      };
+
+      if (isUUID(profile.cargo)) {
+        cargoId = profile.cargo;
+        const { data: cargoData } = await supabase
+          .from("cargos")
+          .select("nome")
+          .eq("id", cargoId)
+          .maybeSingle();
+        if (cargoData) cargoNomeEncontrado = cargoData.nome;
+      } else {
+        const { data: cargoData } = await supabase
+          .from("cargos")
+          .select("id, nome")
+          .eq("nome", profile.cargo)
+          .maybeSingle();
+        if (cargoData) {
+          cargoId = cargoData.id;
+          cargoNomeEncontrado = cargoData.nome;
+        }
       }
 
-      if (!cargoData) {
-        toast.warning(`Cargo "${profile.cargo}" não encontrado na tabela de cargos.`);
+      if (!cargoId) {
+        toast.warning("Cargo não encontrado no sistema.");
         setLoading(false);
         return;
       }
+      setCargoNome(cargoNomeEncontrado || profile.cargo);
 
-      const cargoId = cargoData.id;
-
-      // 4. Buscar vínculo do cargo com sindicato laboral na unidade
+      // 4. Buscar vínculo do cargo com sindicato laboral
       const { data: unidadeCargo, error: ucError } = await supabase
         .from("unidade_cargos")
         .select("sindicato_laboral_id")
@@ -147,44 +186,14 @@ export default function DocumentosSindicato() {
         throw slError;
       }
 
-      if (sindLaboral) {
-        setSindicatoLaboral(sindLaboral);
-      } else {
+      if (!sindLaboral) {
         toast.warning("Sindicato laboral não encontrado.");
         setLoading(false);
         return;
       }
+      setSindicatoLaboral(sindLaboral);
 
-      // 6. Buscar sindicatos patronais da unidade
-      const { data: vincPatronais, error: vpError } = await supabase
-        .from("sindicato_unidades")
-        .select("sindicato_id")
-        .eq("unidade_id", profile.unidade_id);
-
-      if (vpError) {
-        console.error("Erro ao buscar vínculos patronais:", vpError);
-        throw vpError;
-      }
-
-      const idsPatronais = vincPatronais?.map(v => v.sindicato_id) || [];
-      if (idsPatronais.length === 0) {
-        toast.warning("Sua unidade não possui sindicato patronal vinculado.");
-        setLoading(false);
-        return;
-      }
-
-      const { data: sindPatronais, error: spError } = await supabase
-        .from("sindicatos")
-        .select("*")
-        .in("id", idsPatronais);
-
-      if (spError) {
-        console.error("Erro ao buscar sindicatos patronais:", spError);
-        throw spError;
-      }
-      setSindicatosPatronais(sindPatronais || []);
-
-      // 7. Buscar negociação mais recente (ACT/CCT)
+      // 6. Buscar negociação mais recente (ACT/CCT)
       const { data: negociacaoData, error: negError } = await supabase
         .from("negociacoes")
         .select(`
@@ -194,7 +203,6 @@ export default function DocumentosSindicato() {
         `)
         .eq("unidade_id", profile.unidade_id)
         .eq("sindicato_laboral_id", unidadeCargo.sindicato_laboral_id)
-        .in("sindicato_patronal_id", idsPatronais)
         .order("ano", { ascending: false })
         .order("mes", { ascending: false })
         .limit(1)
@@ -208,7 +216,27 @@ export default function DocumentosSindicato() {
       if (negociacaoData) {
         setNegociacao(negociacaoData);
       } else {
-        toast.info("Nenhuma negociação encontrada para seu sindicato e unidade.");
+        // Fallback: buscar sem filtrar por unidade
+        const { data: negFallback, error: fallbackError } = await supabase
+          .from("negociacoes")
+          .select(`
+            *,
+            sindicato_patronal:sindicatos!negociacoes_sindicato_patronal_id_fkey(id, nome, cnpj, contato_whatsapp),
+            sindicato_laboral:sindicatos!negociacoes_sindicato_laboral_id_fkey(id, nome, cnpj, contato_whatsapp)
+          `)
+          .eq("sindicato_laboral_id", unidadeCargo.sindicato_laboral_id)
+          .order("ano", { ascending: false })
+          .order("mes", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (fallbackError) {
+          console.error("Erro ao buscar negociação fallback:", fallbackError);
+        } else if (negFallback) {
+          setNegociacao(negFallback);
+        } else {
+          toast.info("Nenhuma negociação encontrada para seu sindicato.");
+        }
       }
     } catch (error) {
       console.error("Erro no carregamento:", error);
@@ -317,37 +345,28 @@ export default function DocumentosSindicato() {
             {sindicatoLaboral.cnpj && (
               <div>
                 <span className="text-sm text-muted-foreground">CNPJ</span>
-                <p className="font-mono">{sindicatoLaboral.cnpj}</p>
+                <p className="font-mono">{formatCNPJ(sindicatoLaboral.cnpj)}</p>
               </div>
             )}
             {sindicatoLaboral.contato_whatsapp && (
               <div>
                 <span className="text-sm text-muted-foreground">WhatsApp</span>
-                <p>{sindicatoLaboral.contato_whatsapp}</p>
+                <div className="mt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                    onClick={() => window.open(linkWhatsApp(sindicatoLaboral.contato_whatsapp), "_blank")}
+                  >
+                    <MessageCircle className="size-4 mr-2" />
+                    {formatWhatsApp(sindicatoLaboral.contato_whatsapp)}
+                  </Button>
+                </div>
               </div>
             )}
           </div>
         </CardContent>
       </Card>
-
-      {sindicatosPatronais.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-xl flex items-center gap-2">
-              <Building2 className="size-5 text-primary" /> Sindicatos Patronais da Unidade
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {sindicatosPatronais.map((s) => (
-                <Badge key={s.id} variant="secondary" className="text-sm py-1.5 px-3">
-                  {s.nome}
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardHeader className="pb-3">
@@ -410,7 +429,7 @@ export default function DocumentosSindicato() {
             </div>
           ) : (
             <div className="text-center text-muted-foreground py-6">
-              Nenhum documento coletivo encontrado para o sindicato da sua função nesta unidade.
+              Nenhum documento coletivo encontrado para o sindicato da sua função.
             </div>
           )}
         </CardContent>
