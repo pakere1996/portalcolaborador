@@ -1,246 +1,337 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import {
-  Bell,
-  Loader2,
-  Clock,
-  AlertCircle,
-  CheckCircle2,
-  UserCheck,
-  FileText,
-  Coins,
-  Scale,
-  Calendar,
-  ArrowRight,
-  CalendarClock,
-} from "lucide-react";
-import { usePendencias } from "@/lib/pendencias-context";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "./auth-context";
 import { toast } from "sonner";
 
-interface PendenciasWidgetProps {
-  titulo?: string;
-  emptyMessage?: string;
-  viewAllLink?: string;
-  viewAllLabel?: string;
-  maxItems?: number;
+export interface Pendencia {
+  id: string;
+  tipo: "excecao" | "contracheque" | "adiantamento" | "folha_ponto" | "negociacao";
+  titulo: string;
+  descricao: string;
+  data_vencimento: string;
+  dias_atraso: number;
+  rota_resolver: string;
+  unidade_id?: string | null;
+  colaborador_id?: string | null;
+  identificador_unico: string;
 }
 
-const ICON_MAP = {
-  excecao: { icon: UserCheck, color: "text-blue-600", bg: "bg-blue-50" },
-  contracheque: { icon: FileText, color: "text-purple-600", bg: "bg-purple-50" },
-  adiantamento: { icon: Coins, color: "text-cyan-600", bg: "bg-cyan-50" },
-  folha_ponto: { icon: Clock, color: "text-emerald-600", bg: "bg-emerald-50" },
-  negociacao: { icon: Scale, color: "text-amber-600", bg: "bg-amber-50" },
-};
+interface PendenciaContextType {
+  pendencias: Pendencia[];
+  loading: boolean;
+  adiarPendencia: (identificadorUnico: string, dias: number) => Promise<void>;
+  removerAdiamento: (identificadorUnico: string) => Promise<void>;
+  refresh: () => Promise<void>;
+}
 
-const TIPO_LABEL = {
-  excecao: "Exceção",
-  contracheque: "Contracheque",
-  adiantamento: "Adiantamento",
-  folha_ponto: "Folha de Ponto",
-  negociacao: "Negociação",
-};
+const PendenciaContext = createContext<PendenciaContextType | undefined>(undefined);
 
-export function PendenciasWidget({
-  titulo = "Pendências",
-  emptyMessage = "Nenhuma pendência no momento.",
-  viewAllLink = "/admin/folgas",
-  viewAllLabel = "Ver todas",
-  maxItems = 5,
-}: PendenciasWidgetProps) {
-  const { pendencias, loading, adiarPendencia } = usePendencias();
-  const [adiarDialog, setAdiarDialog] = useState<{
-    open: boolean;
-    identificador: string | null;
-    dias: number;
-  }>({
-    open: false,
-    identificador: null,
-    dias: 1,
-  });
+export function PendenciasProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const [pendencias, setPendencias] = useState<Pendencia[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const itensExibidos = pendencias.slice(0, maxItems);
-  const temMais = pendencias.length > maxItems;
-
-  const handleAdiar = async () => {
-    if (!adiarDialog.identificador) {
-      toast.error("Identificador da pendência não encontrado.");
+  const carregarPendencias = useCallback(async () => {
+    if (!user) {
+      setPendencias([]);
+      setLoading(false);
       return;
     }
-    if (adiarDialog.dias < 1) {
-      toast.error("Informe um número de dias válido.");
-      return;
+
+    setLoading(true);
+    try {
+      const { data: adiados, error: adiadosError } = await supabase
+        .from("pendencias_adiadas")
+        .select("tipo_pendencia, identificador, data_reexibicao")
+        .eq("usuario_id", user.id)
+        .gte("data_reexibicao", new Date().toISOString().split("T")[0]);
+
+      if (adiadosError) throw adiadosError;
+
+      const chaveAdiados = new Set();
+      adiados?.forEach(a => {
+        chaveAdiados.add(`${a.tipo_pendencia}-${a.identificador}`);
+      });
+
+      const pendenciasList: Pendencia[] = [];
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+
+      // 2. Solicitações de exceção pendentes
+      try {
+        const { data: excecoes, error: excecoesError } = await supabase
+          .from("solicitacoes_especiais")
+          .select(`
+            id,
+            user_id,
+            data,
+            motivo,
+            status,
+            created_at,
+            profiles!solicitacoes_especiais_user_id_fkey(nome)
+          `)
+          .eq("status", "pendente");
+
+        if (excecoesError) throw excecoesError;
+
+        if (excecoes && excecoes.length > 0) {
+          for (const ex of excecoes) {
+            const chave = `excecao-${ex.id}`;
+            if (chaveAdiados.has(chave)) continue;
+
+            const dataSolicitacao = ex.data || ex.created_at?.split("T")[0] || new Date().toISOString().split("T")[0];
+            const dataVencimento = new Date(dataSolicitacao + "T00:00:00");
+            const diffDias = Math.ceil((hoje.getTime() - dataVencimento.getTime()) / (1000 * 60 * 60 * 24));
+            const diasAtraso = diffDias > 0 ? diffDias : 0;
+
+            const colaboradorNome = (ex as any).profiles?.nome || "Colaborador";
+
+            pendenciasList.push({
+              id: `excecao-${ex.id}`,
+              tipo: "excecao",
+              titulo: "Solicitação de exceção pendente",
+              descricao: `${colaboradorNome} - ${ex.motivo || "Sem motivo"} (${new Date(dataSolicitacao).toLocaleDateString("pt-BR")})`,
+              data_vencimento: dataSolicitacao,
+              dias_atraso: diasAtraso,
+              rota_resolver: "/admin/solicitacoes",
+              identificador_unico: chave,
+            });
+          }
+        }
+      } catch (error) {
+        console.warn("Erro ao buscar solicitações de exceção:", error);
+      }
+
+      // 3. Documentos
+      const mesVigente = hoje.getMonth() + 1;
+      const anoVigente = hoje.getFullYear();
+      const diaHoje = hoje.getDate();
+
+      const { data: unidades, error: unidError } = await supabase
+        .from("unidades")
+        .select("id, nome, possui_relogio_ponto, tem_adiantamento, dia_adiantamento")
+        .eq("ativo", true);
+
+      if (unidError) throw unidError;
+
+      const mesAnterior = mesVigente === 1 ? 12 : mesVigente - 1;
+      const anoAnterior = mesVigente === 1 ? anoVigente - 1 : anoVigente;
+
+      const verificarDocumento = async (tipo: string, unidadeId: string, mes: number, ano: number, dataVencimento: Date) => {
+        const chave = `${tipo}-${unidadeId}-${mes}-${ano}`;
+        if (chaveAdiados.has(chave)) return null;
+
+        const { count, error } = await supabase
+          .from("documentos")
+          .select("*", { count: "exact", head: true })
+          .eq("tipo", tipo)
+          .eq("unidade_id", unidadeId)
+          .eq("mes", mes)
+          .eq("ano", ano);
+
+        if (error) {
+          console.warn(`Erro ao verificar ${tipo} para unidade ${unidadeId}:`, error);
+          return null;
+        }
+
+        if (count === 0) {
+          const diffDias = Math.ceil((hoje.getTime() - dataVencimento.getTime()) / (1000 * 60 * 60 * 24));
+          const diasAtraso = diffDias > 0 ? diffDias : 0;
+          return { chave, diasAtraso };
+        }
+        return null;
+      };
+
+      for (const unidade of unidades) {
+        // Contracheque
+        if (diaHoje >= 10) {
+          const dataVencimento = new Date(anoAnterior, mesAnterior - 1, 10);
+          const resultado = await verificarDocumento("contracheque", unidade.id, mesAnterior, anoAnterior, dataVencimento);
+          if (resultado) {
+            pendenciasList.push({
+              id: resultado.chave,
+              tipo: "contracheque",
+              titulo: "Contracheque não importado",
+              descricao: `${unidade.nome} - ${String(mesAnterior).padStart(2, "0")}/${anoAnterior}`,
+              data_vencimento: dataVencimento.toISOString().split("T")[0],
+              dias_atraso: resultado.diasAtraso,
+              rota_resolver: "/admin/documentos/contracheque",
+              unidade_id: unidade.id,
+              identificador_unico: resultado.chave,
+            });
+          }
+        }
+
+        // Adiantamento
+        if (unidade.tem_adiantamento && unidade.dia_adiantamento) {
+          const diaAdiantamento = unidade.dia_adiantamento;
+          const diaLimite = diaAdiantamento + 5;
+          if (diaHoje >= diaLimite) {
+            const dataVencimento = new Date(anoVigente, mesVigente - 1, diaLimite);
+            const resultado = await verificarDocumento("adiantamento", unidade.id, mesVigente, anoVigente, dataVencimento);
+            if (resultado) {
+              pendenciasList.push({
+                id: resultado.chave,
+                tipo: "adiantamento",
+                titulo: "Adiantamento não importado",
+                descricao: `${unidade.nome} - ${String(mesVigente).padStart(2, "0")}/${anoVigente}`,
+                data_vencimento: dataVencimento.toISOString().split("T")[0],
+                dias_atraso: resultado.diasAtraso,
+                rota_resolver: "/admin/documentos/adiantamento",
+                unidade_id: unidade.id,
+                identificador_unico: resultado.chave,
+              });
+            }
+          }
+        }
+
+        // Folha de ponto
+        if (unidade.possui_relogio_ponto && diaHoje >= 10) {
+          const dataVencimento = new Date(anoAnterior, mesAnterior - 1, 10);
+          const resultado = await verificarDocumento("ponto", unidade.id, mesAnterior, anoAnterior, dataVencimento);
+          if (resultado) {
+            pendenciasList.push({
+              id: resultado.chave,
+              tipo: "folha_ponto",
+              titulo: "Folha de ponto não importada",
+              descricao: `${unidade.nome} - ${String(mesAnterior).padStart(2, "0")}/${anoAnterior}`,
+              data_vencimento: dataVencimento.toISOString().split("T")[0],
+              dias_atraso: resultado.diasAtraso,
+              rota_resolver: "/admin/documentos/ponto",
+              unidade_id: unidade.id,
+              identificador_unico: resultado.chave,
+            });
+          }
+        }
+      }
+
+      // 4. Negociações coletivas
+      try {
+        for (const unidade of unidades) {
+          const { data: negociacao, error: negError } = await supabase
+            .from("negociacoes")
+            .select("ano, mes, created_at")
+            .eq("unidade_id", unidade.id)
+            .order("ano", { ascending: false })
+            .order("mes", { ascending: false })
+            .limit(1);
+
+          if (negError) {
+            console.warn(`Erro ao buscar negociação para unidade ${unidade.id}:`, negError);
+            continue;
+          }
+
+          let dataVencimento: Date;
+          let diffDias: number;
+          let chave: string;
+
+          if (negociacao && negociacao.length > 0) {
+            const ultima = negociacao[0];
+            const dataBase = new Date(ultima.ano, ultima.mes - 1, 1);
+            dataVencimento = new Date(ultima.ano + 1, ultima.mes - 1, 0);
+            const dataInicioAtraso = new Date(dataVencimento);
+            dataInicioAtraso.setDate(dataInicioAtraso.getDate() + 1);
+            diffDias = Math.ceil((hoje.getTime() - dataInicioAtraso.getTime()) / (1000 * 60 * 60 * 24));
+            chave = `negociacao-${unidade.id}-${ultima.ano}-${ultima.mes}`;
+          } else {
+            dataVencimento = new Date(hoje);
+            diffDias = 0;
+            chave = `negociacao-${unidade.id}-sem`;
+          }
+
+          if (diffDias > 0 && !chaveAdiados.has(chave)) {
+            const descricao = negociacao && negociacao.length > 0
+              ? `${unidade.nome} - Última: ${String(negociacao[0].mes).padStart(2, "0")}/${negociacao[0].ano}`
+              : `${unidade.nome} - Nenhuma negociação cadastrada`;
+            pendenciasList.push({
+              id: chave,
+              tipo: "negociacao",
+              titulo: "Negociação coletiva pendente",
+              descricao: descricao,
+              data_vencimento: dataVencimento.toISOString().split("T")[0],
+              dias_atraso: diffDias,
+              rota_resolver: "/admin/documentos/act-cct",
+              unidade_id: unidade.id,
+              identificador_unico: chave,
+            });
+          }
+        }
+      } catch (error) {
+        console.warn("Erro ao buscar negociações por unidade:", error);
+      }
+
+      pendenciasList.sort((a, b) => b.dias_atraso - a.dias_atraso);
+
+      setPendencias(pendenciasList);
+    } catch (error) {
+      console.error("Erro ao carregar pendências:", error);
+      toast.error("Erro ao carregar pendências");
+    } finally {
+      setLoading(false);
     }
-    await adiarPendencia(adiarDialog.identificador, adiarDialog.dias);
-    setAdiarDialog({ open: false, identificador: null, dias: 1 });
+  }, [user]);
+
+  useEffect(() => {
+    carregarPendencias();
+  }, [carregarPendencias]);
+
+  const adiarPendencia = async (identificadorUnico: string, dias: number) => {
+    if (!user) return;
+    try {
+      const [tipo, ...resto] = identificadorUnico.split('-');
+      const dataReexibicao = new Date();
+      dataReexibicao.setDate(dataReexibicao.getDate() + dias);
+      const dataStr = dataReexibicao.toISOString().split("T")[0];
+
+      const { error } = await supabase
+        .from("pendencias_adiadas")
+        .insert({
+          usuario_id: user.id,
+          tipo_pendencia: tipo,
+          identificador: identificadorUnico,
+          data_reexibicao: dataStr,
+        });
+
+      if (error) throw error;
+      await carregarPendencias();
+      toast.success(`Pendência adiada por ${dias} dia(s)`);
+    } catch (error) {
+      console.error("Erro ao adiar pendência:", error);
+      toast.error("Erro ao adiar pendência");
+    }
   };
 
-  const abrirAdiar = (identificador: string) => {
-    setAdiarDialog({ open: true, identificador, dias: 1 });
+  const removerAdiamento = async (identificadorUnico: string) => {
+    if (!user) return;
+    try {
+      const { error } = await supabase
+        .from("pendencias_adiadas")
+        .delete()
+        .eq("usuario_id", user.id)
+        .eq("identificador", identificadorUnico);
+
+      if (error) throw error;
+      await carregarPendencias();
+    } catch (error) {
+      console.error("Erro ao remover adiamento:", error);
+    }
   };
 
-  if (loading) {
-    return (
-      <Card className="border-border shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Bell className="size-5 text-muted-foreground" />
-            {titulo}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="size-6 animate-spin text-muted-foreground" />
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (pendencias.length === 0) {
-    return (
-      <Card className="border-border shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Bell className="size-5 text-muted-foreground" />
-            {titulo}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center py-6 text-center">
-            <CheckCircle2 className="size-10 text-emerald-500 mb-2" />
-            <span className="text-muted-foreground">{emptyMessage}</span>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const refresh = async () => {
+    await carregarPendencias();
+  };
 
   return (
-    <>
-      <Card className="border-amber-200 bg-amber-50/50 shadow-sm flex flex-col">
-        <CardHeader className="pb-3 shrink-0">
-          <CardTitle className="flex items-center gap-2 text-amber-800">
-            <Bell className="size-5" />
-            {titulo}
-            <Badge className="ml-2 bg-amber-600 text-white">{pendencias.length}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex-1 overflow-y-auto max-h-[400px] pr-1">
-          <div className="space-y-2">
-            {itensExibidos.map((p) => {
-              const IconComponent = ICON_MAP[p.tipo]?.icon || AlertCircle;
-              const colorClass = ICON_MAP[p.tipo]?.color || "text-gray-600";
-              const bgClass = ICON_MAP[p.tipo]?.bg || "bg-gray-50";
-              const tipoLabel = TIPO_LABEL[p.tipo] || p.tipo;
-              const isAtrasado = p.dias_atraso > 0;
-
-              return (
-                <div
-                  key={p.id}
-                  className={`flex items-start justify-between p-3 bg-white rounded-lg border shadow-sm hover:shadow-md transition-shadow ${
-                    isAtrasado ? "border-red-200 bg-red-50/50" : "border-amber-100"
-                  }`}
-                >
-                  <div className="flex gap-3 flex-1 min-w-0">
-                    <div className={`size-8 rounded-full ${bgClass} flex items-center justify-center shrink-0 mt-0.5`}>
-                      <IconComponent className={`size-4 ${colorClass}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium">{p.titulo}</span>
-                        {isAtrasado && (
-                          <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200 text-[10px]">
-                            <AlertCircle className="size-3 mr-0.5" />
-                            Atrasado {p.dias_atraso} dia{p.dias_atraso > 1 ? 's' : ''}
-                          </Badge>
-                        )}
-                        {!isAtrasado && p.dias_atraso === 0 && (
-                          <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200 text-[10px]">
-                            <CheckCircle2 className="size-3 mr-0.5" />
-                            Hoje
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="text-sm text-muted-foreground">{p.descricao}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {tipoLabel} • Vencimento: {new Date(p.data_vencimento + "T00:00:00").toLocaleDateString("pt-BR")}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-1 shrink-0 ml-2">
-                    <Link to={p.rota_resolver}>
-                      <Button size="sm" variant="outline" className="text-xs h-7 px-2 border-amber-300 hover:bg-amber-50">
-                        <ArrowRight className="size-3 mr-1" /> Resolver
-                      </Button>
-                    </Link>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-xs h-7 px-2 text-muted-foreground"
-                      onClick={() => abrirAdiar(p.identificador_unico)}
-                    >
-                      <CalendarClock className="size-3 mr-1" /> Adiar
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-            {temMais && (
-              <div className="text-center pt-2">
-                <Link to={viewAllLink}>
-                  <Button variant="ghost" size="sm" className="text-amber-600 hover:text-amber-700">
-                    Ver mais {pendencias.length - maxItems} pendência(s)
-                  </Button>
-                </Link>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Dialog open={adiarDialog.open} onOpenChange={(open) => !open && setAdiarDialog({ open: false, identificador: null, dias: 1 })}>
-        <DialogContent className="max-w-sm rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>Adiar pendência</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="dias">Dias para reexibição</Label>
-              <Input
-                id="dias"
-                type="number"
-                min={1}
-                max={365}
-                value={adiarDialog.dias}
-                onChange={(e) => setAdiarDialog({ ...adiarDialog, dias: parseInt(e.target.value) || 1 })}
-                className="w-24"
-              />
-              <p className="text-xs text-muted-foreground">A pendência reaparecerá após este período.</p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setAdiarDialog({ open: false, identificador: null, dias: 1 })}>
-              Cancelar
-            </Button>
-            <Button onClick={handleAdiar} className="bg-amber-600 hover:bg-amber-700 text-white">
-              Adiar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+    <PendenciaContext.Provider value={{ pendencias, loading, adiarPendencia, removerAdiamento, refresh }}>
+      {children}
+    </PendenciaContext.Provider>
   );
+}
+
+export function usePendencias() {
+  const context = useContext(PendenciaContext);
+  if (context === undefined) {
+    throw new Error("usePendencias must be used within a PendenciasProvider");
+  }
+  return context;
 }
