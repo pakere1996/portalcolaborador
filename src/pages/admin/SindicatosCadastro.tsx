@@ -107,11 +107,8 @@ export default function SindicatosCadastro() {
   // Confirmação de exclusão
   const [confirmDelete, setConfirmDelete] = useState<Sindicato | null>(null);
 
-  // --- Função para obter dados da unidade do colaborador logado (corrigida) ---
-  const getUnidadeDoUsuario = useCallback(async () => {
-    // 🔥 Acessa unidade_id via any para evitar erro de tipo
-    const unidadeId = (profile as any)?.unidade_id;
-    if (!unidadeId) return null;
+  // --- Função para obter dados de uma unidade por ID ---
+  const getUnidadePorId = useCallback(async (unidadeId: string) => {
     const { data, error } = await supabase
       .from("unidades")
       .select("nome, cnpj")
@@ -119,9 +116,16 @@ export default function SindicatosCadastro() {
       .single();
     if (error) return null;
     return data;
-  }, [profile]);
+  }, []);
 
-  // --- Abrir WhatsApp com mensagem pré-definida ---
+  // --- Função para obter dados da unidade do colaborador logado (usado para sindicatos laborais) ---
+  const getUnidadeDoUsuario = useCallback(async () => {
+    const unidadeId = (profile as any)?.unidade_id;
+    if (!unidadeId) return null;
+    return getUnidadePorId(unidadeId);
+  }, [profile, getUnidadePorId]);
+
+  // --- Abrir WhatsApp com mensagem pré-definida (corrigido para patronais) ---
   const abrirWhatsApp = async (sindicato: Sindicato) => {
     const numero = onlyNumbers(sindicato.contato_whatsapp || "");
     if (!numero) {
@@ -129,10 +133,44 @@ export default function SindicatosCadastro() {
       return;
     }
 
-    const unidade = await getUnidadeDoUsuario();
     const nomeUsuario = profile?.nome || "Colaborador";
-    const nomeUnidade = unidade?.nome || "empresa";
-    const cnpjUnidade = unidade?.cnpj || "não informado";
+    let nomeUnidade = "empresa";
+    let cnpjUnidade = "não informado";
+
+    if (sindicato.tipo === "patronal") {
+      // 🔥 Buscar unidades vinculadas a este sindicato patronal
+      const { data: vinc, error } = await supabase
+        .from("sindicato_unidades")
+        .select("unidade_id")
+        .eq("sindicato_id", sindicato.id);
+
+      if (error || !vinc || vinc.length === 0) {
+        toast.warning("Este sindicato patronal não está vinculado a nenhuma unidade.");
+        return;
+      }
+
+      // Pega a primeira unidade vinculada
+      const unidadeId = vinc[0].unidade_id;
+      const unidade = await getUnidadePorId(unidadeId);
+      if (!unidade) {
+        toast.warning("Não foi possível obter dados da unidade vinculada.");
+        return;
+      }
+
+      nomeUnidade = unidade.nome || "empresa";
+      cnpjUnidade = unidade.cnpj || "não informado";
+
+      if (vinc.length > 1) {
+        toast.info(`Este sindicato representa ${vinc.length} unidades. Usando a primeira: ${nomeUnidade}`);
+      }
+    } else {
+      // Laboral: usa a unidade do colaborador logado
+      const unidade = await getUnidadeDoUsuario();
+      if (unidade) {
+        nomeUnidade = unidade.nome || "empresa";
+        cnpjUnidade = unidade.cnpj || "não informado";
+      }
+    }
 
     const mensagem = `Olá, me chamo ${nomeUsuario}, da empresa ${nomeUnidade}, CNPJ nº ${cnpjUnidade}. Posso tirar dúvidas com você?`;
     const link = `https://wa.me/55${numero}?text=${encodeURIComponent(mensagem)}`;
