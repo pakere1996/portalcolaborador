@@ -6,7 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Building2, FileText, Download, Eye, Users, Scale, File, MessageCircle } from "lucide-react";
+import { Building2, FileText, Download, Eye, Users, Scale, MessageCircle } from "lucide-react";
+import { formatBR, parseYMD } from "@/lib/folga-rules";
+import { formatCPF } from "@/lib/cpf";
 
 interface Sindicato {
   id: string;
@@ -31,13 +33,34 @@ interface Negociacao {
   sindicato_laboral?: Sindicato;
 }
 
+// 🔥 Formatação para WhatsApp
+const onlyNumbers = (value: string) => value.replace(/\D/g, "");
+const formatWhatsApp = (value: string) => {
+  const clean = onlyNumbers(value);
+  if (clean.length <= 2) return clean;
+  if (clean.length <= 6) return clean.replace(/^(\d{2})(\d{0,4})/, "($1) $2");
+  if (clean.length <= 10) return clean.replace(/^(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3");
+  return clean.replace(/^(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3");
+};
+const formatCNPJ = (value: string) => {
+  const clean = onlyNumbers(value);
+  if (clean.length <= 2) return clean;
+  if (clean.length <= 5) return clean.replace(/^(\d{2})(\d{0,3})/, "$1.$2");
+  if (clean.length <= 8) return clean.replace(/^(\d{2})(\d{3})(\d{0,3})/, "$1.$2.$3");
+  if (clean.length <= 12) return clean.replace(/^(\d{2})(\d{3})(\d{3})(\d{0,4})/, "$1.$2.$3/$4");
+  return clean.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, "$1.$2.$3/$4-$5");
+};
+
 export default function DocumentosSindicato() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [sindicatoLaboral, setSindicatoLaboral] = useState<Sindicato | null>(null);
+  const [sindicatosPatronais, setSindicatosPatronais] = useState<Sindicato[]>([]);
   const [negociacao, setNegociacao] = useState<Negociacao | null>(null);
   const [unidadeNome, setUnidadeNome] = useState<string>("");
   const [cargoNome, setCargoNome] = useState<string>("");
+  const [cpfColaborador, setCpfColaborador] = useState<string>("");
+  const [cnpjUnidade, setCnpjUnidade] = useState<string>("");
 
   useEffect(() => {
     if (!user) {
@@ -46,37 +69,6 @@ export default function DocumentosSindicato() {
     }
     carregarDados();
   }, [user]);
-
-  // Utilitários de formatação
-  const formatarCNPJ = (cnpj: string | null): string => {
-    if (!cnpj) return "";
-    const numeros = cnpj.replace(/\D/g, "");
-    if (numeros.length !== 14) return cnpj;
-    return numeros.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
-  };
-
-  const formatarWhatsAppExibicao = (whatsapp: string | null): string => {
-    if (!whatsapp) return "";
-    const numeros = whatsapp.replace(/\D/g, "");
-    if (numeros.length === 11) {
-      return numeros.replace(/^(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
-    }
-    if (numeros.length === 10) {
-      return numeros.replace(/^(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
-    }
-    return whatsapp;
-  };
-
-  const extrairNumerosWhatsApp = (whatsapp: string | null): string => {
-    if (!whatsapp) return "";
-    return whatsapp.replace(/\D/g, "");
-  };
-
-  const linkWhatsApp = (whatsapp: string | null): string => {
-    const numeros = extrairNumerosWhatsApp(whatsapp);
-    if (!numeros) return "#";
-    return `https://wa.me/55${numeros}`;
-  };
 
   const carregarDados = async () => {
     if (!user?.id) {
@@ -87,9 +79,10 @@ export default function DocumentosSindicato() {
 
     setLoading(true);
     try {
+      // 1. Buscar perfil do colaborador
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("unidade_id, cargo, nome")
+        .select("unidade_id, cargo, nome, cpf")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -110,55 +103,26 @@ export default function DocumentosSindicato() {
         return;
       }
 
-      const { data: unidadeRes } = await supabase
-        .from("unidades")
-        .select("nome")
-        .eq("id", profile.unidade_id)
-        .maybeSingle();
+      setCpfColaborador(profile.cpf || "");
 
-      if (unidadeRes) setUnidadeNome(unidadeRes.nome);
+      // 2. Buscar unidade e cargo
+      const [unidadeRes, cargoRes] = await Promise.all([
+        supabase.from("unidades").select("nome, cnpj").eq("id", profile.unidade_id).maybeSingle(),
+        supabase.from("cargos").select("nome").eq("id", profile.cargo).maybeSingle(),
+      ]);
 
-      // Buscar cargo ID
-      let cargoId: string | null = null;
-      let cargoNomeEncontrado = "";
-
-      const isUUID = (str: string) => {
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        return uuidRegex.test(str);
-      };
-
-      if (isUUID(profile.cargo)) {
-        cargoId = profile.cargo;
-        const { data: cargoData } = await supabase
-          .from("cargos")
-          .select("nome")
-          .eq("id", cargoId)
-          .maybeSingle();
-        if (cargoData) cargoNomeEncontrado = cargoData.nome;
-      } else {
-        const { data: cargoData } = await supabase
-          .from("cargos")
-          .select("id, nome")
-          .eq("nome", profile.cargo)
-          .maybeSingle();
-        if (cargoData) {
-          cargoId = cargoData.id;
-          cargoNomeEncontrado = cargoData.nome;
-        }
+      if (unidadeRes.data) {
+        setUnidadeNome(unidadeRes.data.nome);
+        setCnpjUnidade(unidadeRes.data.cnpj || "");
       }
+      if (cargoRes.data) setCargoNome(cargoRes.data.nome);
 
-      if (!cargoId) {
-        toast.warning("Cargo não encontrado no sistema.");
-        setLoading(false);
-        return;
-      }
-      setCargoNome(cargoNomeEncontrado || profile.cargo);
-
+      // 3. Buscar vínculo do cargo com sindicato laboral na unidade
       const { data: unidadeCargo, error: ucError } = await supabase
         .from("unidade_cargos")
         .select("sindicato_laboral_id")
         .eq("unidade_id", profile.unidade_id)
-        .eq("cargo_id", cargoId)
+        .eq("cargo_id", profile.cargo)
         .maybeSingle();
 
       if (ucError) {
@@ -172,6 +136,7 @@ export default function DocumentosSindicato() {
         return;
       }
 
+      // 4. Buscar dados do sindicato laboral
       const { data: sindLaboral, error: slError } = await supabase
         .from("sindicatos")
         .select("*")
@@ -183,14 +148,44 @@ export default function DocumentosSindicato() {
         throw slError;
       }
 
-      if (!sindLaboral) {
+      if (sindLaboral) {
+        setSindicatoLaboral(sindLaboral);
+      } else {
         toast.warning("Sindicato laboral não encontrado.");
         setLoading(false);
         return;
       }
-      setSindicatoLaboral(sindLaboral);
 
-      // Buscar negociação mais recente
+      // 5. Buscar sindicatos patronais da unidade
+      const { data: vincPatronais, error: vpError } = await supabase
+        .from("sindicato_unidades")
+        .select("sindicato_id")
+        .eq("unidade_id", profile.unidade_id);
+
+      if (vpError) {
+        console.error("Erro ao buscar vínculos patronais:", vpError);
+        throw vpError;
+      }
+
+      const idsPatronais = vincPatronais?.map(v => v.sindicato_id) || [];
+      if (idsPatronais.length === 0) {
+        toast.warning("Sua unidade não possui sindicato patronal vinculado.");
+        setLoading(false);
+        return;
+      }
+
+      const { data: sindPatronais, error: spError } = await supabase
+        .from("sindicatos")
+        .select("*")
+        .in("id", idsPatronais);
+
+      if (spError) {
+        console.error("Erro ao buscar sindicatos patronais:", spError);
+        throw spError;
+      }
+      setSindicatosPatronais(sindPatronais || []);
+
+      // 6. Buscar negociação mais recente (ACT/CCT)
       const { data: negociacaoData, error: negError } = await supabase
         .from("negociacoes")
         .select(`
@@ -200,6 +195,7 @@ export default function DocumentosSindicato() {
         `)
         .eq("unidade_id", profile.unidade_id)
         .eq("sindicato_laboral_id", unidadeCargo.sindicato_laboral_id)
+        .in("sindicato_patronal_id", idsPatronais)
         .order("ano", { ascending: false })
         .order("mes", { ascending: false })
         .limit(1)
@@ -213,27 +209,7 @@ export default function DocumentosSindicato() {
       if (negociacaoData) {
         setNegociacao(negociacaoData);
       } else {
-        // Fallback sem unidade
-        const { data: negFallback, error: fallbackError } = await supabase
-          .from("negociacoes")
-          .select(`
-            *,
-            sindicato_patronal:sindicatos!negociacoes_sindicato_patronal_id_fkey(id, nome, cnpj, contato_whatsapp),
-            sindicato_laboral:sindicatos!negociacoes_sindicato_laboral_id_fkey(id, nome, cnpj, contato_whatsapp)
-          `)
-          .eq("sindicato_laboral_id", unidadeCargo.sindicato_laboral_id)
-          .order("ano", { ascending: false })
-          .order("mes", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (fallbackError) {
-          console.error("Erro ao buscar negociação fallback:", fallbackError);
-        } else if (negFallback) {
-          setNegociacao(negFallback);
-        } else {
-          toast.info("Nenhuma negociação encontrada para seu sindicato.");
-        }
+        toast.info("Nenhuma negociação encontrada para seu sindicato e unidade.");
       }
     } catch (error) {
       console.error("Erro no carregamento:", error);
@@ -241,6 +217,25 @@ export default function DocumentosSindicato() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 🔥 Função para abrir WhatsApp com mensagem personalizada
+  const abrirWhatsApp = (sindicato: Sindicato) => {
+    const numero = onlyNumbers(sindicato.contato_whatsapp || "");
+    if (!numero) {
+      toast.warning("Este sindicato não possui número de WhatsApp cadastrado.");
+      return;
+    }
+
+    const nomeUsuario = user?.email?.split('@')[0] || "Colaborador"; // fallback
+    // 🔥 Pegar CPF do colaborador (já armazenado no estado)
+    const cpf = cpfColaborador ? formatCPF(cpfColaborador) : "não informado";
+    const empresa = unidadeNome || "empresa";
+    const cnpj = cnpjUnidade ? formatCNPJ(cnpjUnidade) : "não informado";
+
+    const mensagem = `Olá, me chamo ${nomeUsuario}, CPF nº ${cpf}, trabalho na empresa ${empresa}, CNPJ nº ${cnpj}. Gostaria de tirar dúvidas com você.`;
+    const link = `https://wa.me/55${numero}?text=${encodeURIComponent(mensagem)}`;
+    window.open(link, "_blank");
   };
 
   const downloadArquivo = async (path: string, nome: string) => {
@@ -325,6 +320,18 @@ export default function DocumentosSindicato() {
           <span className="text-muted-foreground">Cargo</span>
           <p className="font-semibold">{cargoNome || "—"}</p>
         </div>
+        {cpfColaborador && (
+          <div>
+            <span className="text-muted-foreground">CPF</span>
+            <p className="font-mono">{formatCPF(cpfColaborador)}</p>
+          </div>
+        )}
+        {cnpjUnidade && (
+          <div>
+            <span className="text-muted-foreground">CNPJ da Unidade</span>
+            <p className="font-mono">{formatCNPJ(cnpjUnidade)}</p>
+          </div>
+        )}
       </div>
 
       <Card>
@@ -342,26 +349,26 @@ export default function DocumentosSindicato() {
             {sindicatoLaboral.cnpj && (
               <div>
                 <span className="text-sm text-muted-foreground">CNPJ</span>
-                <p className="font-mono">{formatarCNPJ(sindicatoLaboral.cnpj)}</p>
-              </div>
-            )}
-            {sindicatoLaboral.contato_whatsapp && (
-              <div>
-                <span className="text-sm text-muted-foreground">Contato com o Sindicato</span>
-                <div className="mt-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-full text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
-                    onClick={() => window.open(linkWhatsApp(sindicatoLaboral.contato_whatsapp), "_blank")}
-                  >
-                    <MessageCircle className="size-4 mr-2" />
-                    {formatarWhatsAppExibicao(sindicatoLaboral.contato_whatsapp)}
-                  </Button>
-                </div>
+                <p className="font-mono">{formatCNPJ(sindicatoLaboral.cnpj)}</p>
               </div>
             )}
           </div>
+          {sindicatoLaboral.contato_whatsapp && (
+            <div className="mt-2">
+              <span className="text-sm text-muted-foreground">Contato com o Sindicato</span>
+              <div className="mt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                  onClick={() => abrirWhatsApp(sindicatoLaboral)}
+                >
+                  <MessageCircle className="size-4 mr-2" />
+                  {formatWhatsApp(sindicatoLaboral.contato_whatsapp)}
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -401,7 +408,7 @@ export default function DocumentosSindicato() {
                 </div>
               </div>
 
-              {negociacao.storage_path && (
+              {negociacao.storage_path && negociacao.nome_pdf && (
                 <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-border">
                   <Button
                     variant="outline"
@@ -414,7 +421,7 @@ export default function DocumentosSindicato() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => downloadArquivo(negociacao.storage_path!, negociacao.nome_pdf || "documento.pdf")}
+                    onClick={() => downloadArquivo(negociacao.storage_path!, negociacao.nome_pdf!)}
                     className="rounded-full"
                   >
                     <Download className="size-4 mr-1" /> Baixar
@@ -424,7 +431,7 @@ export default function DocumentosSindicato() {
             </div>
           ) : (
             <div className="text-center text-muted-foreground py-6">
-              Nenhum documento coletivo encontrado para o sindicato da sua função.
+              Nenhum documento coletivo encontrado para o sindicato da sua função nesta unidade.
             </div>
           )}
         </CardContent>
