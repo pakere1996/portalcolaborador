@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,26 +19,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Loader2,
   FileText,
   Eye,
   Download,
-  Pencil,
-  Trash2,
   Search,
 } from "lucide-react";
 import { formatBR } from "@/lib/folga-rules";
@@ -48,7 +34,7 @@ import { FavoritarBotao } from "@/components/FavoritarBotao";
 interface DocumentoUnificado {
   id: string;
   tipo: "contracheque" | "adiantamento" | "ponto" | "atestado" | "disciplinar" | "sindical";
-  colaborador_id: string | null; // pode ser null para sindical (global)
+  colaborador_id: string | null;
   colaborador_nome: string;
   colaborador_ativo: boolean | null;
   unidade_id: string | null;
@@ -61,15 +47,11 @@ interface DocumentoUnificado {
   storage_path: string | null;
   nome_pdf: string | null;
   created_at: string;
-  // Campos extras
   dias_afastamento?: number | null;
   observacao_admin?: string | null;
   tipo_disciplinar?: string | null;
-  // Para documentos sindicais
   sindicato_patronal?: string;
   sindicato_laboral?: string;
-  // Para edição
-  acaoSeDuplicado?: string | null;
 }
 
 interface Profile {
@@ -135,12 +117,10 @@ const STATUS_OPTS = [
 ];
 
 export default function DocumentosHistoricoCompleto() {
-  const { user } = useAuth();
   const [documentos, setDocumentos] = useState<DocumentoUnificado[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
 
   // Filtros
   const [filtroTipo, setFiltroTipo] = useState("todos");
@@ -156,19 +136,9 @@ export default function DocumentosHistoricoCompleto() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<DocumentoUnificado | null>(null);
 
-  // Edição
-  const [editOpen, setEditOpen] = useState(false);
-  const [editDoc, setEditDoc] = useState<DocumentoUnificado | null>(null);
-  const [editForm, setEditForm] = useState<any>({});
-
-  // Exclusão
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteDoc, setDeleteDoc] = useState<DocumentoUnificado | null>(null);
-
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // 🔥 Buscar TODOS os perfis (ativos e inativos) para manter histórico
       const [profilesRes, unidadesRes] = await Promise.all([
         supabase.from("profiles").select("id, nome, unidade_id, ativo").order("nome"),
         supabase.from("unidades").select("id, nome").eq("ativo", true).order("nome"),
@@ -185,7 +155,7 @@ export default function DocumentosHistoricoCompleto() {
       const profileMap = new Map(profilesData.map(p => [p.id, p]));
       const unidadeMap = new Map(unidadesData.map(u => [u.id, u.nome]));
 
-      // 1. Documentos padrão (contracheque, adiantamento, ponto)
+      // 1. Documentos padrão
       const { data: docsData, error: docsError } = await supabase
         .from("documentos")
         .select("*")
@@ -210,7 +180,7 @@ export default function DocumentosHistoricoCompleto() {
 
       if (disciplinaresError) throw disciplinaresError;
 
-      // 4. 🔥 Documentos sindicais (ACT/CCT)
+      // 4. Documentos sindicais
       const { data: negociacoesData, error: negociacoesError } = await supabase
         .from("negociacoes")
         .select(`
@@ -301,7 +271,6 @@ export default function DocumentosHistoricoCompleto() {
         };
       });
 
-      // 🔥 Mapear negociações como documentos sindicais
       const negociacoesMapeadas: DocumentoUnificado[] = (negociacoesData ?? []).map((n: Negociacao) => {
         const unidadeNome = (n.unidade as any)?.nome || "Unidade não definida";
         const patronalNome = (n.sindicato_patronal as any)?.nome || "—";
@@ -309,7 +278,7 @@ export default function DocumentosHistoricoCompleto() {
         return {
           id: n.id,
           tipo: "sindical",
-          colaborador_id: null, // sindical é global, não vinculado a um colaborador específico
+          colaborador_id: null,
           colaborador_nome: `ACT/CCT - ${unidadeNome}`,
           colaborador_ativo: null,
           unidade_id: n.unidade_id,
@@ -405,7 +374,6 @@ export default function DocumentosHistoricoCompleto() {
     return <Badge className="bg-green-100 text-green-700 border-green-200">Disponível</Badge>;
   };
 
-  // Ações
   const handleDownload = async (doc: DocumentoUnificado) => {
     if (!doc.storage_path) {
       toast.warning("Este documento não possui arquivo anexado.");
@@ -437,126 +405,6 @@ export default function DocumentosHistoricoCompleto() {
       setPreviewOpen(true);
     } else {
       toast.error("Erro ao gerar link de visualização");
-    }
-  };
-
-  const openEdit = (doc: DocumentoUnificado) => {
-    if (doc.tipo === "sindical") {
-      toast.info("Documentos sindicais não podem ser editados nesta tela. Utilize a tela de ACT-CCT.");
-      return;
-    }
-    setEditDoc(doc);
-    setEditOpen(true);
-    if (doc.tipo === "atestado") {
-      setEditForm({
-        status: doc.status,
-        dias_afastamento: doc.dias_afastamento || "",
-        observacao_admin: doc.observacao_admin || "",
-        observacao: doc.observacao || "",
-      });
-    } else if (doc.tipo === "disciplinar") {
-      setEditForm({
-        tipo: doc.tipo_disciplinar || "outro",
-        observacao: doc.observacao || "",
-        dias_afastamento: doc.dias_afastamento || "",
-      });
-    } else {
-      setEditForm({
-        mes: doc.mes || "",
-        ano: doc.ano || "",
-      });
-    }
-  };
-
-  const handleEditSave = async () => {
-    if (!editDoc) return;
-    setBusy(true);
-    try {
-      if (editDoc.tipo === "atestado") {
-        const updates: any = {
-          status: editForm.status,
-          dias_afastamento: parseInt(editForm.dias_afastamento) || 0,
-          observacao_admin: editForm.observacao_admin || null,
-          observacao: editForm.observacao || null,
-          updated_at: new Date().toISOString(),
-        };
-        if (editForm.status === "aprovado" || editForm.status === "rejeitado") {
-          updates.respondido_em = new Date().toISOString();
-          updates.respondido_por = user?.id;
-        }
-        const { error } = await supabase
-          .from("atestados")
-          .update(updates)
-          .eq("id", editDoc.id);
-        if (error) throw error;
-      } else if (editDoc.tipo === "disciplinar") {
-        const updates: any = {
-          tipo: editForm.tipo,
-          observacao: editForm.observacao || null,
-          dias_afastamento: parseInt(editForm.dias_afastamento) || 0,
-          updated_at: new Date().toISOString(),
-        };
-        const { error } = await supabase
-          .from("registros_disciplinares")
-          .update(updates)
-          .eq("id", editDoc.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("documentos")
-          .update({
-            mes: parseInt(editForm.mes),
-            ano: parseInt(editForm.ano),
-          })
-          .eq("id", editDoc.id);
-        if (error) throw error;
-      }
-      toast.success("Documento atualizado com sucesso!");
-      setEditOpen(false);
-      loadData();
-    } catch (error) {
-      console.error("Erro ao editar:", error);
-      toast.error("Erro ao atualizar", { description: (error as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const confirmDelete = (doc: DocumentoUnificado) => {
-    if (doc.tipo === "sindical") {
-      toast.info("Documentos sindicais devem ser excluídos na tela de ACT-CCT.");
-      return;
-    }
-    setDeleteDoc(doc);
-    setDeleteOpen(true);
-  };
-
-  const handleDelete = async () => {
-    if (!deleteDoc) return;
-    setBusy(true);
-    try {
-      if (deleteDoc.storage_path) {
-        const bucket = deleteDoc.tipo === "sindical" ? "sindicatos" : "documentos";
-        await supabase.storage.from(bucket).remove([deleteDoc.storage_path]);
-      }
-
-      let table: string;
-      if (deleteDoc.tipo === "atestado") table = "atestados";
-      else if (deleteDoc.tipo === "disciplinar") table = "registros_disciplinares";
-      else table = "documentos";
-
-      const { error } = await supabase.from(table).delete().eq("id", deleteDoc.id);
-      if (error) throw error;
-
-      toast.success("Documento excluído com sucesso!");
-      setDeleteOpen(false);
-      setDeleteDoc(null);
-      loadData();
-    } catch (error) {
-      console.error("Erro ao excluir:", error);
-      toast.error("Erro ao excluir", { description: (error as Error).message });
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -760,26 +608,6 @@ export default function DocumentosHistoricoCompleto() {
                         >
                           <Download className="size-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8"
-                          title="Editar"
-                          onClick={() => openEdit(doc)}
-                          disabled={doc.tipo === "sindical"}
-                        >
-                          <Pencil className="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                          title="Excluir"
-                          onClick={() => confirmDelete(doc)}
-                          disabled={doc.tipo === "sindical"}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -830,171 +658,6 @@ export default function DocumentosHistoricoCompleto() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Edit Dialog */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              Editar {editDoc ? getTipoLabel(editDoc.tipo) : "Documento"}
-            </DialogTitle>
-            <DialogDescription>
-              {editDoc?.colaborador_nome} - {editDoc?.mes && editDoc?.ano ? `${String(editDoc.mes).padStart(2, "0")}/${editDoc.ano}` : ""}
-            </DialogDescription>
-          </DialogHeader>
-          {editDoc && (
-            <div className="space-y-4 py-4">
-              {editDoc.tipo === "atestado" ? (
-                <>
-                  <div className="space-y-2">
-                    <Label>Status</Label>
-                    <Select
-                      value={editForm.status}
-                      onValueChange={(v) => setEditForm({ ...editForm, status: v })}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pendente">Pendente</SelectItem>
-                        <SelectItem value="aprovado">Aprovado</SelectItem>
-                        <SelectItem value="rejeitado">Rejeitado</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Dias de Afastamento</Label>
-                    <Input
-                      type="number"
-                      value={editForm.dias_afastamento}
-                      onChange={(e) => setEditForm({ ...editForm, dias_afastamento: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Observação do Admin</Label>
-                    <Textarea
-                      value={editForm.observacao_admin || ""}
-                      onChange={(e) => setEditForm({ ...editForm, observacao_admin: e.target.value })}
-                      rows={2}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Observação</Label>
-                    <Textarea
-                      value={editForm.observacao || ""}
-                      onChange={(e) => setEditForm({ ...editForm, observacao: e.target.value })}
-                      rows={2}
-                    />
-                  </div>
-                </>
-              ) : editDoc.tipo === "disciplinar" ? (
-                <>
-                  <div className="space-y-2">
-                    <Label>Tipo</Label>
-                    <Select
-                      value={editForm.tipo}
-                      onValueChange={(v) => setEditForm({ ...editForm, tipo: v })}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="advertencia">Advertência</SelectItem>
-                        <SelectItem value="suspensao">Suspensão</SelectItem>
-                        <SelectItem value="justa_causa">Justa Causa</SelectItem>
-                        <SelectItem value="outro">Outro</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Dias de Afastamento</Label>
-                    <Input
-                      type="number"
-                      value={editForm.dias_afastamento}
-                      onChange={(e) => setEditForm({ ...editForm, dias_afastamento: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Observação</Label>
-                    <Textarea
-                      value={editForm.observacao || ""}
-                      onChange={(e) => setEditForm({ ...editForm, observacao: e.target.value })}
-                      rows={2}
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="space-y-2">
-                    <Label>Mês</Label>
-                    <Select
-                      value={String(editForm.mes)}
-                      onValueChange={(v) => setEditForm({ ...editForm, mes: v })}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Mês" /></SelectTrigger>
-                      <SelectContent>
-                        {MESES.map(m => (
-                          <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Ano</Label>
-                    <Input
-                      type="number"
-                      value={editForm.ano}
-                      onChange={(e) => setEditForm({ ...editForm, ano: e.target.value })}
-                      placeholder="2026"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setEditOpen(false)} disabled={busy}>
-              Cancelar
-            </Button>
-            <Button onClick={handleEditSave} disabled={busy}>
-              {busy ? <Loader2 className="size-4 animate-spin mr-1" /> : null}
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Dialog */}
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir documento?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja excluir este documento?
-              <br /><br />
-              <strong>Colaborador:</strong> {deleteDoc?.colaborador_nome}
-              <br />
-              <strong>Tipo:</strong> {deleteDoc ? getTipoLabel(deleteDoc.tipo) : ""}
-              <br />
-              {deleteDoc?.mes && deleteDoc?.ano && (
-                <>
-                  <strong>Competência:</strong> {String(deleteDoc.mes).padStart(2, "0")}/{deleteDoc.ano}
-                  <br />
-                </>
-              )}
-              <br />
-              Esta ação <strong>não pode ser desfeita</strong>.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              disabled={busy}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {busy ? <Loader2 className="size-4 animate-spin mr-1" /> : null}
-              {busy ? "Excluindo..." : "Sim, excluir"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
