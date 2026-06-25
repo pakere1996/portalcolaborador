@@ -16,13 +16,12 @@ import { Switch } from "@/components/ui/switch";
 import { formatCPF, onlyDigits, isValidCPFLength } from "@/lib/cpf";
 import { Badge } from "@/components/ui/badge";
 import { ColaboradorFormDialog } from "@/components/ColaboradorFormDialog";
-import { Tables } from "@/integrations/supabase/types";
+import { Tables, Unidade, Cargo } from "@/integrations/supabase/types";
 import { adminApi } from "@/lib/admin-api";
 import { FavoritarBotao } from "@/components/FavoritarBotao";
 
-type Profile = Tables<'profiles'> & { role?: string | null };
-type Unidade = Tables<'unidades'> & { possui_relogio_ponto?: boolean };
-type Cargo = Tables<'cargos'>;
+type Profile = Tables<"profiles"> & { role?: string | null };
+// Unidade e Cargo já estão importados dos tipos
 
 const blankEditForm = {
   nome: "", cpf: "", matricula: "", email: "", whatsapp: "",
@@ -91,8 +90,8 @@ export default function Colaboradores() {
       });
 
       setProfiles(sortedProfiles);
-      setUnidades(uRes.data ?? []);
-      setCargos(cRes.data ?? []);
+      setUnidades(uRes.data as Unidade[] ?? []);
+      setCargos(cRes.data as Cargo[] ?? []);
     } catch (e) {
       console.error("Erro ao carregar dados:", e);
       toast.error("Erro ao carregar dados", { description: (e as Error).message });
@@ -205,9 +204,9 @@ export default function Colaboradores() {
       ativo: p.ativo,
       senha: "",
       regime_trabalho: p.regime_trabalho ?? "none",
-      dataDemissao: (p as any).data_demissao ?? "",
-      tipo_vinculo: (p as any).tipo_vinculo ?? "CLT",
-      possui_folha_ponto: (p as any).possui_folha_ponto ?? false,
+      dataDemissao: p.data_demissao ?? "",
+      tipo_vinculo: p.tipo_vinculo ?? "CLT",
+      possui_folha_ponto: p.possui_folha_ponto ?? false,
     });
   };
 
@@ -227,10 +226,6 @@ export default function Colaboradores() {
       const cleanCpf = onlyDigits(editForm.cpf);
       if (!isValidCPFLength(cleanCpf)) throw new Error("CPF inválido");
 
-      const dataAdmissao = editForm.dataAdmissao || null;
-      const dataNascimento = editForm.dataNascimento || null;
-      const dataDemissao = editForm.dataDemissao || null;
-
       const { error: profErr } = await supabase.from("profiles").update({
         nome: toUpperCaseTrim(editForm.nome),
         cpf: cleanCpf,
@@ -240,12 +235,12 @@ export default function Colaboradores() {
         cargo: toUpperCaseTrim(editForm.cargo),
         unidade_id: editForm.unidadeId === "none" ? null : editForm.unidadeId,
         folga_fixa_semana: editForm.folgaFixa === "none" ? null : Number(editForm.folgaFixa),
-        data_nascimento: dataNascimento,
-        data_admissao: dataAdmissao,
+        data_nascimento: editForm.dataNascimento || null,
+        data_admissao: editForm.dataAdmissao || null,
         ativo: editForm.ativo,
         updated_at: new Date().toISOString(),
         regime_trabalho: editForm.regime_trabalho === "none" ? null : editForm.regime_trabalho,
-        data_demissao: dataDemissao,
+        data_demissao: editForm.dataDemissao || null,
         tipo_vinculo: editForm.tipo_vinculo || "CLT",
         possui_folha_ponto: editForm.possui_folha_ponto ?? false,
       }).eq("id", editingProfile.id);
@@ -258,7 +253,9 @@ export default function Colaboradores() {
         if (currentRole) {
           await supabase.from("user_roles").delete().eq("user_id", editingProfile.id).eq("role", currentRole);
         }
-        await supabase.from("user_roles").upsert({ user_id: editingProfile.id, role: newRole }, { onConflict: "user_id,role" });
+        if (newRole) {
+          await supabase.from("user_roles").upsert({ user_id: editingProfile.id, role: newRole }, { onConflict: "user_id,role" });
+        }
       }
 
       toast.success("Colaborador atualizado!");
@@ -336,6 +333,7 @@ export default function Colaboradores() {
         </div>
       </div>
 
+      {/* Filtros */}
       <div className="bg-card border border-border rounded-2xl p-4 flex flex-wrap gap-4 items-end">
         <div className="space-y-2 flex-1 min-w-[200px]">
           <Label className="text-xs font-bold uppercase text-muted-foreground">Buscar</Label>
@@ -373,6 +371,7 @@ export default function Colaboradores() {
         </div>
       </div>
 
+      {/* Tabela */}
       <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
         {loading ? (
           <div className="p-12 text-center text-muted-foreground">
@@ -407,8 +406,8 @@ export default function Colaboradores() {
                       {unidades.find(u => u.id === p.unidade_id)?.nome ?? "—"}
                     </td>
                     <td className="p-4 text-center">
-                      <Badge className={(p as any).tipo_vinculo === "Socio" ? "bg-purple-100 text-purple-700 border-purple-200" : "bg-blue-100 text-blue-700 border-blue-200"}>
-                        {(p as any).tipo_vinculo === "Socio" ? "Sócio" : "CLT"}
+                      <Badge className={p.tipo_vinculo === "Socio" ? "bg-purple-100 text-purple-700 border-purple-200" : "bg-blue-100 text-blue-700 border-blue-200"}>
+                        {p.tipo_vinculo === "Socio" ? "Sócio" : p.tipo_vinculo || "CLT"}
                       </Badge>
                     </td>
                     <td className="p-4 text-center">
@@ -423,7 +422,7 @@ export default function Colaboradores() {
                       </Badge>
                     </td>
                     <td className="p-4 text-center">
-                      {(p as any).possui_folha_ponto ? (
+                      {p.possui_folha_ponto ? (
                         <Badge className="bg-green-100 text-green-700 border-green-200">Sim</Badge>
                       ) : (
                         <Badge variant="outline" className="text-muted-foreground">Não</Badge>
@@ -450,6 +449,7 @@ export default function Colaboradores() {
         )}
       </div>
 
+      {/* Dialog de Edição */}
       <ColaboradorFormDialog
         open={!!editingProfile}
         onOpenChange={(open) => { if (!open) setEditingProfile(null); }}
@@ -462,6 +462,7 @@ export default function Colaboradores() {
         onSave={handleUpdate}
       />
 
+      {/* Dialog de Exclusão */}
       <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -479,6 +480,7 @@ export default function Colaboradores() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Dialog de Redefinição de Senha */}
       <AlertDialog open={!!resetPasswordDialog} onOpenChange={(o) => !o && setResetPasswordDialog(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
